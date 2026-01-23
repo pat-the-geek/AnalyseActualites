@@ -1,0 +1,494 @@
+[
+    {
+        "Titre":"Basic Apple Guy",
+        "URL":"https:\/\/basicappleguy.com\/basicappleblog?format=rss"
+    },
+    {
+        "Titre":"CNET",
+        "URL":"https:\/\/www.cnet.com\/rss\/all\/"
+    },
+    {
+        "Titre":"Daring Fireball",
+        "URL":"https:\/\/daringfireball.net\/feeds\/main"
+    },
+    {
+        "Titre":"DVDFr - Dans les bacs",
+        "URL":"http:\/\/www.dvdfr.com\/fluxrss\/bacs.php"
+    },
+    {
+        "Titre":"Critiques DVDFr",
+        "URL":"http:\/\/www.dvdfr.com\/fluxrss\/critiques.php"
+    },
+    {
+        "Titre":"Mashable",
+        "URL":"http:\/\/feeds.mashable.com\/Mashable"
+    },
+    {
+        "Titre":"IGN France",
+        "URL":"https:\/\/fr.ign.com\/feed.xml"
+    },
+    {
+        "Titre":"News",
+        "URL":"https:\/\/www.ictjournal.ch\/taxonomy\/term\/31\/feed"
+    },
+    {
+        "Titre":"Les Numériques - Toute l'actualité, les tests et dossiers, les bons plans",
+        "URL":"http:\/\/lesnumeriques.com\/rss.xml"
+    },
+    {
+        "Titre":"Patrick Ostertag",
+        "URL":"https:\/\/techhub.social\/@patcedar.rss"
+    },
+    {
+        "Titre":"Vinyl every day",
+        "URL":"https:\/\/mastodon.nl\/@vinyl.rss"
+    },
+    {
+        "Titre":"Le Point J ‐ RTS",
+        "URL":"https:\/\/feeds.audiomeans.fr\/feed\/62ebf020-43e6-4df4-8b7a-66c32d6cae3a.xml"
+    },
+    {
+        "Titre":"Travelling ‐ RTS Première",
+        "URL":"https:\/\/www.rts.ch\/la-1ere\/programmes\/travelling\/podcast\/?flux=rss"
+    },
+    {
+        "Titre":"Small Talk - Konbini",
+        "URL":"https:\/\/feeds.audiomeans.fr\/feed\/f57a29ac-5ce1-423d-8ca2-82369d9ca230.xml"
+    },
+    {
+        "Titre":"Dominic Nieto",
+        "URL":"https:\/\/mastodon.social\/@dominicnieto.rss"
+    },
+    {
+        "Titre":"Cinezik",
+        "URL":"https:\/\/www.cinezik.org\/rss\/cinezik_rss2.xml"
+    },
+    {
+        "Titre":"Deadline",
+        "URL":"https:\/\/deadline.com\/feed\/"
+    },
+    {
+        "Titre":"IndieWire",
+        "URL":"https:\/\/www.indiewire.com\/feed\/"
+    },
+    {
+        "Titre":"France Culture",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCd5DKToXYTKAQ6khzewww2g"
+    },
+    {
+        "Titre":"Vinyl",
+        "URL":"https:\/\/pixelfed.social\/users\/Vinyl.atom"
+    },
+    {
+        "Titre":"r\/plexamp",
+        "URL":"https:\/\/reddit.com\/r\/plexamp\/new.rss"
+    },
+    {
+        "Titre":"r\/lanadelrey",
+        "URL":"https:\/\/reddit.com\/r\/lanadelrey\/new.rss"
+    },
+    {
+        "Titre":"r\/PleX",
+        "URL":"https:\/\/reddit.com\/r\/plex\/new.rss"
+    },
+    {
+        "Titre":"Les Nums, l'Update",
+        "URL":"https:\/\/publishers.edisound.com\/serie\/1efcda82-9f58-60f8-9f88-9b89a2fb2b5b\/rss"
+    },
+    {
+        "Titre":"Underscore_",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCWedHS9qKebauVIK2J7383g"
+    },
+    {
+        "Titre":"iA Writer",
+        "URL":"https:\/\/bsky.app\/profile\/did:plc:3l7xpi24mcts4h74jqqtijqh\/rss"
+    },
+    {
+        "Titre":"iA",
+        "URL":"https:\/\/mastodon.online\/@ia.rss"
+    },
+    {
+        "Titre":"iA",
+        "URL":"https:\/\/ia.net\/feed\/"
+    },
+    {
+        "Titre":"International - L'actualité 100 % vidéo - Brut",
+        "URL":"https:\/\/www.brut.media\/rss\/fr\/international.xml"
+    },
+    {
+        "Titre":"Environnement - L'actualité 100 % vidéo - Brut",
+        "URL":"https:\/\/www.brut.media\/rss\/fr\/environnement.xml"
+    },
+    {
+        "Titre":"Sciences & Technologies - L'actualité 100 % vidéo - Brut",
+        "URL":"https:\/\/www.brut.media\/rss\/fr\/sciences-technologies.xml"
+    },
+    {
+        "Titre":"Santé - L'actualité 100 % vidéo - Brut",
+        "URL":"https:\/\/www.brut.media\/rss\/fr\/sante.xml"
+    },
+    {
+        "Titre":"Economie - L'actualité 100 % vidéo - Brut",
+        "URL":"https:\/\/www.brut.media\/rss\/fr\/economie.xml"
+    },
+    {
+        "Titre":"Apple TV",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UC1Myj674wRVXB9I4c6Hm5zA"
+    },
+    {
+        "Titre":"Mac4Ever",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCfwLCsZhix155PAoFTBb-oQ"
+    },
+    {
+        "Titre":"Apple Newsroom",
+        "URL":"https:\/\/www.apple.com\/newsroom\/rss-feed.rss"
+    },
+    {
+        "Titre":"MacStories",
+        "URL":"https:\/\/www.macstories.net\/feed\/"
+    },
+    {
+        "Titre":"AppleInsider News",
+        "URL":"http:\/\/appleinsider.com\/appleinsider.rss"
+    },
+    {
+        "Titre":"Patently Apple",
+        "URL":"https:\/\/www.patentlyapple.com\/patently-apple\/rss.xml"
+    },
+    {
+        "Titre":"9to5Mac",
+        "URL":"https:\/\/9to5mac.com\/feed\/"
+    },
+    {
+        "Titre":"Mac4Ever - Flux Actualité",
+        "URL":"https:\/\/www.mac4ever.com\/flux\/rss\/content\/actu?token=23a40491d2a41e72fc8ca49ffa14f584fefcaa8466c867bf0dc9a30be8a1e98f"
+    },
+    {
+        "Titre":"MacRumors: Mac News and Rumors - Front Page",
+        "URL":"http:\/\/feeds.macrumors.com\/MacRumors-Front"
+    },
+    {
+        "Titre":"Silvio Rizzi",
+        "URL":"https:\/\/gloria.social\/@rizzi.rss"
+    },
+    {
+        "Titre":"amazing mac TV",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UC1ndVn8sa4oTbW09P5ICOog"
+    },
+    {
+        "Titre":"Apple",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UCE_M8A5yxnLfW0KghEeajjw"
+    },
+    {
+        "Titre":"Apple France",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UCh5CL7XbLPZPfJa7Bf6ifng"
+    },
+    {
+        "Titre":"MacGeneration Light",
+        "URL":"https:\/\/www.macg.co\/news\/feed"
+    },
+    {
+        "Titre":"LeMatin | Home",
+        "URL":"https:\/\/partner-feeds.lematin.ch\/rss\/lematin\/home"
+    },
+    {
+        "Titre":"Mediapart",
+        "URL":"https:\/\/mediapart.social\/@mediapart.rss"
+    },
+    {
+        "Titre":"RTS Info 🤖 [Bot]",
+        "URL":"https:\/\/botsin.space\/@RadioTeleSuisse.rss"
+    },
+    {
+        "Titre":"Agence France-Presse [🤖]",
+        "URL":"https:\/\/amicale.net\/@afpfr.rss"
+    },
+    {
+        "Titre":"FRANCE 24 Français [🤖]",
+        "URL":"https:\/\/amicale.net\/@france24_fr.rss"
+    },
+    {
+        "Titre":"Le Temps",
+        "URL":"https:\/\/www.letemps.ch\/feed"
+    },
+    {
+        "Titre":"La Liberté",
+        "URL":"https:\/\/www.laliberte.ch\/rss\/news"
+    },
+    {
+        "Titre":"Le Monde.fr - Actualités et Infos en France et dans le monde",
+        "URL":"https:\/\/www.lemonde.fr\/rss\/une.xml"
+    },
+    {
+        "Titre":"20 Minutes | Home",
+        "URL":"https:\/\/partner-feeds.20min.ch\/rss\/20minutes"
+    },
+    {
+        "Titre":"r\/sonos",
+        "URL":"https:\/\/reddit.com\/r\/sonos\/new.rss"
+    },
+    {
+        "Titre":"AllMusic Blog",
+        "URL":"https:\/\/www.allmusic.com\/rss"
+    },
+    {
+        "Titre":"Sonos",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCk8iI4Al5DbUMF5smZ68grQ"
+    },
+    {
+        "Titre":"Pitchfork",
+        "URL":"https:\/\/pitchfork.com\/feed\/rss"
+    },
+    {
+        "Titre":"Roon Labs",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UCeRqzkqgvIJl0iTr1SMZRXA"
+    },
+    {
+        "Titre":"Rolling Stone",
+        "URL":"https:\/\/www.rollingstone.fr\/feed\/"
+    },
+    {
+        "Titre":"Rolling Stone",
+        "URL":"https:\/\/www.rollingstone.com\/feed"
+    },
+    {
+        "Titre":"Toutelaculture",
+        "URL":"https:\/\/toutelaculture.com\/rss"
+    },
+    {
+        "Titre":"RSS News Feed - BraveWords",
+        "URL":"https:\/\/bravewords.com\/rss\/news.xml"
+    },
+    {
+        "Titre":"RSS: Track Reviews",
+        "URL":"https:\/\/pitchfork.com\/feed\/feed-track-reviews\/rss"
+    },
+    {
+        "Titre":"Musique : actualités et infos décalées en continu, en France et dans le monde",
+        "URL":"https:\/\/www.huffingtonpost.fr\/musique\/rss_headline.xml"
+    },
+    {
+        "Titre":"Roon Labs",
+        "URL":"https:\/\/blog.roonlabs.com\/feed\/"
+    },
+    {
+        "Titre":"Spotify",
+        "URL":"https:\/\/newsroom.spotify.com\/feed\/"
+    },
+    {
+        "Titre":"TSUGI",
+        "URL":"https:\/\/www.tsugi.fr\/feed\/"
+    },
+    {
+        "Titre":"Darko Audio",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCQIcXQ2n0sa-7CD0NtqnrrA"
+    },
+    {
+        "Titre":"Pro-Ject Audio Systems",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCva5OupB0lx7LiFsupyKPAA"
+    },
+    {
+        "Titre":"Stereogum",
+        "URL":"https:\/\/www.stereogum.com\/feed\/"
+    },
+    {
+        "Titre":"Rock&folk",
+        "URL":"https:\/\/www.rocknfolk.com\/feed\/"
+    },
+    {
+        "Titre":"Glitter Magazine",
+        "URL":"https:\/\/glittermagazine.co\/feed\/"
+    },
+    {
+        "Titre":"NME",
+        "URL":"https:\/\/www.nme.com\/feed"
+    },
+    {
+        "Titre":"Plexamp",
+        "URL":"https:\/\/mstdn.social\/@plexamp.rss"
+    },
+    {
+        "Titre":"Headphonesty",
+        "URL":"https:\/\/www.headphonesty.com\/feed\/"
+    },
+    {
+        "Titre":"Benzine Magazine",
+        "URL":"https:\/\/www.benzinemag.net\/feed\/"
+    },
+    {
+        "Titre":"Les Inrocks",
+        "URL":"https:\/\/www.lesinrocks.com\/rss"
+    },
+    {
+        "Titre":"La Planète Bleue - Radio Vostok",
+        "URL":"https:\/\/podcast.radiovostok.ch\/laplanetebleue\/feed.xml"
+    },
+    {
+        "Titre":"r\/vinyl",
+        "URL":"https:\/\/reddit.com\/r\/vinyl\/new.rss"
+    },
+    {
+        "Titre":"r\/ChatGPT",
+        "URL":"https:\/\/reddit.com\/r\/chatgpt\/new.rss"
+    },
+    {
+        "Titre":"WIRED",
+        "URL":"https:\/\/www.wired.com\/feed\/rss"
+    },
+    {
+        "Titre":"Flux général Developpez.com",
+        "URL":"https:\/\/www.developpez.com\/rss\/"
+    },
+    {
+        "Titre":"The Verge",
+        "URL":"http:\/\/theverge.com\/rss\/index.xml"
+    },
+    {
+        "Titre":"01net.com",
+        "URL":"https:\/\/www.01net.com\/feed\/"
+    },
+    {
+        "Titre":"PP World",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UCPQsSFJurluaMOG1qL0Y7sA"
+    },
+    {
+        "Titre":"Engadget is a web magazine with obsessive daily coverage of everything new in gadgets and consumer electronics",
+        "URL":"https:\/\/www.engadget.com\/rss.xml"
+    },
+    {
+        "Titre":"The Linux Foundation",
+        "URL":"https:\/\/bsky.app\/profile\/did:plc:h5hpocfxr26lrha2d6qwd2b7\/rss"
+    },
+    {
+        "Titre":"Presse-citron",
+        "URL":"https:\/\/www.presse-citron.net\/feed\/"
+    },
+    {
+        "Titre":"Daring Fireball",
+        "URL":"https:\/\/mastodon.social\/@daringfireball.rss"
+    },
+    {
+        "Titre":"LoKan Sardari",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCaHolOYkfcTdC0vTFAywzXw"
+    },
+    {
+        "Titre":"Peter Pee",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCnUOo0U4wI2b9R4ghXmKblw"
+    },
+    {
+        "Titre":"Les dernières actualités de Futura-Maison",
+        "URL":"https:\/\/www.futura-sciences.com\/rss\/maison\/actualites.xml"
+    },
+    {
+        "Titre":"Les dernières actualités de Futura",
+        "URL":"https:\/\/www.futura-sciences.com\/rss\/actualites.xml"
+    },
+    {
+        "Titre":"Gizmodo",
+        "URL":"https:\/\/gizmodo.com\/rss"
+    },
+    {
+        "Titre":"Numerama",
+        "URL":"https:\/\/www.numerama.com\/feed\/"
+    },
+    {
+        "Titre":"r\/reeder",
+        "URL":"https:\/\/reddit.com\/r\/reeder\/new.rss"
+    },
+    {
+        "Titre":"Fredzone",
+        "URL":"https:\/\/www.fredzone.org\/feed"
+    },
+    {
+        "Titre":"TechCrunch",
+        "URL":"https:\/\/techcrunch.com\/feed\/"
+    },
+    {
+        "Titre":"Nightech",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCu6HC8ahaPWqqfSvic7nWyQ"
+    },
+    {
+        "Titre":"r\/suisse",
+        "URL":"https:\/\/reddit.com\/r\/suisse\/new.rss"
+    },
+    {
+        "Titre":"Nota Bene",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCP46_MXP_WG_auH88FnfS1A"
+    },
+    {
+        "Titre":"Chef Michel Dumas",
+        "URL":"https:\/\/www.youtube.com\/feeds\/videos.xml?channel_id=UCSLyEx8ISkp567AjOAHYN5Q"
+    },
+    {
+        "Titre":"Jacques Attali",
+        "URL":"http:\/\/www.attali.com\/feed\/"
+    },
+    {
+        "Titre":"Kumiko Recette",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCdc26UC7BScMZ3-KPQzXI-w"
+    },
+    {
+        "Titre":"Flux d'actualité Elle.fr",
+        "URL":"https:\/\/cdn-elle.ladmedia.fr\/var\/plain_site\/storage\/flux_rss\/fluxToutELLEfr.xml"
+    },
+    {
+        "Titre":"ARTEfr 🤖 [Bot]",
+        "URL":"https:\/\/botsin.space\/@artefr.rss"
+    },
+    {
+        "Titre":"Men With The Pot",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCfxzr4iHJ1ZFq7KT8bwfiBw"
+    },
+    {
+        "Titre":"Fast Company",
+        "URL":"https:\/\/www.fastcompany.com\/latest\/rss?truncated=true"
+    },
+    {
+        "Titre":"Glitter Magazine",
+        "URL":"https:\/\/glittermagazine.co\/feed\/"
+    },
+    {
+        "Titre":"Open Culture (Official)",
+        "URL":"https:\/\/toot.community\/@openculture.rss"
+    },
+    {
+        "Titre":"ARTEfr 🤖 [Bot]",
+        "URL":"https:\/\/botsin.space\/@artefr.rss"
+    },
+    {
+        "Titre":"OpenAI News",
+        "URL":"http:\/\/openai.com\/blog\/rss.xml"
+    },
+    {
+        "Titre":"Fifty States — un Podcast Quotidien",
+        "URL":"https:\/\/feeds.audiomeans.fr\/feed\/fa79dc24-5b09-4f81-ba14-2b8229bcb817.xml"
+    },
+    {
+        "Titre":"Screen Rant",
+        "URL":"https:\/\/screenrant.com\/feed"
+    },
+    {
+        "Titre":"Captain Popcorn",
+        "URL":"https:\/\/youtube.com\/feeds\/videos.xml?channel_id=UCZeyUZmGAyRLDfM2ir3q-OQ"
+    },
+    {
+        "Titre":"AlloCiné",
+        "URL":"https:\/\/feeds.360.audion.fm\/-nV23GTsk3gNKJvLwiSsV"
+    },
+    {
+        "Titre":"Infuse",
+        "URL":"https:\/\/mastodon.social\/@infuse.rss"
+    },
+    {
+        "Titre":"Ecran Large",
+        "URL":"https:\/\/www.ecranlarge.com\/feed\/"
+    },
+    {
+        "Titre":"Le Blog Du Cinéma",
+        "URL":"https:\/\/www.leblogducinema.com\/feed\/"
+    },
+    {
+        "Titre":"News cinéma, films et séries",
+        "URL":"https:\/\/www.allocine.fr\/rss\/news.xml"
+    }
+]

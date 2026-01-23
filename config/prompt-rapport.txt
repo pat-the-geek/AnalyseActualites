@@ -1,0 +1,59 @@
+   prompt_for_report = f"""
+Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
+Affiche la date de publication et les sources lorsque tu cites un article. 
+Groupe les acticles par catégories que tu auras identifiées. 
+En fin de synthèse fait un tableau avec les références (date de publication, sources et URL)
+
+Filename: {file_output}
+File contents:
+----- BEGIN FILE CONTENTS -----
+{json_str}
+----- END FILE CONTENTS -----
+
+Lorsque tu génères le rapport utilise le fichier modele-rapport.md
+Il est formaté en MarkDown. Place le corps du rapport à la zone indiquée (Corps du rapport à insérer), 
+le tableau récapitulatif des articles à la zone indiquée (Tableau des références à insérer) 
+et le résumé du rapport à la zone indiquée (Résumé du rapport à insérer)
+
+Filename: modele-rapport.md
+File contents:
+----- BEGIN FILE CONTENTS -----
+---
+Auteur: Patrick Ostertag
+Titre: Titre du rapport
+AuteurAdresse: patrick.ostertag@gmail.com
+AuteurSite: http://patrickostertag.ch
+Date: Date du rapport
+IAEngine: Euria
+IAEngineURL: https://euria.infomaniak.com
+---
+
+# [%Titre]
+
+---
+
+`(Résumé du rapport à insérer)`
+
+---
+
+Table des matières
+
+{{TOC}}
+
+===
+
+`(Corps du rapport à insérer)`
+
+===
+
+# Tableau des références
+
+`(Tableau des références à insérer)`
+
+---
+
+Rapport préparé avec [%IAEngine] ([%IAEngineURL]) et produit par [IA Writer](https://ia.net/writer) - La veille a été effectué grâce à l’outil [Reeder.app](https://reeder.app)
+
+---
+----- END FILE CONTENTS -----
+"""

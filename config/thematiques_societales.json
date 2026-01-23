@@ -1,0 +1,211 @@
+{
+    "metadata": {
+        "date_analyse": "2026-01-23T14:45:00",
+        "periode_couverte": "2025-12-01 au 2026-01-23",
+        "nombre_articles_total": 84,
+        "nombre_articles_valides": 72,
+        "version": "1.0",
+        "description": "Thématiques sociétales identifiées dans les articles d'actualité collectés"
+    },
+    "thematiques": {
+        "Intelligence Artificielle & Technologie": {
+            "rang": 1,
+            "occurrences": 72,
+            "pourcentage": 100.0,
+            "mots_cles": [
+                "ia",
+                "intelligence artificielle",
+                "chatgpt",
+                "gemini",
+                "mistral",
+                "openai",
+                "modèle",
+                "algorithme",
+                "llm",
+                "machine learning",
+                "deepseek",
+                "anthropic",
+                "claude",
+                "grok",
+                "siri",
+                "apple intelligence"
+            ]
+        },
+        "Économie & Entreprises": {
+            "rang": 2,
+            "occurrences": 39,
+            "pourcentage": 54.2,
+            "mots_cles": [
+                "économie",
+                "entreprise",
+                "marché",
+                "investissement",
+                "revenus",
+                "valorisation",
+                "compétitivité",
+                "start-up",
+                "licorne",
+                "productivité",
+                "financier",
+                "gain"
+            ]
+        },
+        "Protection des Consommateurs": {
+            "rang": 3,
+            "occurrences": 34,
+            "pourcentage": 47.2,
+            "mots_cles": [
+                "consommateur",
+                "utilisateur",
+                "client",
+                "responsabilité",
+                "vulnérable"
+            ]
+        },
+        "Politique & Géopolitique": {
+            "rang": 4,
+            "occurrences": 28,
+            "pourcentage": 38.9,
+            "mots_cles": [
+                "gouvernement",
+                "état",
+                "ministère",
+                "chine",
+                "censure",
+                "souveraineté",
+                "régulation",
+                "loi",
+                "sénat",
+                "autorités",
+                "militaire",
+                "armées",
+                "national"
+            ]
+        },
+        "Médias & Information": {
+            "rang": 5,
+            "occurrences": 22,
+            "pourcentage": 30.6,
+            "mots_cles": [
+                "média",
+                "information",
+                "presse",
+                "journalisme",
+                "contenu",
+                "désinformation",
+                "résumé",
+                "fake news"
+            ]
+        },
+        "Éthique & Droits": {
+            "rang": 6,
+            "occurrences": 19,
+            "pourcentage": 26.4,
+            "mots_cles": [
+                "éthique",
+                "droit",
+                "droits d'auteur",
+                "propriété intellectuelle",
+                "plagiat",
+                "données protégées",
+                "vie privée",
+                "confidentialité",
+                "rgpd",
+                "transparence"
+            ]
+        },
+        "Sécurité & Cybersécurité": {
+            "rang": 7,
+            "occurrences": 17,
+            "pourcentage": 23.6,
+            "mots_cles": [
+                "sécurité",
+                "cyberattaque",
+                "piratage",
+                "hackeurs",
+                "vulnérabilité",
+                "ransomware",
+                "protection",
+                "garde-fou"
+            ]
+        },
+        "Justice & Réglementation": {
+            "rang": 8,
+            "occurrences": 16,
+            "pourcentage": 22.2,
+            "mots_cles": [
+                "justice",
+                "procès",
+                "plainte",
+                "poursuite",
+                "tribunal",
+                "légal",
+                "juridique",
+                "amende",
+                "condamnation"
+            ]
+        },
+        "Santé": {
+            "rang": 9,
+            "occurrences": 15,
+            "pourcentage": 20.8,
+            "mots_cles": [
+                "santé",
+                "médical",
+                "cancer",
+                "suicide",
+                "mental",
+                "patient",
+                "maladie",
+                "thérapie",
+                "diagnostic",
+                "traitement",
+                "test hépatiques"
+            ]
+        },
+        "Emploi & Travail": {
+            "rang": 10,
+            "occurrences": 12,
+            "pourcentage": 16.7,
+            "mots_cles": [
+                "emploi",
+                "travail",
+                "salarié",
+                "professionnel",
+                "métier",
+                "compétence",
+                "poste",
+                "carrière"
+            ]
+        },
+        "Éducation & Formation": {
+            "rang": 11,
+            "occurrences": 8,
+            "pourcentage": 11.1,
+            "mots_cles": [
+                "éducation",
+                "formation",
+                "enseignement",
+                "apprentissage",
+                "étudiant",
+                "pédagogique",
+                "école"
+            ]
+        },
+        "Environnement": {
+            "rang": 12,
+            "occurrences": 6,
+            "pourcentage": 8.3,
+            "mots_cles": [
+                "environnement",
+                "co2",
+                "carbone",
+                "énergie",
+                "énergétique",
+                "empreinte",
+                "climat",
+                "écologique"
+            ]
+        }
+    }
+}
