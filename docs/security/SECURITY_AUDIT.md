@@ -223,7 +223,7 @@ git commit -m "🎉 Initial commit - Pipeline ETL sécurisé"
 
 ### 1. Déploiement GitHub
 
-Suivre le guide [DEPLOY.md](DEPLOY.md) :
+Suivre le guide [../DEPLOY.md](../DEPLOY.md) :
 1. Créer le dépôt sur GitHub
 2. Configurer le remote
 3. Pousser le code
@@ -249,7 +249,7 @@ Suivre le guide [DEPLOY.md](DEPLOY.md) :
 
 **Responsable** : Patrick Ostertag  
 **Email** : patrick.ostertag@gmail.com  
-**Documentation** : Voir [DOCS_INDEX.md](DOCS_INDEX.md)
+**Documentation** : Voir [../DOCS_INDEX.md](../DOCS_INDEX.md)
 
 ---
 

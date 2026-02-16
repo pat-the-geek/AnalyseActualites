@@ -38,7 +38,7 @@
 |---------|--------|-------------|
 | `.env.example` | 1.4 KB | Template configuration |
 | `pre-commit-hook.sh` | 4.8 KB | Hook sécurité Git |
-| `SECURITY.md` | 5.0 KB | Guide sécurité complet |
+| `security/SECURITY.md` | 5.0 KB | Guide sécurité complet |
 | `DEPLOY.md` | 6.4 KB | Guide déploiement GitHub |
 | `SECURITY_AUDIT.md` | 7.6 KB | Rapport audit sécurité |
 | 5x `.gitkeep` | ~0.5 KB | Maintien structure vides |
@@ -243,7 +243,7 @@ git push --force
 ### Doutes sur la sécurité
 
 1. **NE PAS POUSSER** vers GitHub
-2. Relire [SECURITY.md](SECURITY.md)
+2. Relire [security/SECURITY.md](security/SECURITY.md)
 3. Exécuter les vérifications ci-dessus
 4. Contacter : patrick.ostertag@gmail.com
 
@@ -252,7 +252,7 @@ git push --force
 ## 📞 Support
 
 - **Documentation** : Voir [DOCS_INDEX.md](DOCS_INDEX.md)
-- **Sécurité** : Voir [SECURITY.md](SECURITY.md)
+- **Sécurité** : Voir [security/SECURITY.md](security/SECURITY.md)
 - **Déploiement** : Voir [DEPLOY.md](DEPLOY.md)
 - **Email** : patrick.ostertag@gmail.com
 

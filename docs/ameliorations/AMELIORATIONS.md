@@ -425,8 +425,8 @@ pytest tests/test_http_utils.py -v
 ### Fichiers à mettre à jour
 
 1. **README.md** - Ajouter section sur les utils et version optimisée
-2. **ARCHITECTURE.md** - Documenter nouvelle architecture modulaire
-3. **STRUCTURE.md** - Inclure le répertoire utils/
+2. **../ARCHITECTURE.md** - Documenter nouvelle architecture modulaire
+3. **../STRUCTURE.md** - Inclure le répertoire utils/
 4. **scripts/USAGE.md** - Documenter les deux versions du script
 
 ---
@@ -573,7 +573,7 @@ cache.clear(older_than=86400)  # Supprimer > 24h
 
 Pour questions ou problèmes:
 - Email: patrick.ostertag@gmail.com
-- Consulter: ARCHITECTURE.md, STRUCTURE.md, README.md
+- Consulter: ../ARCHITECTURE.md, ../STRUCTURE.md, ../README.md
 - Issues GitHub: [à créer]
 
 ---

@@ -30,30 +30,24 @@ Dépendances:
     - tkinter: pour l'interface de sélection de fichier (stdlib)
 """
 
+
 import requests
 from bs4 import BeautifulSoup
 import json
 import sys
-
 import time
 from datetime import datetime
+import os
+
+# Import du logger centralisé
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logging import print_console, setup_logger
+logger = setup_logger("AnalyseActualites")
 
 import tkinter as tk
 from tkinter import filedialog
 
-def print_console(msg):
-    """Affiche un message avec horodatage dans la console.
-    
-    Args:
-        msg (str): Le message à afficher
-        
-    Exemple:
-        >>> print_console("Traitement en cours...")
-        2026-01-23 14:30:45 Traitement en cours...
-    """
-    now = datetime.now()
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-    print (current_time + " " + msg)
+# print_console est importé depuis utils.logging
     
 
 # ============================================================================
@@ -75,6 +69,7 @@ if file_path:
     print_console ("Fichier sélectionné : " + file_path)
 else:
     # Aucun fichier sélectionné, on quitte le programme
+    print_console("Aucun fichier sélectionné, arrêt du script.", level="warning")
     sys.exit()
 
 

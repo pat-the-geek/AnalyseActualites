@@ -62,13 +62,13 @@ def demander_dates() -> tuple[str, str]:
     if len(sys.argv) == 3:
         date_debut = sys.argv[1]
         date_fin = sys.argv[2]
-        print_console(f"Dates prises en compte depuis les arguments : début={date_debut}, fin={date_fin}")
+        print_console(f"Dates prises en compte depuis les arguments : début={date_debut}, fin={date_fin}", level="info")
         
         # Valider les dates
         validate_date_range(date_debut, date_fin)
     else:
         date_debut, date_fin = get_default_date_range()
-        print_console(f"Aucun argument fourni. Utilisation des dates par défaut : début={date_debut}, fin={date_fin}")
+        print_console(f"Aucun argument fourni. Utilisation des dates par défaut : début={date_debut}, fin={date_fin}", level="info")
     
     return date_debut, date_fin
 
@@ -86,13 +86,13 @@ def fetch_json_feed(url: str, timeout: int = 10) -> dict:
     Raises:
         SystemExit: En cas d'erreur réseau ou de parsing
     """
-    print_console(f"Chargement du flux JSON depuis : {url}")
+    print_console(f"Chargement du flux JSON depuis : {url}", level="info")
     
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
         data = response.json()
-        print_console(f"Flux JSON chargé avec succès ({len(data.get('items', []))} articles)")
+        print_console(f"Flux JSON chargé avec succès ({len(data.get('items', []))} articles)", level="info")
         return data
         
     except requests.exceptions.HTTPError as e:
@@ -122,7 +122,7 @@ def create_report(file_output: Path, api_client: EurIAClient) -> None:
         file_output: Chemin du fichier JSON source contenant les articles
         api_client: Client API pour générer le rapport
     """
-    print_console("Génération du rapport en cours...")
+    print_console("Génération du rapport en cours...", level="info")
     
     try:
         with open(file_output, 'r', encoding='utf-8') as jsonfile:
@@ -144,7 +144,7 @@ def create_report(file_output: Path, api_client: EurIAClient) -> None:
         with open(report_file, 'w', encoding='utf-8') as txtfile:
             txtfile.write(report)
         
-        print_console(f"Le rapport a été sauvegardé dans le fichier {report_file}")
+        print_console(f"Le rapport a été sauvegardé dans le fichier {report_file}", level="info")
         
     except Exception as e:
         logger.error(f"Erreur lors de la génération du rapport : {e}")
@@ -152,10 +152,10 @@ def create_report(file_output: Path, api_client: EurIAClient) -> None:
 
 def main():
     """Fonction principale du script."""
-    print_console("=" * 80)
-    print_console("Démarrage du script de génération de résumés d'articles")
-    print_console("Version 2.0 - Optimisée avec traitement parallèle et cache")
-    print_console("=" * 80)
+    print_console("=" * 80, level="info")
+    print_console("Démarrage du script de génération de résumés d'articles", level="info")
+    print_console("Version 2.0 - Optimisée avec traitement parallèle et cache", level="info")
+    print_console("=" * 80, level="info")
     
     # Charger la configuration
     try:
@@ -186,7 +186,7 @@ def main():
         sys.exit(0)
     
     # Filtrer les articles par date d'abord pour optimiser
-    print_console(f"Filtrage des articles entre {date_debut} et {date_fin}...")
+    print_console(f"Filtrage des articles entre {date_debut} et {date_fin}...", level="info")
     filtered_items = []
     
     for item in items:
@@ -198,14 +198,14 @@ def main():
             if verifier_date_entre(date_formatee, date_debut, date_fin):
                 filtered_items.append(item)
     
-    print_console(f"{len(filtered_items)} articles correspondent aux dates spécifiées")
+    print_console(f"{len(filtered_items)} articles correspondent aux dates spécifiées", level="info")
     
     if not filtered_items:
         logger.warning("Aucun article ne correspond aux dates spécifiées")
         sys.exit(0)
     
     # Extraction des textes en parallèle avec cache
-    print_console("Extraction des textes en parallèle...")
+    print_console("Extraction des textes en parallèle...", level="info")
     
     def fetch_with_cache(url: str) -> str:
         """Fonction wrapper pour fetch avec cache."""
@@ -229,7 +229,7 @@ def main():
     api_client = EurIAClient()
     
     # Traitement de chaque article : résumé IA et extraction d'images
-    print_console("Génération des résumés...")
+    print_console("Génération des résumés...", level="info")
     articles_data = []
     
     for i, item in enumerate(filtered_items, 1):
@@ -262,7 +262,7 @@ def main():
         # Extraire les images (pas de cache car rapide)
         images = extract_top_n_largest_images(url, n=3, min_width=500, timeout=10)
         
-        print_console(f"[{i}/{len(filtered_items)}] {source}: {len(resume)} car. | {len(images) if isinstance(images, list) else 0} images")
+        print_console(f"[{i}/{len(filtered_items)}] {source}: {len(resume)} car. | {len(images) if isinstance(images, list) else 0} images", level="debug")
         
         articles_data.append({
             "Date de publication": date_published,
@@ -278,8 +278,8 @@ def main():
     with open(file_output, 'w', encoding='utf-8') as jsonfile:
         json.dump(articles_data, jsonfile, ensure_ascii=False, indent=4)
     
-    print_console("")
-    print_console(f"✓ Les textes de tous les articles ont été sauvés dans {file_output}")
+    print_console("", level="info")
+    print_console(f"✓ Les textes de tous les articles ont été sauvés dans {file_output}", level="info")
     
     # Générer le rapport
     create_report(file_output, api_client)

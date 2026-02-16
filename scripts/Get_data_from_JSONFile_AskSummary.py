@@ -30,10 +30,12 @@ Sorties:
     rapport_sommaire_articles_generated_<date_debut>_<date_fin>.md : Rapport synthétique
 """
 
+
 # Imports des bibliothèques tierces
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
 
 # Imports de la bibliothèque standard
 import json
@@ -41,6 +43,11 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta
+
+# Import du logger centralisé
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logging import print_console, setup_logger
+logger = setup_logger("AnalyseActualites")
 
 def ask_for_ia(prompt: str, max_attempts: int = 3, timeout: int = 60) -> str:
     """Envoie un prompt à l'API EurIA et retourne la réponse.
@@ -94,18 +101,7 @@ def ask_for_ia(prompt: str, max_attempts: int = 3, timeout: int = 60) -> str:
 
     return "Désolé, je n'ai pas pu obtenir de réponse. Veuillez réessayer plus tard."
 
-def print_console(msg: str) -> None:
-    """Affiche un message horodaté dans la console.
-    
-    Préfixe le message avec l'horodatage local au format AAAA-MM-JJ HH:MM:SS
-    et l'affiche sur la sortie standard.
-    
-    Args:
-        msg: Le message à afficher.
-    """
-    now = datetime.now()
-    current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{current_time} {msg}")
+# print_console est importé depuis utils.logging
     
 def verifier_date_entre(date_a_verifier: str, date_debut: str, date_fin: str) -> bool:
     """Vérifie si une date se situe entre deux bornes incluses.
@@ -131,10 +127,7 @@ def verifier_date_entre(date_a_verifier: str, date_debut: str, date_fin: str) ->
         else:
             return False
     except ValueError:
-        print(date_a_verifier_obj)
-        print(date_debut_obj)
-        print(date_fin_obj)
-        print("Format de date invalide. Veuillez utiliser le format AAAA-MM-JJ.")
+        print_console(f"Format de date invalide. Veuillez utiliser le format AAAA-MM-JJ.", level="error")
         return False
     
 def demander_dates() -> tuple[str, str]:
@@ -153,12 +146,12 @@ def demander_dates() -> tuple[str, str]:
     if len(sys.argv) == 3:
         date_debut = sys.argv[1]
         date_fin = sys.argv[2]
-        print(f"Dates prises en compte depuis les arguments : début={date_debut}, fin={date_fin}")
+        print_console(f"Dates prises en compte depuis les arguments : début={date_debut}, fin={date_fin}")
     else:
         today = datetime.today()
         date_debut = today.replace(day=1).strftime("%Y-%m-%d")
         date_fin = today.strftime("%Y-%m-%d")
-        print(f"Aucun argument fourni. Utilisation des dates par défaut : début={date_debut}, fin={date_fin}")
+        print_console(f"Aucun argument fourni. Utilisation des dates par défaut : début={date_debut}, fin={date_fin}")
 
     try:
         date_debut_obj = datetime.strptime(date_debut, "%Y-%m-%d")
@@ -362,22 +355,22 @@ try:
     response.raise_for_status()
     data = response.json()
 except requests.exceptions.HTTPError as e:
-    print(f"Erreur HTTP : {e}")
+    print_console(f"Erreur HTTP : {e}", level="error")
     sys.exit()
 except requests.exceptions.ConnectionError:
-    print("Erreur de connexion au serveur.")
+    print_console("Erreur de connexion au serveur.", level="error")
     sys.exit()
 except requests.exceptions.Timeout:
-    print("La requête a expiré.")
+    print_console("La requête a expiré.", level="error")
     sys.exit()
 except requests.exceptions.RequestException as e:
-    print(f"Erreur générale de requête : {e}")
+    print_console(f"Erreur générale de requête : {e}", level="error")
     sys.exit()
 except json.JSONDecodeError as e:
-    print(f"Erreur de parsing JSON : {e}")
+    print_console(f"Erreur de parsing JSON : {e}", level="error")
     sys.exit()      
 except Exception as e:
-    print(f"Erreur inattendue : {e}")
+    print_console(f"Erreur inattendue : {e}", level="error")
     sys.exit()  
 
 # Récupération des dates de traitement

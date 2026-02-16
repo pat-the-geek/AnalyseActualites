@@ -1,3 +1,125 @@
+## Automatisation cron & Docker
+
+L'application propose une automatisation complète via cron, intégrée dans le déploiement (y compris Docker) :
+
+- Un cron job exécute `python scripts/scheduler_articles.py` chaque semaine (par défaut le lundi à 6h du matin)
+- Le scheduler orchestre la génération des éditions mensuelles et intermédiaires selon le volume d'actualités
+- Le cron est défini dans le conteneur Docker via un fichier `crontab` ou dans le `Dockerfile` (voir exemple ci-dessous)
+
+### Exemple de crontab (à inclure dans l'image Docker)
+
+```cron
+0 6 * * 1 cd /app && python3 scripts/scheduler_articles.py >> /app/rapports/cron_scheduler.log 2>&1
+```
+
+### Intégration Docker
+
+Dans le `Dockerfile`, ajouter :
+
+```dockerfile
+COPY scripts/scheduler_articles.py scripts/
+COPY crontab /etc/cron.d/scheduler_cron
+RUN chmod 0644 /etc/cron.d/scheduler_cron \
+  && crontab /etc/cron.d/scheduler_cron
+CMD ["cron", "-f"]
+```
+
+Le scheduler sera ainsi exécuté automatiquement dans l'environnement Docker, sans intervention manuelle.
+
+---
+# Scheduler intelligent d'articles
+
+Un script `scheduler_articles.py` permet de planifier automatiquement l'exécution de la génération de résumés d'actualités :
+
+- **Exécution mensuelle obligatoire** : du 1er au dernier jour du mois (détection automatique du dernier jour)
+- **Révision hebdomadaire** : chaque semaine, le scheduler compte le nombre de nouveaux articles. Si >10 nouveaux articles, il lance une édition intermédiaire (semaine en cours)
+- **Planification intelligente** : le scheduler interroge l'IA EurIA pour recommander une fréquence optimale selon le volume d'actualités
+- **Historique** : la fréquence d'exécution est ajustée selon l'historique et les recommandations IA
+
+### Utilisation
+
+```bash
+python scripts/scheduler_articles.py
+```
+
+Le script utilise la configuration centrale (`config/`), le cache, et le client API EurIA. Il logge toutes les actions dans la console.
+
+**Remarque :** Le scheduler ne modifie pas la logique métier de génération des résumés, il orchestre simplement les appels au script principal.
+
+---
+# 📡 Utilisation de l'IA EurIA (Infomaniak)
+
+Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour générer automatiquement des résumés d'articles et des rapports thématiques à partir des flux d'actualités. L'intégration se fait principalement dans le script `Get_data_from_JSONFile_AskSummary.py`.
+
+## 🔑 Configuration requise
+
+1. **Variables d'environnement** (dans `.env` à la racine) :
+   - `URL` : URL de l'API EurIA (ex : https://api.infomaniak.com/euria/v1/chat/completions)
+   - `bearer` : Token API Infomaniak (à obtenir sur le portail Infomaniak)
+   - `REEDER_JSON_URL` : URL du flux JSON à analyser
+
+2. **Dépendances** :
+   - `requests`, `python-dotenv` (voir `requirements.txt`)
+
+## ⚙️ Fonctionnement de l'appel API
+
+L'appel à l'API se fait via une requête POST :
+
+```python
+response = requests.post(
+  URL,
+  json={
+    "messages": [{"content": prompt, "role": "user"}],
+    "model": "qwen3",
+    "enable_web_search": True
+  },
+  headers={'Authorization': f'Bearer {BEARER}'},
+  timeout=60
+)
+content = response.json()['choices'][0]['message']['content']
+```
+
+## 📝 Prompts utilisés
+
+### 1. Résumé d'article
+Utilisé pour générer un résumé concis (max 20 lignes) en français à partir du texte brut d'un article.
+
+**Prompt :**
+```
+faire un résumé de ce texte sur maximum 20 lignes en français, 
+ne donne que le résumé, sans commentaire ni remarque : {texte}
+```
+
+**Timeout** : 60s (3 tentatives en cas d'échec)
+
+### 2. Génération de rapport thématique
+Utilisé pour synthétiser un ensemble d'articles en un rapport structuré, avec regroupement par catégories, tableau de références et inclusion d'images.
+
+**Prompt :**
+```
+Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
+Affiche la date de publication et les sources lorsque tu cites un article. 
+Groupe les acticles par catégories que tu auras identifiées. 
+En fin de synthèse fait un tableau avec les références.
+Inclus des images pertinentes (<img src='URL' />).
+```
+
+**Timeout** : 300s (3 tentatives en cas d'échec)
+
+## 🔄 Gestion des erreurs et retries
+
+- **3 tentatives** automatiques en cas d'échec ou de timeout
+- **Timeouts** : 60s pour les résumés, 300s pour les rapports
+- **Fallback** : message d'erreur standardisé si l'API échoue après 3 essais
+
+## 📋 Bonnes pratiques
+
+- Toujours utiliser les prompts en français
+- Ne jamais modifier les clés de sortie (`Résumé`, `Date de publication`, etc.) sans mise à jour globale
+- Respecter le format de date ISO 8601 strict (`%Y-%m-%dT%H:%M:%SZ`)
+- Utiliser la fonction `print_console()` pour les logs
+
+Pour plus de détails, voir la documentation dans `docs/` et les instructions dans `.github/copilot-instructions.md`.
 # AnalyseActualités
 
 Pipeline de collecte et d'analyse d'actualités utilisant des flux RSS/JSON et l'API EurIA d'Infomaniak (modèle Qwen3) pour générer des résumés automatiques d'articles.

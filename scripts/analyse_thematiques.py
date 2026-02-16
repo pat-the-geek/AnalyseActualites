@@ -4,20 +4,24 @@
 Analyse des thématiques sociétales dans les articles collectés
 """
 
+
 import json
 import os
 from collections import Counter
 from datetime import datetime
+import sys
+
+# Import du logger centralisé
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logging import print_console, setup_logger
+logger = setup_logger("AnalyseActualites")
 
 # Définir le répertoire du projet
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data', 'articles')
 
-def print_console(msg):
-    """Affiche un message avec horodatage"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"{timestamp} {msg}")
+# print_console est importé depuis utils.logging
 
 def charger_articles():
     """Charge tous les fichiers JSON du répertoire articles"""
@@ -34,7 +38,7 @@ def charger_articles():
                 articles.extend(data)
                 print_console(f"  ✓ {fichier}: {len(data)} articles")
         except Exception as e:
-            print_console(f"  ✗ Erreur lors du chargement de {fichier}: {e}")
+            print_console(f"  ✗ Erreur lors du chargement de {fichier}: {e}", level="error")
     
     return articles
 

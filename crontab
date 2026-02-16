@@ -1,0 +1,3 @@
+# Crontab pour scheduler intelligent AnalyseActualités
+# Exécute le scheduler chaque lundi à 6h du matin
+0 6 * * 1 cd /app && python3 scripts/scheduler_articles.py >> /app/rapports/cron_scheduler.log 2>&1

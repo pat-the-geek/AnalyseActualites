@@ -1,9 +1,16 @@
+
 import json
 import tkinter as tk
 from tkinter import filedialog
 from datetime import datetime
 import traceback
 import os
+import sys
+
+# Import du logger centralisé
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.logging import print_console, setup_logger
+logger = setup_logger("AnalyseActualites")
 
 def json_to_markdown(input_file, output_file):
     try:
@@ -40,14 +47,14 @@ def json_to_markdown(input_file, output_file):
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(''.join(markdown_content))
 
-        print(f"Le fichier Markdown '{output_file}' a été généré avec succès.")
+        print_console(f"Le fichier Markdown '{output_file}' a été généré avec succès.")
 
     except json.JSONDecodeError as e:
-        print(f"Erreur de décodage JSON : {e}")
+        print_console(f"Erreur de décodage JSON : {e}", level="error")
     except FileNotFoundError as e:
-        print(f"Fichier non trouvé : {e}")
+        print_console(f"Fichier non trouvé : {e}", level="error")
     except Exception as e:
-        print(f"Erreur inattendue : {e}")
+        print_console(f"Erreur inattendue : {e}", level="error")
         traceback.print_exc()
 
 def main():
@@ -76,13 +83,13 @@ def main():
             json_to_markdown(input_file, output_file)
 
         else:
-            print("Aucun fichier sélectionné.")
+            print_console("Aucun fichier sélectionné.", level="warning")
 
     except Exception as e:
         import traceback
-        print(f"Erreur avec l'interface graphique : {e}")
+        print_console(f"Erreur avec l'interface graphique : {e}", level="error")
         traceback.print_exc()
-        print("Essayez de lancer le script depuis un terminal local.")
+        print_console("Essayez de lancer le script depuis un terminal local.", level="warning")
 
 if __name__ == "__main__":
     main()
