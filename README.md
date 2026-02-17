@@ -1,7 +1,7 @@
 
 # WUDD.ai
 
-Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomaniak) et le modèle Qwen3. Collecte, analyse et synthèse d'articles depuis des flux RSS/JSON géré par Reeder, avec export en JSON et Markdown.
+Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomaniak) et le modèle Qwen3. Collecte, analyse et synthèse d'articles depuis des flux RSS/JSON gérés par Reeder, avec export en JSON et Markdown.
 
 ---
 
