@@ -1,81 +1,28 @@
+# WUDD.ai
 
-
-```
-WUDD.ai/
-├── scripts/                              # Scripts Python
-│   ├── Get_data_from_JSONFile_AskSummary.py  # Script principal (collecte + résumés IA)
-│   ├── Get_htmlText_From_JSONFile.py         # Extraction de texte HTML
-│   ├── articles_json_to_markdown.py          # Conversion JSON → Markdown
-│   └── analyse_thematiques.py                # Analyse thématiques sociétales
-│
-├── config/                               # Configuration
-│   ├── sites_actualite.json              # Liste des sources RSS/JSON
-│   ├── categories_actualite.json         # Catégories d'articles
-│   ├── prompt-rapport.txt                # Template de prompt pour rapports
-│   └── thematiques_societales.json       # Thématiques sociétales (12 thèmes)
-│
-├── data/                                 # Données générées
-│   ├── articles/                         # Articles JSON par période
-│   └── raw/                              # Données brutes (HTML, texte)
-│
-├── rapports/                             # Rapports générés
-│   ├── markdown/                         # Rapports .md
-│   └── pdf/                              # Rapports PDF (si générés)
-│
-├── samples/                              # Exemples de rapports générés (voir ci-dessous)
-│
-├── archives/                             # Anciennes versions de scripts
-├── tests/                                # Tests unitaires
-├── .github/                              # Configuration GitHub/Copilot
-├── .env                                  # Variables d'environnement (non versionné)
-└── README.md                             # Ce fichier
-```
-
-### Dossier `samples/` — Exemples de rapports générés
-
-Le dossier `samples/` contient des exemples de rapports générés par le pipeline (par exemple : `articles_generated_2026-02-01_2026-02-28.json`). Ces fichiers servent de référence pour la structure de sortie attendue et sont utilisés pour illustrer le fonctionnement du projet. Certains de ces exemples sont également publiés sur GitHub pour faciliter la démonstration et la validation du pipeline.
-### Exemple de crontab (à inclure dans l'image Docker)
-
-```cron
-0 6 * * 1 cd /app && python3 scripts/scheduler_articles.py >> /app/rapports/cron_scheduler.log 2>&1
-```
-
-### Intégration Docker
-
-Dans le `Dockerfile`, ajouter :
-
-```dockerfile
-COPY scripts/scheduler_articles.py scripts/
-COPY crontab /etc/cron.d/scheduler_cron
-RUN chmod 0644 /etc/cron.d/scheduler_cron \
-  && crontab /etc/cron.d/scheduler_cron
-CMD ["cron", "-f"]
-```
-
-Le scheduler sera ainsi exécuté automatiquement dans l'environnement Docker, sans intervention manuelle.
+> **Origine du nom :**
+>
+> Le projet s’appelle **WUDD.ai** en référence à la célèbre réplique « What's up, Doc? » de Bugs Bunny, symbole de curiosité et de veille, et à l’utilisation de l’**IA** (Intelligence Artificielle) pour l’analyse automatisée de l’actualité.
+>
+> WUDD.ai = « Quoi de neuf, Doc ? » version IA : une plateforme qui interroge le monde de l’info, synthétise et surveille l’actualité pour vous.
 
 ---
-# Scheduler intelligent d'articles
 
-Un script `scheduler_articles.py` permet de planifier automatiquement l'exécution de la génération de résumés d'actualités :
+## 🎯 Finalités de l’application
 
-- **Exécution mensuelle obligatoire** : du 1er au dernier jour du mois (détection automatique du dernier jour)
-- **Révision hebdomadaire** : chaque semaine, le scheduler compte le nombre de nouveaux articles. Si >10 nouveaux articles, il lance une édition intermédiaire (semaine en cours)
-- **Planification intelligente** : le scheduler interroge l'IA EurIA pour recommander une fréquence optimale selon le volume d'actualités
-- **Historique** : la fréquence d'exécution est ajustée selon l'historique et les recommandations IA
+WUDD.ai automatise la veille, la synthèse et l’analyse d’actualités à grande échelle grâce à l’IA. Les principales finalités sont :
 
-### Utilisation
-
-```bash
-python scripts/scheduler_articles.py
-```
-
-Le script utilise la configuration centrale (`config/`), le cache, et le client API EurIA. Il logge toutes les actions dans la console.
-
-**Remarque :** Le scheduler ne modifie pas la logique métier de génération des résumés, il orchestre simplement les appels au script principal.
+- **Veille intelligente** : Collecter et agréger des articles depuis plus de 130 sources d’actualité (RSS/JSON).
+- **Extraction & structuration** : Extraire le texte, les images et les métadonnées des articles pour produire des jeux de données propres et exploitables.
+- **Résumé automatique** : Générer des résumés concis et pertinents en français pour chaque article via l’API IA EurIA (Infomaniak/Qwen3).
+- **Rapports thématiques** : Produire des synthèses structurées (Markdown, PDF) par période, par thématique ou par source.
+- **Analyse sociétale** : Identifier les grandes thématiques et tendances à partir des mots-clés et catégories définis dans la configuration.
+- **Automatisation & planification** : Orchestrer la collecte, le résumé et la génération de rapports via un scheduler intelligent (cron, Docker).
+- **Surveillance & monitoring** : Vérifier automatiquement le bon fonctionnement du pipeline et notifier en cas d’erreur ou d’inactivité.
 
 ---
-# 📡 Utilisation de l'IA EurIA (Infomaniak)
+
+## 📡 Utilisation de l'IA EurIA (Infomaniak)
 
 Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour générer automatiquement des résumés d'articles et des rapports thématiques à partir des flux d'actualités. L'intégration se fait principalement dans le script `Get_data_from_JSONFile_AskSummary.py`.
 
@@ -194,6 +141,15 @@ AnalyseActualités/
 ├── .env                                  # Variables d'environnement (non versionné)
 └── README.md                             # Ce fichier
 ```
+
+
+## 📦 Exemples de sortie
+
+Des exemples de rapports générés sont disponibles dans le dossier `samples/`.
+
+- Exemple de rapport Markdown : [samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
+
+Vous pouvez consulter ce fichier pour visualiser le format et la structure d'un rapport produit automatiquement par l'application.
 
 ## 🔧 Installation
 
@@ -359,9 +315,10 @@ Projet personnel - Patrick Ostertag
 - **Email** : patrick.ostertag@gmail.com
 - **Site** : http://patrickostertag.ch
 
+
 ## 🤖 IA utilisée
 
 - **Moteur** : EurIA (Infomaniak)
 - **Modèle** : Qwen3
 - **URL** : https://euria.infomaniak.com
-- **Documentation prompts** : [PROMPTS.md](PROMPTS.md)
+- **Documentation prompts** : [docs/PROMPTS.md](docs/PROMPTS.md)
