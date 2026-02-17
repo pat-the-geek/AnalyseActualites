@@ -8,11 +8,13 @@
 
 ---
 
+
 ## 🎯 Finalités de l’application
 
 WUDD.ai automatise la veille, la synthèse et l’analyse d’actualités à grande échelle grâce à l’IA. Les principales finalités sont :
 
 - **Veille intelligente** : Collecter et agréger des articles depuis plus de 130 sources d’actualité (RSS/JSON).
+- **Source de données Reeder** : La source principale des flux JSON est l’application [Reeder](https://reeder.app), une application iOS/macOS qui agrège en un seul flux RSS, vidéos, podcasts et réseaux sociaux. Reeder synchronise votre position de lecture entre tous vos appareils, avec des filtres personnalisables pour construire sa propre timeline. Côté confidentialité, aucune donnée n'est collectée et la synchronisation passe exclusivement par iCloud. Un outil d'attention personnelle qui remet l'utilisateur aux commandes de sa consommation d'information, loin des algorithmes des plateformes.
 - **Extraction & structuration** : Extraire le texte, les images et les métadonnées des articles pour produire des jeux de données propres et exploitables.
 - **Résumé automatique** : Générer des résumés concis et pertinents en français pour chaque article via l’API IA EurIA (Infomaniak/Qwen3).
 - **Rapports thématiques** : Produire des synthèses structurées (Markdown, PDF) par période, par thématique ou par source.
@@ -301,7 +303,6 @@ print_console("Message de débogage")
 
 ## ⚠️ Limitations
 
-- **Interface GUI requise** : Les scripts utilisent `tkinter` pour la sélection de fichiers (ne fonctionne pas en headless)
 - **Noms de fichiers fixes** : Certains scripts écrivent dans des fichiers prédéfinis (à adapter si besoin)
 - **Langue française** : Les clés JSON et messages sont en français
 
