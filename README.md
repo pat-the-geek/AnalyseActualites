@@ -1,3 +1,24 @@
+
+# WUDD.ai
+
+**WUDD.ai** est le nom du projet, en référence à la célèbre réplique de Bugs Bunny « What's up, Doc? » (prononcé « WUDD ») et à l'utilisation de l'intelligence artificielle (IA) pour l'analyse d'actualités. Le nom symbolise l'idée de « Quoi de neuf, Doc ? » appliquée à la veille automatisée et intelligente.
+
+---
+
+## 🎯 Finalités de l'application
+
+WUDD.ai vise à automatiser la veille, la synthèse et l'analyse d'actualités à grande échelle grâce à l'IA. Les principales finalités sont :
+
+- **Collecte intelligente d'actualités** : Agréger des articles depuis de multiples sources RSS/JSON, avec gestion centralisée des flux.
+- **Extraction et structuration** : Extraire le texte principal, les métadonnées et les images pertinentes de chaque article.
+- **Résumé automatique par IA** : Générer des résumés concis et en français pour chaque article via l'API EurIA (modèle Qwen3).
+- **Rapports thématiques** : Produire des synthèses structurées par thématique, catégorie ou période, avec tableaux de références et images.
+- **Analyse sociétale** : Identifier les grandes thématiques sociétales abordées dans l'actualité, à partir de mots-clés et de statistiques.
+- **Automatisation & planification** : Orchestrer la génération de rapports via un scheduler intelligent (cron, Docker, etc.).
+- **Export multi-formats** : Permettre l'exploitation des résultats en JSON, Markdown, PDF, etc.
+
+---
+
 ## Automatisation cron & Docker
 
 L'application propose une automatisation complète via cron, intégrée dans le déploiement (y compris Docker) :
