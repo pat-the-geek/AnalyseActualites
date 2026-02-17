@@ -214,12 +214,14 @@ Appliqué à TOUS les fichiers `.py` du projet.
 
 ## ⚠️ Règles strictes pour AI agents
 
+
 ### À NE JAMAIS FAIRE
 - ❌ Modifier les clés JSON françaises sans mise à jour globale
 - ❌ Utiliser chemins relatifs au lieu des constantes `*_DIR`
 - ❌ Hardcoder credentials (toujours via `.env`)
 - ❌ Changer format de dates sans adapter le parsing
 - ❌ Supprimer la fonction `print_console()`
+- ❌ Déplacer ou supprimer README.md ou tout fichier critique (requirements.txt, .env.example, etc.) du top niveau du projet. Ces fichiers doivent toujours rester à la racine pour la clarté, la portabilité et la compatibilité CI/CD.
 
 ### À TOUJOURS FAIRE
 - ✅ Créer backup dans `archives/` avant modification

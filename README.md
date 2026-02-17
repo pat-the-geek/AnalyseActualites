@@ -102,12 +102,13 @@ Ce fichier centralise la liste des flux JSON à traiter. Chaque entrée définit
 - `url` : URL du flux JSON à collecter
 - `scheduler` : paramètres de planification (cron, timeout)
 
+
 Exemple :
 ```json
 [
   {
     "title": "Intelligence artificielle",
-    "url": "https://reederapp.net/lOIzwbVDTXO8Q6D_c2Z1ng.json",
+    "url": "https://exemple.com/flux1.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60
@@ -115,7 +116,7 @@ Exemple :
   },
   {
     "title": "Suisse",
-    "url": "https://reederapp.net/e4nRX4ltQQSn_csdE9px9w.json",
+    "url": "https://exemple.com/flux2.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60
@@ -314,7 +315,6 @@ Créez un fichier `.env` à la racine avec :
 ```env
 URL=https://api.infomaniak.com/euria/v1/chat/completions
 bearer=VOTRE_TOKEN_API_INFOMANIAK
-REEDER_JSON_URL=URL_DE_VOTRE_FLUX_JSON
 ```
 
 ## � Utilisation
@@ -339,9 +339,6 @@ python3 scripts/Get_data_from_JSONFile_AskSummary.py  # dates par défaut
 
 **Format d'entrée attendu** : JSON avec un tableau `items` contenant :
 ```json
-{
-  "items": [
-    {
       "url": "https://...",
       "date_published": "2025-01-23T10:00:00Z",
       "authors": [{"name": "Auteur"}]

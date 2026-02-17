@@ -56,7 +56,6 @@ class Config:
         """Charge les variables d'environnement."""
         self.url = os.getenv("URL")
         self.bearer = os.getenv("bearer")
-        self.reeder_json_url = os.getenv("REEDER_JSON_URL")
         
         # Paramètres avec valeurs par défaut
         self.max_attempts = int(os.getenv("max_attempts", "5"))
@@ -82,8 +81,6 @@ class Config:
             errors.append("Variable d'environnement manquante: URL")
         if not self.bearer:
             errors.append("Variable d'environnement manquante: bearer")
-        if not self.reeder_json_url:
-            errors.append("Variable d'environnement manquante: REEDER_JSON_URL")
         
         # Validation des timeouts
         if self.timeout_resume < 10 or self.timeout_resume > 600:
@@ -130,7 +127,6 @@ class Config:
         """Représentation string de la configuration (sans le token)."""
         return (
             f"Config(url={self.url}, "
-            f"reeder_json_url={self.reeder_json_url[:50]}..., "
             f"max_attempts={self.max_attempts})"
         )
 
