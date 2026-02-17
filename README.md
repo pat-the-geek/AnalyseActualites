@@ -1,13 +1,15 @@
 
 # WUDD.ai
 
-Plateforme d’analyse automatisée de l’actualité par IA, multi-flux, multi-sources, et multi-formats.
+Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomaniak) et le modèle Qwen3. Collecte, analyse et synthèse d'articles depuis des flux RSS/JSON géré par Reeder, avec export en JSON et Markdown.
 
 ---
 
 ## 1. Présentation générale
 
-WUDD.ai (« Quoi de neuf, Doc ? » version IA) automatise la veille, la synthèse et l’analyse d’actualités à grande échelle grâce à l’IA. Il collecte, structure, résume et analyse des articles issus de Reeder, avec orchestration multi-flux et génération de rapports thématiques.
+WUDD.ai fait référence à la réplique « What's up, Doc? » de Bugs Bunny, symbole de curiosité et de veille, associée ici à l’IA. Le nom évoque une plateforme qui interroge l’actualité, synthétise et surveille l’information grâce à l’intelligence artificielle.
+
+Il collecte, structure, résume et analyse des articles issus de Reeder, avec orchestration multi-flux et génération de rapports thématiques.
 
 ---
 
@@ -44,7 +46,7 @@ AnalyseActualités/
 - Rapports thématiques et analyse sociétale
 - Orchestration par scheduler multi-flux
 - Export JSON, Markdown, PDF
-- Interface CLI et GUI (tkinter)
+- Interface CLI
 - Cloisonnement des outputs par flux
 
 ---
@@ -221,7 +223,6 @@ Ce projet collecte automatiquement des articles depuis des flux RSS/JSON, extrai
 - **Extraction de contenu** : Analyse HTML et extraction du texte principal des articles
 - **Génération de résumés IA** : Utilisation de l'API EurIA (Qwen3) pour créer des résumés pertinents
 - **Export multi-formats** : JSON structuré et rapports Markdown
-- **Interface GUI** : Sélection de fichiers via interface graphique (tkinter)
 
 ## 📁 Structure du projet
 
@@ -299,7 +300,6 @@ Vous pouvez consulter ce fichier pour visualiser le format et la structure d'un 
 
 - Python 3.10+
 - Compte Infomaniak avec accès à l'API EurIA
-- Environnement graphique (pour tkinter)
 
 ### Installation des dépendances
 
