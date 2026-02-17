@@ -7,7 +7,7 @@ Plateforme d’analyse automatisée de l’actualité par IA, multi-flux, multi-
 
 ## 1. Présentation générale
 
-WUDD.ai (« Quoi de neuf, Doc ? » version IA) automatise la veille, la synthèse et l’analyse d’actualités à grande échelle grâce à l’IA. Il collecte, structure, résume et analyse des articles issus de plus de 130 sources, avec orchestration multi-flux et génération de rapports thématiques.
+WUDD.ai (« Quoi de neuf, Doc ? » version IA) automatise la veille, la synthèse et l’analyse d’actualités à grande échelle grâce à l’IA. Il collecte, structure, résume et analyse des articles issus de Reeder, avec orchestration multi-flux et génération de rapports thématiques.
 
 ---
 
@@ -66,7 +66,6 @@ Créez un fichier `.env` à la racine :
 ```env
 URL=https://api.infomaniak.com/euria/v1/chat/completions
 bearer=VOTRE_TOKEN_API_INFOMANIAK
-REEDER_JSON_URL=URL_DE_VOTRE_FLUX_JSON
 ```
 
 ---
@@ -108,7 +107,7 @@ Exemple :
 [
   {
     "title": "Intelligence artificielle",
-    "url": "https://exemple.com/flux1.json",
+    "url": "https://reederapp.net/flux1.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60
@@ -116,7 +115,7 @@ Exemple :
   },
   {
     "title": "Suisse",
-    "url": "https://exemple.com/flux2.json",
+    "url": "https://reederapp.net/flux2.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60
