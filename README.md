@@ -1,32 +1,39 @@
 
-# WUDD.ai
 
-**WUDD.ai** est le nom du projet, en référence à la célèbre réplique de Bugs Bunny « What's up, Doc? » (prononcé « WUDD ») et à l'utilisation de l'intelligence artificielle (IA) pour l'analyse d'actualités. Le nom symbolise l'idée de « Quoi de neuf, Doc ? » appliquée à la veille automatisée et intelligente.
+```
+WUDD.ai/
+├── scripts/                              # Scripts Python
+│   ├── Get_data_from_JSONFile_AskSummary.py  # Script principal (collecte + résumés IA)
+│   ├── Get_htmlText_From_JSONFile.py         # Extraction de texte HTML
+│   ├── articles_json_to_markdown.py          # Conversion JSON → Markdown
+│   └── analyse_thematiques.py                # Analyse thématiques sociétales
+│
+├── config/                               # Configuration
+│   ├── sites_actualite.json              # Liste des sources RSS/JSON
+│   ├── categories_actualite.json         # Catégories d'articles
+│   ├── prompt-rapport.txt                # Template de prompt pour rapports
+│   └── thematiques_societales.json       # Thématiques sociétales (12 thèmes)
+│
+├── data/                                 # Données générées
+│   ├── articles/                         # Articles JSON par période
+│   └── raw/                              # Données brutes (HTML, texte)
+│
+├── rapports/                             # Rapports générés
+│   ├── markdown/                         # Rapports .md
+│   └── pdf/                              # Rapports PDF (si générés)
+│
+├── samples/                              # Exemples de rapports générés (voir ci-dessous)
+│
+├── archives/                             # Anciennes versions de scripts
+├── tests/                                # Tests unitaires
+├── .github/                              # Configuration GitHub/Copilot
+├── .env                                  # Variables d'environnement (non versionné)
+└── README.md                             # Ce fichier
+```
 
----
+### Dossier `samples/` — Exemples de rapports générés
 
-## 🎯 Finalités de l'application
-
-WUDD.ai vise à automatiser la veille, la synthèse et l'analyse d'actualités à grande échelle grâce à l'IA. Les principales finalités sont :
-
-- **Collecte intelligente d'actualités** : Agréger des articles depuis de multiples sources RSS/JSON, avec gestion centralisée des flux.
-- **Extraction et structuration** : Extraire le texte principal, les métadonnées et les images pertinentes de chaque article.
-- **Résumé automatique par IA** : Générer des résumés concis et en français pour chaque article via l'API EurIA (modèle Qwen3).
-- **Rapports thématiques** : Produire des synthèses structurées par thématique, catégorie ou période, avec tableaux de références et images.
-- **Analyse sociétale** : Identifier les grandes thématiques sociétales abordées dans l'actualité, à partir de mots-clés et de statistiques.
-- **Automatisation & planification** : Orchestrer la génération de rapports via un scheduler intelligent (cron, Docker, etc.).
-- **Export multi-formats** : Permettre l'exploitation des résultats en JSON, Markdown, PDF, etc.
-
----
-
-## Automatisation cron & Docker
-
-L'application propose une automatisation complète via cron, intégrée dans le déploiement (y compris Docker) :
-
-- Un cron job exécute `python scripts/scheduler_articles.py` chaque semaine (par défaut le lundi à 6h du matin)
-- Le scheduler orchestre la génération des éditions mensuelles et intermédiaires selon le volume d'actualités
-- Le cron est défini dans le conteneur Docker via un fichier `crontab` ou dans le `Dockerfile` (voir exemple ci-dessous)
-
+Le dossier `samples/` contient des exemples de rapports générés par le pipeline (par exemple : `articles_generated_2026-02-01_2026-02-28.json`). Ces fichiers servent de référence pour la structure de sortie attendue et sont utilisés pour illustrer le fonctionnement du projet. Certains de ces exemples sont également publiés sur GitHub pour faciliter la démonstration et la validation du pipeline.
 ### Exemple de crontab (à inclure dans l'image Docker)
 
 ```cron
