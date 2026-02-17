@@ -149,9 +149,7 @@ Temporary Items
 # Project specific
 # -----------------
 # Données brutes et générées (peuvent contenir URLs privées)
-data/raw/
-data/articles/*.json
-data/cache/
+data/
 
 # Rapports générés (peuvent contenir infos sensibles)
 rapports/markdown/*.md

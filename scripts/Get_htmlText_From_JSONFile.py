@@ -44,8 +44,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logging import print_console, setup_logger
 logger = setup_logger("AnalyseActualites")
 
-import tkinter as tk
-from tkinter import filedialog
 
 # print_console est importé depuis utils.logging
     
@@ -54,23 +52,20 @@ from tkinter import filedialog
 # Configuration et sélection du fichier d'entrée
 # ============================================================================
 
-# Créer une fenêtre racine Tkinter (elle ne sera pas affichée)
-root = tk.Tk()
-root.withdraw()  # Masquer la fenêtre racine
 
-# Ouvrir une boîte de dialogue pour sélectionner un fichier JSON
-file_path = filedialog.askopenfilename(
-    title="Sélectionner un fichier JSON",
-    filetypes=[("Fichiers JSON", "*.json"),("Tous les fichiers", "*.*") ]
-)
+# Mode headless : sélection du fichier JSON en argument CLI
+import argparse
+parser = argparse.ArgumentParser(description="Extraction de texte HTML depuis un flux JSON.")
+parser.add_argument('input_file', help='Chemin du fichier JSON source')
+args = parser.parse_args()
 
-# Vérifier si un fichier a été sélectionné
-if file_path:
-    print_console ("Fichier sélectionné : " + file_path)
+file_path = args.input_file
+
+if not os.path.isfile(file_path):
+    print_console(f"Fichier d'entrée introuvable : {file_path}", level="error")
+    sys.exit(1)
 else:
-    # Aucun fichier sélectionné, on quitte le programme
-    print_console("Aucun fichier sélectionné, arrêt du script.", level="warning")
-    sys.exit()
+    print_console("Fichier sélectionné : " + file_path)
 
 
 # ============================================================================
@@ -135,8 +130,13 @@ texts = {item['url']: fetch_and_extract_text(item['url']) for item in items}
 # Génération du fichier de sortie
 # ============================================================================
 
-# Nom du fichier où tous les textes seront consolidés
-output_file = '../data/raw/all_articles.txt'
+
+# Détermination du chemin absolu du projet et du dossier data/raw
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+RAW_DIR = os.path.join(PROJECT_ROOT, 'data', 'raw')
+os.makedirs(RAW_DIR, exist_ok=True)
+output_file = os.path.join(RAW_DIR, 'all_articles.txt')
 
 print_console ("Génération du fichier...")
 

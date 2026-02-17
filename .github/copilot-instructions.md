@@ -1,3 +1,12 @@
+## 🛑 Fichiers à ignorer dans GitHub
+
+Le dossier `data/` (et tout son contenu) doit être ignoré dans le contrôle de version GitHub. Ajoutez ou vérifiez la présence de la ligne suivante dans le fichier `.gitignore` à la racine du projet :
+
+```
+data/
+```
+
+Cela évite de versionner des données volumineuses, sensibles ou générées automatiquement.
 <!-- Copilot instructions for the AnalyseActualités workspace -->
 
 # Assistant guidelines for `AnalyseActualités`

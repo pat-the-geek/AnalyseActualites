@@ -1,7 +1,5 @@
 
 import json
-import tkinter as tk
-from tkinter import filedialog
 from datetime import datetime
 import traceback
 import os
@@ -14,37 +12,17 @@ logger = setup_logger("AnalyseActualites")
 
 def json_to_markdown(input_file, output_file):
     try:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        import argparse
+        parser = argparse.ArgumentParser(description="Convertit un fichier JSON d'articles en Markdown.")
+        parser.add_argument('input_file', help='Chemin du fichier JSON source')
+        parser.add_argument('output_file', help='Chemin du fichier Markdown de sortie')
+        args = parser.parse_args()
 
-        markdown_content = []
+        if not os.path.isfile(args.input_file):
+            print_console(f"Fichier d'entrée introuvable : {args.input_file}", level="error")
+            return
 
-        # Gestion des structures de données JSON
-        if isinstance(data, dict) and "articles" in data:
-            articles = data["articles"]
-        elif isinstance(data, list):
-            articles = data
-        else:
-            raise ValueError("Format JSON non supporté : doit contenir une liste d'articles ou un dictionnaire avec une clé 'articles'.")
-
-        for article in articles:
-            # Parser et reformater la date
-            date_str = article.get('Date de publication')
-            try:
-                date_obj = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
-                formatted_date = date_obj.strftime("%d-%m-%Y %H:%M")
-            except (ValueError, TypeError):
-                formatted_date = date_str if date_str else "Date inconnue"
-
-            # Titre1 avec la date et la source
-            source = article.get('Sources', 'Source inconnue')
-            titre = f"# {formatted_date} — {source}\n"
-            url = f"[Lien sur l'article]({article.get('URL', '#')})\n"
-            resume = f"\n\n{article.get('Résumé', '')}\n\n"
-
-            markdown_content.extend([titre, url, resume, "---\n\n"])
-
-        with open(output_file, 'w', encoding='utf-8') as f:
+        json_to_markdown(args.input_file, args.output_file)
             f.write(''.join(markdown_content))
 
         print_console(f"Le fichier Markdown '{output_file}' a été généré avec succès.")
