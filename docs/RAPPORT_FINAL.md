@@ -160,19 +160,14 @@ tests/
 
 ### 5. Script de démonstration (5.7KB)
 
-**`demo_utils.py`** - Script interactif montrant:
-- ✅ Logging centralisé
-- ✅ Manipulation de dates
-- ✅ Système de cache fonctionnel
-- ✅ Traitement parallèle
-- ✅ Comparaison de performance
+**`Unused-Code/demo_utils.py`** - Script interactif archivé (anciennement démonstration):
+- Logging centralisé
+- Manipulation de dates
+- Système de cache fonctionnel
+- Traitement parallèle
+- Comparaison de performance
 
-**Exécuté avec succès:**
-```bash
-$ python scripts/demo_utils.py
-✅ DÉMONSTRATION TERMINÉE
-Traitement parallèle: 5 items en 0.20s (24.9 items/s)
-```
+Ce script n'est plus maintenu dans le flux principal. Pour référence ou réutilisation, voir Unused-Code/demo_utils.py.
 
 ---
 
@@ -262,7 +257,7 @@ Si l'API EurIA était payante:
 
 ✅ **2 nouveaux scripts**
 1. scripts/Get_data_from_JSONFile_AskSummary_v2.py (optimisé)
-2. scripts/demo_utils.py (démonstration)
+2. Unused-Code/demo_utils.py (archivé)
 
 ### Tests
 
@@ -432,8 +427,9 @@ diff data/articles/articles_generated_*.json
 ### Démonstration
 
 ```bash
-# Voir les utilitaires en action
-python scripts/demo_utils.py
+
+# (Archivé) Ancienne démonstration :
+# python Unused-Code/demo_utils.py
 
 # Utiliser le script optimisé
 python scripts/Get_data_from_JSONFile_AskSummary_v2.py 2026-01-01 2026-01-31

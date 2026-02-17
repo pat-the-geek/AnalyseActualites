@@ -40,7 +40,7 @@ AnalyseActualités/
 │   └── cache.py                # Cache intelligent
 ├── scripts/
 │   ├── Get_data_from_JSONFile_AskSummary_v2.py ⭐ OPTIMISÉ
-│   ├── demo_utils.py ⭐ NOUVEAU
+│   ├── Unused-Code/demo_utils.py (archivé)
 │   └── [anciens scripts compatibles]
 ├── tests/ ⭐ NOUVEAU
 │   ├── test_date_utils.py
