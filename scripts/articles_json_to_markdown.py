@@ -10,19 +10,55 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.logging import print_console, setup_logger
 logger = setup_logger("AnalyseActualites")
 
-def json_to_markdown(input_file, output_file):
+def json_to_markdown(input_file, output_file=None):
     try:
-        import argparse
-        parser = argparse.ArgumentParser(description="Convertit un fichier JSON d'articles en Markdown.")
-        parser.add_argument('input_file', help='Chemin du fichier JSON source')
-        parser.add_argument('output_file', help='Chemin du fichier Markdown de sortie')
-        args = parser.parse_args()
-
-        if not os.path.isfile(args.input_file):
-            print_console(f"Fichier d'entrée introuvable : {args.input_file}", level="error")
+        if not os.path.isfile(input_file):
+            print_console(f"Fichier d'entrée introuvable : {input_file}", level="error")
             return
 
-        json_to_markdown(args.input_file, args.output_file)
+        with open(input_file, 'r', encoding='utf-8') as f:
+            articles = json.load(f)
+
+        # Déduire le nom du flux à partir du chemin du fichier JSON (data/articles/<nom-flux>/...)
+        flux_nom = os.path.basename(os.path.dirname(input_file))
+        # Générer le répertoire de sortie Markdown
+        from utils.config import get_config
+        config = get_config()
+        markdown_dir = config.rapports_markdown_dir / flux_nom
+        markdown_dir.mkdir(parents=True, exist_ok=True)
+
+        # Nom de fichier Markdown par défaut
+        if output_file is None:
+            base = os.path.splitext(os.path.basename(input_file))[0]
+            output_file = markdown_dir / f"{base}.md"
+
+        markdown_content = []
+        for article in articles:
+            markdown_content.append(f"## {article.get('Sources', 'Source inconnue')} - {article.get('Date de publication', '')}\n")
+            markdown_content.append(f"**URL**: {article.get('URL', '')}\n\n")
+            markdown_content.append(f"**Résumé**:\n{article.get('Résumé', '')}\n\n")
+            images = article.get('Images')
+            if images:
+                # Si c'est une liste d'images
+                if isinstance(images, list):
+                    for img in images:
+                        if isinstance(img, dict) and 'url' in img:
+                            markdown_content.append(f"![]({img['url']})\n")
+                # Si c'est un dict (erreur ou image unique)
+                elif isinstance(images, dict):
+                    if 'url' in images:
+                        markdown_content.append(f"![]({images['url']})\n")
+                    elif 'error' in images:
+                        markdown_content.append(f"_Image non disponible : {images['error']}_\n")
+                # Si c'est une chaîne (erreur ou url brute)
+                elif isinstance(images, str):
+                    if images.startswith('http'):
+                        markdown_content.append(f"![]({images})\n")
+                    else:
+                        markdown_content.append(f"_Image non disponible : {images}_\n")
+            markdown_content.append("---\n\n")
+
+        with open(output_file, 'w', encoding='utf-8') as f:
             f.write(''.join(markdown_content))
 
         print_console(f"Le fichier Markdown '{output_file}' a été généré avec succès.")
@@ -35,39 +71,14 @@ def json_to_markdown(input_file, output_file):
         print_console(f"Erreur inattendue : {e}", level="error")
         traceback.print_exc()
 
+
 def main():
-
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        input_file = filedialog.askopenfilename(
-            title="Choisissez un fichier JSON",
-            filetypes=[("Fichiers JSON", "*.json")]
-        )
-        root.destroy()
-
-        # Extraire le répertoire et le nom de fichier sans extension
-        initialdir = os.path.dirname(input_file)
-        initialfile = os.path.splitext(os.path.basename(input_file))[0] + ".md"
-
-        output_file = filedialog.asksaveasfilename(
-            title="Enregistrer le fichier Markdown sous...",
-            initialdir=initialdir,
-            initialfile=initialfile,
-            defaultextension=".md",
-            filetypes=[("Fichiers Markdown", "*.md"), ("Tous les fichiers", "*.*")]
-        )
-        if output_file:
-            json_to_markdown(input_file, output_file)
-
-        else:
-            print_console("Aucun fichier sélectionné.", level="warning")
-
-    except Exception as e:
-        import traceback
-        print_console(f"Erreur avec l'interface graphique : {e}", level="error")
-        traceback.print_exc()
-        print_console("Essayez de lancer le script depuis un terminal local.", level="warning")
+    import argparse
+    parser = argparse.ArgumentParser(description="Convertit un fichier JSON d'articles en Markdown (multi-flux)")
+    parser.add_argument('input_file', help='Chemin du fichier JSON source')
+    parser.add_argument('--output_file', help='Chemin du fichier Markdown de sortie (optionnel)')
+    args = parser.parse_args()
+    json_to_markdown(args.input_file, args.output_file)
 
 if __name__ == "__main__":
     main()

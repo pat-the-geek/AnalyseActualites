@@ -116,25 +116,26 @@ class Cache:
     
     def set(self, key: str, value: Any) -> None:
         """Enregistre une valeur dans le cache.
-        
         Args:
             key: Clé de cache
             value: Valeur à cacher (doit être sérialisable en JSON)
         """
         cache_path = self._get_cache_path(key)
-        
+        # S'assurer que le dossier parent existe
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
         cache_data = {
             'timestamp': datetime.now().isoformat(),
             'key': key[:100],  # Stocker un extrait de la clé pour debug
             'value': value
         }
-        
+
         try:
             with open(cache_path, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
-            
+
             default_logger.debug(f"Valeur cachée: {key[:50]}...")
-            
+
         except (TypeError, ValueError) as e:
             default_logger.error(f"Erreur lors de l'écriture du cache: {e}")
     
@@ -215,15 +216,21 @@ class Cache:
 _cache_instance: Optional[Cache] = None
 
 
-def get_cache() -> Cache:
-    """Retourne l'instance unique de cache.
-    
+
+def get_cache(namespace: Optional[str] = None) -> Cache:
+    """Retourne une instance de cache, cloisonnée par namespace (nom de flux).
+    Args:
+        namespace: nom du sous-répertoire de cache (ex: Intelligence-artificielle)
     Returns:
         Instance Cache
     """
-    global _cache_instance
-    
-    if _cache_instance is None:
-        _cache_instance = Cache()
-    
-    return _cache_instance
+    if namespace:
+        from .config import get_config
+        config = get_config()
+        cache_dir = config.project_root / "data" / "articles" / "cache" / namespace
+        return Cache(cache_dir=cache_dir)
+    else:
+        global _cache_instance
+        if _cache_instance is None:
+            _cache_instance = Cache()
+        return _cache_instance

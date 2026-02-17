@@ -1,3 +1,13 @@
+# Résumé des changements multi-flux (février 2026)
+
+- Ajout d’un fichier de configuration centralisé (config/flux_json_sources.json) listant tous les flux à traiter, avec leur nom logique.
+- Tous les scripts principaux acceptent désormais un paramètre --flux (nom du flux) : chaque exécution est cloisonnée par flux.
+- Les fichiers de sortie (JSON, Markdown, PDF) sont générés dans des sous-répertoires dédiés à chaque flux (ex : data/articles/Intelligence-artificielle/).
+- Le scheduler exécute indépendamment chaque flux selon sa configuration, en respectant la fréquence et les règles propres à chaque source.
+- Le système de cache est cloisonné par flux, chaque flux ayant son propre sous-répertoire de cache.
+- La génération des rapports Markdown est également cloisonnée par flux, dans rapports/markdown/<nom-flux>/.
+- L’architecture reste headless : tout est pilotable en ligne de commande, sans interface graphique.
+- Les scripts et la structure du projet sont adaptés pour garantir l’isolation complète des traitements et des données par flux.
 # Architecture du projet AnalyseActualités
 
 > Documentation technique de l'architecture du système  

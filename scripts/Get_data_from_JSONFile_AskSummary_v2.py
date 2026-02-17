@@ -18,6 +18,7 @@ Exemple:
 import json
 import os
 import sys
+import argparse
 from pathlib import Path
 
 # Ajouter le répertoire parent au PYTHONPATH pour importer utils
@@ -59,18 +60,25 @@ def demander_dates() -> tuple[str, str]:
     Raises:
         ValueError: Si le format de date est invalide ou si date_debut >= date_fin.
     """
-    if len(sys.argv) == 3:
-        date_debut = sys.argv[1]
-        date_fin = sys.argv[2]
-        print_console(f"Dates prises en compte depuis les arguments : début={date_debut}, fin={date_fin}", level="info")
-        
-        # Valider les dates
-        validate_date_range(date_debut, date_fin)
-    else:
-        date_debut, date_fin = get_default_date_range()
-        print_console(f"Aucun argument fourni. Utilisation des dates par défaut : début={date_debut}, fin={date_fin}", level="info")
-    
-    return date_debut, date_fin
+    # Les dates sont désormais gérées via argparse
+    # Cette fonction n'est plus utilisée directement
+    raise NotImplementedError("Utilisez parse_args() pour gérer les dates et le flux.")
+def charger_flux_config(flux_config_path: Path) -> list:
+    """Charge la liste des flux JSON depuis le fichier de config."""
+    with open(flux_config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def normaliser_nom_flux(title: str) -> str:
+    """Normalise le nom du flux (espaces -> tirets)."""
+    return title.strip().replace(' ', '-').replace('\u00a0', '-')
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Génération de résumés d'articles multi-flux.")
+    parser.add_argument('--flux', type=str, required=True, help="Nom logique du flux à traiter (ex: Intelligence-artificielle)")
+    parser.add_argument('--date_debut', type=str, help="Date de début (YYYY-MM-DD)")
+    parser.add_argument('--date_fin', type=str, help="Date de fin (YYYY-MM-DD)")
+    args = parser.parse_args()
+    return args
 
 
 def fetch_json_feed(url: str, timeout: int = 10) -> dict:
@@ -127,9 +135,9 @@ def create_report(file_output: Path, api_client: EurIAClient) -> None:
     try:
         with open(file_output, 'r', encoding='utf-8') as jsonfile:
             data = json.load(jsonfile)
-        
+
         json_str = json.dumps(data, indent=2, ensure_ascii=False)
-        
+
         # Générer le rapport via l'API
         config = get_config()
         report = api_client.generate_report(
@@ -137,15 +145,18 @@ def create_report(file_output: Path, api_client: EurIAClient) -> None:
             file_output.name,
             timeout=config.timeout_rapport
         )
-        
-        # Sauvegarder le rapport
-        report_file = config.rapports_markdown_dir / f"rapport_sommaire_{file_output.stem}.md"
-        
+
+        # Déterminer le nom du flux à partir du chemin du fichier output
+        flux_title = file_output.parent.name
+        rapport_dir = config.rapports_markdown_dir / flux_title
+        rapport_dir.mkdir(parents=True, exist_ok=True)
+        report_file = rapport_dir / f"rapport_sommaire_{file_output.stem}.md"
+
         with open(report_file, 'w', encoding='utf-8') as txtfile:
             txtfile.write(report)
-        
+
         print_console(f"Le rapport a été sauvegardé dans le fichier {report_file}", level="info")
-        
+
     except Exception as e:
         logger.error(f"Erreur lors de la génération du rapport : {e}")
 
@@ -157,28 +168,55 @@ def main():
     print_console("Version 2.0 - Optimisée avec traitement parallèle et cache", level="info")
     print_console("=" * 80, level="info")
     
-    # Charger la configuration
+    # Charger la configuration générale
     try:
         config = get_config()
         logger.info("Configuration chargée avec succès")
     except ValueError as e:
         logger.error(f"Erreur de configuration : {e}")
         sys.exit(1)
-    
-    # Initialiser le cache
-    cache = get_cache()
-    stats = cache.get_stats()
-    logger.info(f"Cache : {stats['entries']} entrées, {stats['total_size_mb']:.2f} MB")
-    
-    # Récupération des dates de traitement
-    try:
-        date_debut, date_fin = demander_dates()
-    except ValueError as e:
-        logger.error(f"Erreur de dates : {e}")
+
+    # Charger la config multi-flux
+    flux_config_path = config.config_dir / "flux_json_sources.json"
+    flux_list = charger_flux_config(flux_config_path)
+
+    # Parser les arguments
+    args = parse_args()
+    flux_nom = args.flux
+    date_debut = args.date_debut
+    date_fin = args.date_fin
+
+    # Chercher le flux demandé
+    flux = None
+    for f in flux_list:
+        if normaliser_nom_flux(f["title"]) == flux_nom:
+            flux = f
+            break
+    if not flux:
+        print_console(f"Flux '{flux_nom}' introuvable. Flux disponibles : " + ", ".join([normaliser_nom_flux(f["title"]) for f in flux_list]), level="error")
         sys.exit(1)
-    
+
+    flux_url = flux["url"]
+    flux_title = normaliser_nom_flux(flux["title"])
+
+    # Initialiser le cache
+    cache = get_cache(namespace=flux_title)
+    stats = cache.get_stats()
+    logger.info(f"Cache ({flux_title}) : {stats['entries']} entrées, {stats['total_size_mb']:.2f} MB")
+
+    # Déterminer les dates
+    if not date_debut or not date_fin:
+        d1, d2 = get_default_date_range()
+        date_debut = date_debut or d1
+        date_fin = date_fin or d2
+    validate_date_range(date_debut, date_fin)
+
+    # Créer le sous-répertoire de sortie pour ce flux
+    output_dir = config.data_articles_dir / flux_title
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # Chargement du flux JSON
-    data = fetch_json_feed(config.reeder_json_url)
+    data = fetch_json_feed(flux_url)
     items = data.get('items', [])
     
     if not items:
@@ -272,15 +310,15 @@ def main():
             "Images": images
         })
     
-    # Sauvegarde des résultats dans un fichier JSON
-    file_output = config.data_articles_dir / f"articles_generated_{date_debut}_{date_fin}.json"
-    
+    # Sauvegarde des résultats dans un fichier JSON (dans le sous-répertoire du flux)
+    file_output = output_dir / f"articles_generated_{date_debut}_{date_fin}.json"
+
     with open(file_output, 'w', encoding='utf-8') as jsonfile:
         json.dump(articles_data, jsonfile, ensure_ascii=False, indent=4)
-    
+
     print_console("", level="info")
     print_console(f"✓ Les textes de tous les articles ont été sauvés dans {file_output}", level="info")
-    
+
     # Générer le rapport
     create_report(file_output, api_client)
     

@@ -1,3 +1,26 @@
+# Usage multi-flux (février 2026)
+
+## Générer les résumés d'un flux
+
+```bash
+python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux Economie-numerique --date_debut 2026-02-01 --date_fin 2026-02-17
+```
+
+## Générer le rapport Markdown d'un flux
+
+```bash
+python3 scripts/articles_json_to_markdown.py data/articles/Economie-numerique/articles_generated_2026-02-01_2026-02-17.json
+```
+
+## Lancer le scheduler sur tous les flux
+
+```bash
+python3 scripts/scheduler_articles.py
+```
+
+## Ajouter un nouveau flux
+
+Ajouter une entrée dans `config/flux_json_sources.json` avec le titre et l'URL du flux.
 # Guide d'utilisation des scripts
 
 Ce guide explique comment utiliser les différents scripts du projet AnalyseActualités.

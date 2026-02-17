@@ -1,2 +1,0 @@
-# Ce fichier permet de conserver ce répertoire dans Git même s'il est vide
-# Les fichiers .json générés sont ignorés par .gitignore pour raisons de confidentialité
