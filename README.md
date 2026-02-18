@@ -74,9 +74,9 @@ bearer=VOTRE_TOKEN_API_INFOMANIAK
 
 ## 5. Utilisation rapide (exemples)
 
-### Générer des résumés pour un flux
+### Générer un rapport annuel pour un flux (exemple : Intelligence-artificielle, année 2026)
 ```bash
-python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux Intelligence-artificielle --date_debut 2026-02-01 --date_fin 2026-02-17
+python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux "Intelligence-artificielle" --date_debut 2026-01-01 --date_fin 2026-12-31
 ```
 
 ### Générer un rapport Markdown
