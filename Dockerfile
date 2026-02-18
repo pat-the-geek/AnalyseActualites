@@ -19,7 +19,7 @@ COPY tests/ tests/
 # Copie depuis archives/
 COPY archives/requirements.txt ./requirements.txt
 COPY .env.example .env.example
-COPY archives/README.md ./README.md
+COPY README.md ./README.md
 
 # 4. Installation des dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
