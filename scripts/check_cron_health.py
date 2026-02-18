@@ -4,9 +4,9 @@ from email.message import EmailMessage
 from datetime import datetime, timedelta
 
 # Paramètres de vérification
-CRON_LOG = "/app/cron_test.log"
+CRON_LOG = None  # Désactivé : surveillance du cron_test.log supprimée
 SCHEDULER_LOG = "/app/rapports/cron_scheduler.log"
-MAX_MINUTES = 5  # délai max sans update du cron_test.log
+MAX_MINUTES = 5  # (inutile si CRON_LOG désactivé)
 
 # Paramètres de notification (adapter pour votre SMTP)
 MAIL_ENABLED = True
@@ -37,7 +37,7 @@ def send_mail(subject, body):
 
 
 def check_cron_health():
-    # Vérifie la fraîcheur du cron_test.log
+    # Vérification du cron_test.log désactivée (aucune action)
     try:
         mtime = os.path.getmtime(CRON_LOG)
         last = datetime.fromtimestamp(mtime)
