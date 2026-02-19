@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Exemple Source 1",
+    "url": "https://exemple.com/flux1.json",
+    "scheduler": {
+      "cron": "0 6 * * *",
+      "timeout": 60
+    }
+  },
+  {
+    "title": "Exemple Source 2",
+    "url": "https://exemple.com/flux2.json",
+    "scheduler": {
+      "cron": "0 6 * * *",
+      "timeout": 60
+    }
+  },
+  {
+    "title": "Exemple Source 3",
+    "url": "https://exemple.com/flux3.json",
+    "scheduler": {
+      "cron": "0 6 * * *",
+      "timeout": 60
+    }
+  }
+]
