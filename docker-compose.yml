@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  analyse-actualites:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: analyse-actualites
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./rapports:/app/rapports
+      - ./samples:/app/samples
+      - ./archives:/app/archives
+    restart: unless-stopped
+    tty: true
+    # Expose cron logs if needed
+    # ports:
+    #   - "8080:8080"
+    # command: ["cron", "-f"]
