@@ -1,3 +1,17 @@
+### Extraction quotidienne par mot-clé (nouveau)
+
+Le script `get-keyword-from-rss.py` collecte chaque jour à 1h00 (via cron) les articles dont le titre contient un mot-clé défini dans `config/keyword-to-search.json`.
+Pour chaque mot-clé, il génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
+
+Exécution manuelle :
+```bash
+python3 scripts/get-keyword-from-rss.py
+```
+Exécution automatique (cron) :
+```
+0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
+```
+
 
 # WUDD.ai
 

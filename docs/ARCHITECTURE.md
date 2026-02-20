@@ -1,3 +1,27 @@
+### 6. get-keyword-from-rss.py
+
+**Rôle** : Extraction quotidienne des articles contenant un mot-clé depuis tous les flux RSS de Reeder.opml
+
+**Flux** :
+1. Lecture de Reeder.opml (liste des flux RSS)
+2. Pour chaque flux, extraction des articles publiés il y a moins d'une semaine
+3. Filtrage par mot-clé (défini dans `config/keyword-to-search.json`)
+4. Génération d'un fichier JSON par mot-clé dans `data/articles-from-rss/` (sans doublon)
+5. Résumé IA (API EurIA) et extraction de l'image principale
+6. Exécution automatique via cron chaque jour à 1h00
+
+**Automatisation** :
+```
+0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
+```
+
+**Sortie** :
+- `data/articles-from-rss/<mot-clé>.json`
+
+**Contraintes** :
+- Pas de doublon (une URL par mot-clé)
+- Format de sortie conforme à `articles_generated_YYYY-MM-DD_YYYY-MM-DD.json`
+- Résumé IA en français, images principales extraites
 # Résumé des changements multi-flux (février 2026)
 
 - Ajout d’un fichier de configuration centralisé (config/flux_json_sources.json) listant tous les flux à traiter, avec leur nom logique.
