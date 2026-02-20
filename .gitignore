@@ -1,3 +1,4 @@
+config/
 # Exclure la configuration sensible
 config/
 !config/flux_json_sources.example.json
@@ -158,6 +159,7 @@ Temporary Items
 # -----------------
 # Données brutes et générées (peuvent contenir URLs privées)
 data/
+rapports/
 
 # Rapports générés (peuvent contenir infos sensibles)
 rapports/markdown/*.md
