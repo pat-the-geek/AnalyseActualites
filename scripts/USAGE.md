@@ -1,3 +1,21 @@
+### 5. get-keyword-from-rss.py
+
+**Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de Reeder.opml.
+Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
+
+**Utilisation** :
+```bash
+python3 get-keyword-from-rss.py
+```
+
+**Automatisation (cron)** :
+```
+0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
+```
+
+**Sortie** :
+- `../data/articles-from-rss/<mot-clé>.json`
+
 # Usage multi-flux (février 2026)
 
 ## Générer les résumés d'un flux

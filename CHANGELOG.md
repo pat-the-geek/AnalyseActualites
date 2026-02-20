@@ -1,3 +1,11 @@
+### Ajout du script get-keyword-from-rss.py (20/02/2026)
+
+- Nouveau script : `get-keyword-from-rss.py` (extraction quotidienne par mot-clé depuis tous les flux RSS)
+- Génère un fichier JSON par mot-clé dans `data/articles-from-rss/`, sans doublon
+- Résumé IA et images principales extraites
+- Intégration au scheduler via cron (1h00 chaque jour)
+- Documentation mise à jour (README.md, USAGE.md, ARCHITECTURE.md)
+
 # Changements apportés - Restructuration du 23 janvier 2026
 
 ## 🎯 Objectif

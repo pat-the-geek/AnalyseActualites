@@ -38,6 +38,9 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Exclure la documentation interne du scheduler
+docs/SCHEDULER_CRON.md
+
 # Unit test / coverage reports
 rapports/
 config/flux_json_sources.json
