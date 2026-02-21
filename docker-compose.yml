@@ -13,9 +13,10 @@ services:
       - ./rapports:/app/rapports
       - ./samples:/app/samples
       - ./archives:/app/archives
+      - ./config:/app/config
     restart: unless-stopped
     tty: true
     # Expose cron logs if needed
     # ports:
     #   - "8080:8080"
-    # command: ["cron", "-f"]
+    command: ["cron", "-f"]
