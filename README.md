@@ -1,5 +1,3 @@
-
-
 # WUDD.ai
 
 <p align="left">
@@ -20,88 +18,110 @@
   </a>
 </p>
 
-Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomaniak) et le modèle Qwen3. Collecte, analyse et synthèse d'articles depuis des flux RSS/JSON gérés par Reeder, avec export en JSON et Markdown.
+> **What's up, Doc?** — Plateforme de veille intelligente inspirée de Bugs Bunny : collecte, analyse et synthèse d'actualités via l'API EurIA (Infomaniak / Qwen3), à partir de flux RSS/JSON gérés par Reeder.
 
 ---
 
 ## Table des matières
 
-1. [Présentation générale](#1-pr%C3%A9sentation-g%C3%A9n%C3%A9rale)
-2. [Architecture et organisation](#2-architecture-et-organisation)
-3. [Fonctionnalités principales](#3-fonctionnalit%C3%A9s-principales)
-4. [Installation et configuration](#4-installation-et-configuration)
-5. [Utilisation rapide (exemples)](#5-utilisation-rapide-exemples)
-6. [Structure des outputs et configuration des flux](#6-structure-des-outputs-et-configuration-des-flux)
-7. [Fonctionnement technique détaillé](#7-fonctionnement-technique-d%C3%A9taill%C3%A9)
-8. [Développement et extension](#8-d%C3%A9veloppement-et-extension)
-9. [Limitations et points d’attention](#9-limitations-et-points-dattention)
-10. [Contact et licence](#10-contact-et-licence)
-11. [Références IA](#11-r%C3%A9f%C3%A9rences-ia)
-12. [Contribuer](#12-contribuer)
-13. [FAQ / Dépannage](#13-faq--d%C3%A9pannage)
+1. [Présentation](#1-présentation)
+2. [Architecture](#2-architecture)
+3. [Installation](#3-installation)
+4. [Utilisation](#4-utilisation)
+5. [Configuration des flux](#5-configuration-des-flux)
+6. [Fonctionnement technique](#6-fonctionnement-technique)
+7. [Orchestration Docker](#7-orchestration-docker)
+8. [Développement et extension](#8-développement-et-extension)
+9. [Limitations](#9-limitations)
+10. [FAQ / Dépannage](#10-faq--dépannage)
+11. [Contribuer](#11-contribuer)
+12. [Contact et licence](#12-contact-et-licence)
 
 ---
 
-## 1. Présentation générale
+## 1. Présentation
 
-WUDD.ai fait référence à la réplique « What's up, Doc? » de Bugs Bunny, symbole de curiosité et de veille, associée ici à l’IA. Le nom évoque une plateforme qui interroge l’actualité, synthétise et surveille l’information grâce à l’intelligence artificielle.
+WUDD.ai collecte des articles depuis des flux RSS/JSON (Reeder), en extrait le texte, génère des résumés en français via l'API EurIA (modèle Qwen3), puis produit des rapports thématiques en JSON, Markdown et PDF.
 
-Il collecte, structure, résume et analyse des articles issus de Reeder, avec orchestration multi-flux et génération de rapports thématiques.
+**Fonctionnalités principales :**
+- Veille multi-flux automatisée
+- Résumés IA en français (Qwen3)
+- Rapports thématiques et analyse sociétale
+- Export JSON, Markdown, PDF
+- Extraction quotidienne par mot-clé
+- Orchestration complète via Docker/cron
+
+Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
 ---
 
-## 2. Architecture et organisation
+## 2. Architecture
 
-- **Collecte** : flux RSS/JSON (Reeder, autres)
-- **Extraction** : texte, images, métadonnées
-- **Résumé IA** : API EurIA (Infomaniak/Qwen3)
-- **Rapports** : Markdown, PDF, analyse thématique
-- **Automatisation** : scheduler multi-flux, cron, Docker
-- **Surveillance** : logs, monitoring, tests
+### Pipeline de traitement
+
+```
+Reeder (RSS/JSON) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Markdown/PDF
+```
 
 ### Arborescence du projet
+
 ```
-AnalyseActualités/
+WUDD.ai/
 ├── scripts/           # Scripts Python exécutables
-├── config/            # Configuration (sources, catégories, prompts)
-├── data/              # Données générées (par flux)
-├── rapports/          # Rapports générés (Markdown, PDF)
-├── archives/          # Anciennes versions de scripts
+│   ├── Get_data_from_JSONFile_AskSummary_v2.py  # Collecte + résumés IA
+│   ├── Get_htmlText_From_JSONFile.py             # Extraction texte HTML
+│   ├── articles_json_to_markdown.py              # Conversion JSON → Markdown
+│   ├── analyse_thematiques.py                    # Analyse sociétale
+│   ├── scheduler_articles.py                     # Scheduler multi-flux
+│   ├── get-keyword-from-rss.py                   # Extraction par mot-clé
+│   └── check_cron_health.py                      # Monitoring cron
+├── config/            # Sources, catégories, prompts, thématiques
+├── data/              # Articles JSON générés (par flux)
+│   ├── articles/<flux>/
+│   ├── articles/cache/<flux>/
+│   └── raw/
+├── rapports/          # Rapports générés
+│   ├── markdown/<flux>/
+│   └── pdf/
+├── archives/          # Sauvegardes versionnées de scripts
+├── samples/           # Exemples de rapports produits
 ├── tests/             # Tests unitaires
-├── .github/           # Config Copilot/CI
-├── .env               # Variables d’environnement
-└── README.md          # Ce fichier
+├── .github/           # Config GitHub Actions / Copilot
+├── .env               # Variables d'environnement (non versionné)
+└── README.md
 ```
 
----
+### Fichiers de configuration clés
 
-## 3. Fonctionnalités principales
-
-- Veille intelligente multi-flux
-- Extraction et structuration automatisée
-- Résumés IA (français, Qwen3)
-- Rapports thématiques et analyse sociétale
-- Orchestration par scheduler multi-flux
-- Export JSON, Markdown, PDF
-- Interface CLI
-- Cloisonnement des outputs par flux
+| Fichier | Rôle |
+|---|---|
+| `config/flux_json_sources.json` | Liste des flux RSS/JSON et paramètres cron |
+| `config/sites_actualite.json` | Sources RSS disponibles |
+| `config/categories_actualite.json` | Catégories d'articles |
+| `config/keyword-to-search.json` | Mots-clés pour extraction quotidienne |
+| `config/thematiques_societales.json` | 12 thématiques sociétales |
+| `config/prompt-rapport.txt` | Template de prompt pour rapports |
 
 ---
 
-## 4. Installation et configuration
+## 3. Installation
 
 ### Prérequis
-- Python 3.10+
-- Compte Infomaniak avec accès à l’API EurIA
-- .env à la racine (voir ci-dessous)
 
-### Installation
+- Python 3.10+
+- Compte Infomaniak avec accès à l'API EurIA
+- Docker (pour l'orchestration automatisée)
+
+### Dépendances
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### Configuration
-Créez un fichier `.env` à la racine :
+
+Créez un fichier `.env` à la racine :
+
 ```env
 URL=https://api.infomaniak.com/euria/v1/chat/completions
 bearer=VOTRE_TOKEN_API_INFOMANIAK
@@ -109,39 +129,50 @@ bearer=VOTRE_TOKEN_API_INFOMANIAK
 
 ---
 
-## 5. Utilisation rapide (exemples)
+## 4. Utilisation
 
-### Générer un rapport annuel pour un flux (exemple : Intelligence-artificielle, année 2026)
+### Générer des résumés pour un flux
+
 ```bash
-python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux "Intelligence-artificielle" --date_debut 2026-01-01 --date_fin 2026-12-31
+python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py \
+  --flux "Intelligence-artificielle" \
+  --date_debut 2026-02-01 \
+  --date_fin 2026-02-17
 ```
 
-### Générer un rapport Markdown
+Sortie :
+- `data/articles/Intelligence-artificielle/articles_generated_2026-02-01_2026-02-17.json`
+- `rapports/markdown/Intelligence-artificielle/rapport_sommaire_*.md`
+
+### Convertir un fichier JSON en rapport Markdown
+
 ```bash
-python3 scripts/articles_json_to_markdown.py data/articles/Intelligence-artificielle/articles_generated_2026-02-01_2026-02-17.json
+python3 scripts/articles_json_to_markdown.py \
+  data/articles/Intelligence-artificielle/articles_generated_2026-02-01_2026-02-17.json
 ```
 
-### Scheduler multi-flux (tous les flux)
+### Lancer le scheduler multi-flux
+
 ```bash
 python3 scripts/scheduler_articles.py
 ```
 
+Traite automatiquement tous les flux définis dans `config/flux_json_sources.json`.
+
+### Extraction par mot-clé (manuelle)
+
+```bash
+python3 scripts/get-keyword-from-rss.py
+```
+
+Génère un fichier JSON dans `data/articles-from-rss/` pour chaque mot-clé configuré, avec résumé IA et images principales.
+
 ---
 
-## 6. Structure des outputs et configuration des flux
+## 5. Configuration des flux
 
-- Outputs : `data/articles/<flux>/`, `rapports/markdown/<flux>/`, `data/articles/cache/<flux>/`
-- Exemples de rapports : `samples/`
+### Format `config/flux_json_sources.json`
 
-### Configuration des flux : `config/flux_json_sources.json`
-
-Ce fichier centralise la liste des flux JSON à traiter. Chaque entrée définit :
-- `title` : nom du flux (utilisé pour le cloisonnement des outputs)
-- `url` : URL du flux JSON à collecter
-- `scheduler` : paramètres de planification (cron, timeout)
-
-
-Exemple :
 ```json
 [
   {
@@ -163,250 +194,54 @@ Exemple :
 ]
 ```
 
-Pour ajouter un flux, il suffit d’ajouter un objet à ce tableau. Le scheduler et tous les scripts multi-flux utiliseront automatiquement cette configuration pour traiter chaque flux de façon indépendante.
+Chaque objet définit un flux indépendant. Le scheduler et tous les scripts multi-flux utilisent ce fichier comme source de vérité unique. Pour ajouter un flux, il suffit d'ajouter un objet au tableau.
 
 ---
 
-## 7. Fonctionnement technique détaillé
+## 6. Fonctionnement technique
 
 ### Appel API EurIA
+
 ```python
 response = requests.post(
-  URL,
-  json={
-    "messages": [{"content": prompt, "role": "user"}],
-    "model": "qwen3",
-    "enable_web_search": True
-  },
-  headers={'Authorization': f'Bearer {BEARER}'},
-  timeout=60
+    URL,
+    json={
+        "messages": [{"content": prompt, "role": "user"}],
+        "model": "qwen3",
+        "enable_web_search": True
+    },
+    headers={"Authorization": f"Bearer {BEARER}"},
+    timeout=60
 )
-content = response.json()['choices'][0]['message']['content']
+content = response.json()["choices"][0]["message"]["content"]
 ```
 
-### Prompts utilisés
-**Résumé d’article** :
+L'API intègre un mécanisme de retry avec backoff exponentiel.
+
+### Prompts
+
+**Résumé d'article :**
 ```
-faire un résumé de ce texte sur maximum 20 lignes en français, 
+Faire un résumé de ce texte sur maximum 20 lignes en français,
 ne donne que le résumé, sans commentaire ni remarque : {texte}
 ```
-**Rapport thématique** :
+
+**Rapport thématique :**
 ```
-Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
-Affiche la date de publication et les sources lorsque tu cites un article. 
-Groupe les acticles par catégories que tu auras identifiées. 
+Analyse ce fichier JSON et fait une synthèse des actualités.
+Affiche la date de publication et les sources lorsque tu cites un article.
+Groupe les articles par catégories que tu auras identifiées.
 En fin de synthèse fait un tableau avec les références.
 Inclus des images pertinentes (<img src='URL' />).
 ```
 
-### Bonnes pratiques
-- Prompts et clés en français
-- Format de date ISO 8601 strict (`%Y-%m-%dT%H:%M:%SZ`)
-- Utiliser `print_console()` pour les logs
+### Formats de données
 
-### Extraction quotidienne par mot-clé (nouveau)
-
-Le script `get-keyword-from-rss.py` collecte chaque jour à 1h00 (via cron) les articles dont le titre contient un mot-clé défini dans `config/keyword-to-search.json`.
-Pour chaque mot-clé, il génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
-
-Exécution manuelle :
-```bash
-python3 scripts/get-keyword-from-rss.py
-```
-Exécution automatique (cron) :
-```
-0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
-```
-
-### Orchestration et planification (Docker)
-
-**Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement à l’intérieur du conteneur Docker via cron.**
-
-**Aucune tâche n’est programmée sur l’hôte.**
-
-### Tâches cron actives dans Docker
-
-- **Extraction quotidienne par mot-clé** :
-  - `0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log`
-- **Vérification santé du cron toutes les 10 minutes** :
-  - `*/10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log`
-- **Scheduler d’articles chaque lundi à 6h** :
-  - `0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log`
-- **Tâche de test chaque minute** :
-  - `* * * * * root touch /app/cron_test.log && echo "cron ok $(date)" | tee -a /app/cron_test.log`
-
-**Note conformité :**
-> _Vérifié le 21/02/2026 : aucune tâche cron n’est programmée sur l’hôte, toute l’automatisation est contenue dans Docker pour garantir l’isolation et la portabilité._
-
-## 8. Développement et extension
-
-### Ajouter une source ou catégorie
-- Modifiez `config/sites_actualite.json` ou `config/categories_actualite.json`
-
-### Sauvegarde automatique des scripts
-Avant toute modification :
-```bash
-cp "script.py" "archives/script_$(date +%Y%m%d_%H%M%S).py"
-```
-
-### Tests
-```bash
-pytest tests/
-```
-
----
-
-## 9. Limitations et points d’attention
-
-- Certains scripts écrivent dans des fichiers prédéfinis (adapter si besoin)
-- Langue française obligatoire pour les clés et messages
-- README.md et fichiers critiques doivent rester à la racine
-
----
-
-## 10. Contact et licence
-
-- Auteur : Patrick Ostertag
-- Email : patrick.ostertag@gmail.com
-- Site : http://patrickostertag.ch
-- Licence : Projet personnel
-
----
-
-## 11. Références IA
-
-- Moteur : EurIA (Infomaniak)
-- Modèle : Qwen3
-- URL : https://euria.infomaniak.com
-- Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md)
-
-Pipeline de collecte et d'analyse d'actualités utilisant des flux RSS/JSON et l'API EurIA d'Infomaniak (modèle Qwen3) pour générer des résumés automatiques d'articles.
-
-## 📋 Description
-
-Ce projet collecte automatiquement des articles depuis des flux RSS/JSON, extrait leur contenu HTML, et génère des résumés intelligents via l'API EurIA. Les résultats sont exportés en JSON et peuvent être convertis en rapports Markdown.
-
-## 🚀 Fonctionnalités
-
-- **Collecte de flux RSS/JSON** : Récupération automatique d'articles depuis des sources configurables
-- **Extraction de contenu** : Analyse HTML et extraction du texte principal des articles
-- **Génération de résumés IA** : Utilisation de l'API EurIA (Qwen3) pour créer des résumés pertinents
-- **Export multi-formats** : JSON structuré et rapports Markdown
-
-## 📁 Structure du projet
-
-```
-AnalyseActualités/
-├── scripts/                              # Scripts Python
-│   ├── Get_data_from_JSONFile_AskSummary.py  # Script principal (collecte + résumés IA)
-│   ├── Get_htmlText_From_JSONFile.py         # Extraction de texte HTML
-│   ├── articles_json_to_markdown.py          # Conversion JSON → Markdown
-│   └── analyse_thematiques.py                # Analyse thématiques sociétales
-│
-├── config/                               # Configuration
-│   ├── sites_actualite.json              # Liste des sources RSS/JSON
-│   ├── categories_actualite.json         # Catégories d'articles
-│   ├── prompt-rapport.txt                # Template de prompt pour rapports
-│   └── thematiques_societales.json       # Thématiques sociétales (12 thèmes)
-│
-├── data/                                 # Données générées
-│   ├── articles/                         # Articles JSON par période
-│   └── raw/                              # Données brutes (HTML, texte)
-│
-├── rapports/                             # Rapports générés
-│   ├── markdown/                         # Rapports .md
-│   └── pdf/                              # Rapports PDF (si générés)
-│
-├── archives/                             # Anciennes versions de scripts
-├── tests/                                # Tests unitaires
-├── .github/                              # Configuration GitHub/Copilot
-├── .env                                  # Variables d'environnement (non versionné)
-└── README.md                             # Ce fichier
-```
-
-# Exemples d'usage multi-flux (février 2026)
-
-## Génération de résumés pour un flux spécifique
-
-```bash
-python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux Intelligence-artificielle --date_debut 2026-02-01 --date_fin 2026-02-17
-```
-
-## Génération de rapports Markdown pour un flux
-
-```bash
-python3 scripts/articles_json_to_markdown.py data/articles/Intelligence-artificielle/articles_generated_2026-02-01_2026-02-17.json
-```
-
-## Scheduler multi-flux (tous les flux configurés)
-
-```bash
-python3 scripts/scheduler_articles.py
-```
-
-## Structure des outputs
-
-- Les fichiers sont générés dans :
-  - `data/articles/<nom-flux>/`
-  - `rapports/markdown/<nom-flux>/`
-  - `data/articles/cache/<nom-flux>/`
-
-## Configuration des flux
-
-Voir et éditer : `config/flux_json_sources.json`
-
-## 📦 Exemples de sortie
-
-Des exemples de rapports générés sont disponibles dans le dossier `samples/`.
-
-- Exemple de rapport Markdown : [samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
-
-Vous pouvez consulter ce fichier pour visualiser le format et la structure d'un rapport produit automatiquement par l'application.
-
-## 🔧 Installation
-
-### Prérequis
-
-- Python 3.10+
-- Compte Infomaniak avec accès à l'API EurIA
-
-### Installation des dépendances
-
-```bash
-pip install -r requirements.txt
-```
-
-### Configuration
-
-Créez un fichier `.env` à la racine avec :
-
-```env
-URL=https://api.infomaniak.com/euria/v1/chat/completions
-bearer=VOTRE_TOKEN_API_INFOMANIAK
-```
-
-## � Utilisation
-
-### 1. Générer des résumés d'articles
-
-```bash
-# Depuis n'importe quel répertoire (v2.0+)
-python3 scripts/Get_data_from_JSONFile_AskSummary.py [date_debut] [date_fin]
-
-# Exemples
-python3 scripts/Get_data_from_JSONFile_AskSummary.py 2026-01-01 2026-01-31
-python3 scripts/Get_data_from_JSONFile_AskSummary.py  # dates par défaut
-```
-
-- Récupère articles depuis `REEDER_JSON_URL` (configuré dans `.env`)
-- Génère résumés via l'API EurIA
-- Sauvegarde dans `data/articles/articles_generated_YYYY-MM-DD_YYYY-MM-DD.json`
-- Génère rapport dans `rapports/markdown/rapport_sommaire_*.md`
-
-**Nouveauté v2.0 :** Les scripts utilisent maintenant des chemins absolus et fonctionnent depuis n'importe quel répertoire.
-
-**Format d'entrée attendu** : JSON avec un tableau `items` contenant :
+**Format d'entrée attendu (flux JSON) :**
 ```json
+{
+  "items": [
+    {
       "url": "https://...",
       "date_published": "2025-01-23T10:00:00Z",
       "authors": [{"name": "Auteur"}]
@@ -415,7 +250,7 @@ python3 scripts/Get_data_from_JSONFile_AskSummary.py  # dates par défaut
 }
 ```
 
-**Format de sortie** : Liste d'objets avec clés françaises :
+**Format de sortie (articles résumés) :**
 ```json
 [
   {
@@ -427,60 +262,64 @@ python3 scripts/Get_data_from_JSONFile_AskSummary.py  # dates par défaut
 ]
 ```
 
-### 2. Extraire le texte HTML brut
+### Chemins absolus (v2.0+)
 
-```bash
-python3 scripts/Get_htmlText_From_JSONFile.py
-```
+Depuis la v2.0, tous les scripts utilisent des chemins absolus et fonctionnent depuis n'importe quel répertoire :
 
-- Sélectionnez un fichier JSON de flux
-- Génère `data/raw/all_articles.txt` avec le contenu texte de chaque article
-
-### 3. Convertir en Markdown
-
-```bash
-python3 scripts/articles_json_to_markdown.py
-```Chemins absolus automatiques (v2.0)
-Les scripts détectent automatiquement leur emplacement et construisent des chemins absolus :
 ```python
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
 ```
-**Avantages :**
-- ✅ Fonctionne depuis n'importe quel répertoire
-- ✅ Compatible raccourcis macOS, cron, automatisation
-- ✅ Pas de dépendance au répertoire courant (`cwd`)
 
-### 
+### Bonnes pratiques de développement
 
-- Sélectionnez un fichier JSON d'articles
-- Choisissez le nom/emplacement du fichier Markdown de sortie
-- Génère un rapport lisible avec références
+- Langue française obligatoire pour les clés JSON et messages
+- Format de date ISO 8601 strict : `YYYY-MM-DDTHH:MM:SSZ`
+- Utiliser `print_console()` pour les logs horodatés
+- **Toujours sauvegarder avant de modifier un script :**
+  ```bash
+  cp "script.py" "archives/script_$(date +%Y%m%d_%H%M%S).py"
+  ```
 
-## 🔑 Points clés techniques
+---
 
-### Format de dates
-Les dates sont au format ISO 8601 : `YYYY-MM-DDTHH:MM:SSZ`
-```python
-datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
-```
+## 7. Orchestration Docker
 
-### API EurIA (Infomaniak)
-- Endpoint : `/euria/v1/chat/completions`
-- Modèle : Qwen3
-- Authentification : Bearer token
-- Retry automatique avec backoff exponentiel
+### Principe
 
-### Sauvegarde automatique
-Conformément à la politique du projet, **toute modification de script Python doit être précédée d'une sauvegarde** dans `archives/` avec timestamp :
+**Toute l'automatisation est contenue dans le conteneur Docker.** Aucune tâche cron n'est programmée sur l'hôte, garantissant isolation et portabilité.
+
+> _Vérifié le 21/02/2026 : conformité confirmée._
+
+### Déploiement
+
 ```bash
-cp "script.py" "archives/script_$(date +%Y%m%d_%H%M%S).py"
+docker-compose up --build -d
 ```
 
-## 🛠️ Développement
+Seul le conteneur `analyse-actualites` (défini dans `docker-compose.yml`) doit être actif. Pour supprimer un ancien conteneur résiduel :
 
-### Ajouter une nouvelle source
+```bash
+docker rm -f wudd-ai-final   # ou wuddai, etc.
+```
+
+### Tâches cron actives dans le conteneur
+
+| Planification | Tâche |
+|---|---|
+| `0 1 * * *` | Extraction par mot-clé (`get-keyword-from-rss.py`) |
+| `0 6 * * 1` | Scheduler articles chaque lundi (`scheduler_articles.py`) |
+| `*/10 * * * *` | Vérification santé du cron (`check_cron_health.py`) |
+| `* * * * *` | Test cron (écriture dans `cron_test.log`) |
+
+Tous les logs sont disponibles dans `rapports/`.
+
+---
+
+## 8. Développement et extension
+
+### Ajouter une source RSS
 
 Modifiez `config/sites_actualite.json` :
 ```json
@@ -499,86 +338,63 @@ Modifiez `config/categories_actualite.json` :
 }
 ```
 
-### Logs et debugging
-
-Utilisez la fonction `print_console()` définie dans les scripts pour des logs horodatés :
-```python
-print_console("Message de débogage")
-```
-
-# 🐳 Maintenance Docker et déploiement
-
-## Nettoyage des anciens conteneurs
-
-Après plusieurs déploiements, il peut rester d'anciens conteneurs Docker inutilisés (ex : `wudd-ai-final`, `wuddai`).
-
-**Seul le conteneur `analyse-actualites` doit être actif pour ce projet.**
-
-Pour supprimer un ancien conteneur :
+### Lancer les tests
 
 ```bash
-docker rm -f wudd-ai-final
+pytest tests/
 ```
 
-Le déploiement officiel s'effectue toujours via :
+---
 
-```bash
-docker-compose up --build -d
-```
+## 9. Limitations
 
-Ce qui (re)lance uniquement le conteneur `analyse-actualites` défini dans `docker-compose.yml`.
+- Certains scripts écrivent dans des fichiers prédéfinis — à adapter selon les besoins
+- Langue française requise pour les clés et messages (non configurable)
+- `README.md` et fichiers critiques doivent rester à la racine du projet
 
+---
 
-## ⚠️ Limitations
+## 10. FAQ / Dépannage
 
-- **Noms de fichiers fixes** : Certains scripts écrivent dans des fichiers prédéfinis (à adapter si besoin)
-- **Langue française** : Les clés JSON et messages sont en français
+**Q : Le README n'est pas à jour sur GitHub ?**  
+Vérifiez que vous êtes sur la branche `main` et que le push a été effectué. Actualisez ou videz le cache du navigateur.
 
-## 📝 Licence
+**Q : Erreur de parsing de date ?**  
+Les dates doivent être au format ISO 8601 strict : `YYYY-MM-DDTHH:MM:SSZ`.
 
-Projet personnel - Patrick Ostertag
+**Q : Les scripts ne trouvent pas les fichiers de données ?**  
+Depuis la v2.0, tous les chemins sont absolus. Les scripts fonctionnent depuis n'importe quel répertoire.
 
-## 📧 Contact
+**Q : Comment ajouter un flux ou une catégorie ?**  
+Modifiez les fichiers dans `config/` (voir [Section 5](#5-configuration-des-flux) et [Section 8](#8-développement-et-extension)).
+
+**Q : Comment sauvegarder avant une modification ?**  
+Copiez le script dans `archives/` avec timestamp (voir [Section 6](#6-fonctionnement-technique)).
+
+---
+
+## 11. Contribuer
+
+Les contributions sont les bienvenues !
+
+1. Forkez le dépôt
+2. Créez une branche : `git checkout -b feature/ma-nouvelle-fonction`
+3. Commitez : `git commit -am 'Ajout nouvelle fonction'`
+4. Poussez : `git push origin feature/ma-nouvelle-fonction`
+5. Ouvrez une Pull Request
+
+Merci de respecter : la structure du projet, la langue française pour les clés/messages, et la politique de sauvegarde avant modification.
+
+---
+
+## 12. Contact et licence
 
 - **Auteur** : Patrick Ostertag
 - **Email** : patrick.ostertag@gmail.com
-- **Site** : http://patrickostertag.ch
-
-
-
----
-
-## 12. Contribuer
-
-Les contributions sont les bienvenues ! Pour proposer une amélioration :
-
-1. Forkez le dépôt
-2. Créez une branche (`git checkout -b feature/ma-nouvelle-fonction`)
-3. Commitez vos modifications (`git commit -am 'Ajout nouvelle fonction'`)
-4. Poussez la branche (`git push origin feature/ma-nouvelle-fonction`)
-5. Ouvrez une Pull Request
-
-Merci de respecter la structure du projet, la langue française pour les clés/messages, et la politique de sauvegarde.
+- **Site** : [patrickostertag.ch](http://patrickostertag.ch)
+- **Moteur IA** : EurIA (Infomaniak) — Modèle : Qwen3 — [euria.infomaniak.com](https://euria.infomaniak.com)
+- **Licence** : Projet personnel
 
 ---
 
-## 13. FAQ / Dépannage
-
-**Q : Le README n’est pas à jour sur GitHub ?**
-A : Vérifiez que vous êtes bien sur la branche `main` et que le push a été effectué. Actualisez la page GitHub ou videz le cache du navigateur.
-
-**Q : J’ai une erreur de parsing de date.**
-A : Vérifiez que les dates sont bien au format ISO 8601 strict (`YYYY-MM-DDTHH:MM:SSZ`).
-
-**Q : Les scripts ne trouvent pas les fichiers de données.**
-A : Depuis la v2.0, tous les chemins sont absolus : exécutez les scripts depuis n’importe où, ils trouveront les bons dossiers.
-
-**Q : Comment ajouter un flux ou une catégorie ?**
-A : Modifiez les fichiers dans `config/` (voir sections dédiées ci-dessus).
-
-**Q : Comment sauvegarder avant modification ?**
-A : Toujours copier le script dans `archives/` avant toute modification (voir section Sauvegarde automatique).
-
----
-
-
+*Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md)*
