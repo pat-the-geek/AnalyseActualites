@@ -4,7 +4,6 @@ Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomani
 
 ---
 
-
 ## Orchestration et planification (Docker)
 
 **Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement à l’intérieur du conteneur Docker via cron.**
@@ -512,9 +511,4 @@ Projet personnel - Patrick Ostertag
 
 ## 🤖 IA utilisée
 
-- **Moteur** : EurIA (Infomaniak)
-- **Modèle** : Qwen3
-- **URL** : https://euria.infomaniak.com
-- **Documentation prompts** : [docs/PROMPTS.md](docs/PROMPTS.md)
 
----
