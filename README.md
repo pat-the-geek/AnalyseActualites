@@ -1,28 +1,46 @@
+
+
 # WUDD.ai
+
+<p align="left">
+  <a href="https://github.com/pat-the-geek/WUDD.ai/actions">
+    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/pat-the-geek/WUDD.ai/ci.yml?branch=main&label=build&logo=github" />
+  </a>
+  <a href="https://github.com/pat-the-geek/WUDD.ai/blob/main/LICENSE">
+    <img alt="Licence" src="https://img.shields.io/github/license/pat-the-geek/WUDD.ai?color=blue" />
+  </a>
+  <a href="https://www.python.org/downloads/release/python-3100/">
+    <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-blue.svg?logo=python&logoColor=white" />
+  </a>
+  <a href="https://github.com/pat-the-geek/WUDD.ai/commits/main">
+    <img alt="Dernier commit" src="https://img.shields.io/github/last-commit/pat-the-geek/WUDD.ai?logo=github" />
+  </a>
+  <a href="https://github.com/pat-the-geek/WUDD.ai/issues">
+    <img alt="Issues" src="https://img.shields.io/github/issues/pat-the-geek/WUDD.ai?color=orange" />
+  </a>
+</p>
 
 Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomaniak) et le modèle Qwen3. Collecte, analyse et synthèse d'articles depuis des flux RSS/JSON gérés par Reeder, avec export en JSON et Markdown.
 
 ---
 
-## Orchestration et planification (Docker)
+## Table des matières
 
-**Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement à l’intérieur du conteneur Docker via cron.**
+1. [Présentation générale](#1-pr%C3%A9sentation-g%C3%A9n%C3%A9rale)
+2. [Architecture et organisation](#2-architecture-et-organisation)
+3. [Fonctionnalités principales](#3-fonctionnalit%C3%A9s-principales)
+4. [Installation et configuration](#4-installation-et-configuration)
+5. [Utilisation rapide (exemples)](#5-utilisation-rapide-exemples)
+6. [Structure des outputs et configuration des flux](#6-structure-des-outputs-et-configuration-des-flux)
+7. [Fonctionnement technique détaillé](#7-fonctionnement-technique-d%C3%A9taill%C3%A9)
+8. [Développement et extension](#8-d%C3%A9veloppement-et-extension)
+9. [Limitations et points d’attention](#9-limitations-et-points-dattention)
+10. [Contact et licence](#10-contact-et-licence)
+11. [Références IA](#11-r%C3%A9f%C3%A9rences-ia)
+12. [Contribuer](#12-contribuer)
+13. [FAQ / Dépannage](#13-faq--d%C3%A9pannage)
 
-**Aucune tâche n’est programmée sur l’hôte.**
-
-### Tâches cron actives dans Docker
-
-- **Extraction quotidienne par mot-clé** :
-  - `0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log`
-- **Vérification santé du cron toutes les 10 minutes** :
-  - `*/10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log`
-- **Scheduler d’articles chaque lundi à 6h** :
-  - `0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log`
-- **Tâche de test chaque minute** :
-  - `* * * * * root touch /app/cron_test.log && echo "cron ok $(date)" | tee -a /app/cron_test.log`
-
-**Note conformité :**
-> _Vérifié le 21/02/2026 : aucune tâche cron n’est programmée sur l’hôte, toute l’automatisation est contenue dans Docker pour garantir l’isolation et la portabilité._
+---
 
 ## 1. Présentation générale
 
@@ -200,7 +218,25 @@ Exécution automatique (cron) :
 0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
 ```
 
----
+### Orchestration et planification (Docker)
+
+**Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement à l’intérieur du conteneur Docker via cron.**
+
+**Aucune tâche n’est programmée sur l’hôte.**
+
+### Tâches cron actives dans Docker
+
+- **Extraction quotidienne par mot-clé** :
+  - `0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log`
+- **Vérification santé du cron toutes les 10 minutes** :
+  - `*/10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log`
+- **Scheduler d’articles chaque lundi à 6h** :
+  - `0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log`
+- **Tâche de test chaque minute** :
+  - `* * * * * root touch /app/cron_test.log && echo "cron ok $(date)" | tee -a /app/cron_test.log`
+
+**Note conformité :**
+> _Vérifié le 21/02/2026 : aucune tâche cron n’est programmée sur l’hôte, toute l’automatisation est contenue dans Docker pour garantir l’isolation et la portabilité._
 
 ## 8. Développement et extension
 
@@ -509,6 +545,40 @@ Projet personnel - Patrick Ostertag
 - **Site** : http://patrickostertag.ch
 
 
-## 🤖 IA utilisée
+
+---
+
+## 12. Contribuer
+
+Les contributions sont les bienvenues ! Pour proposer une amélioration :
+
+1. Forkez le dépôt
+2. Créez une branche (`git checkout -b feature/ma-nouvelle-fonction`)
+3. Commitez vos modifications (`git commit -am 'Ajout nouvelle fonction'`)
+4. Poussez la branche (`git push origin feature/ma-nouvelle-fonction`)
+5. Ouvrez une Pull Request
+
+Merci de respecter la structure du projet, la langue française pour les clés/messages, et la politique de sauvegarde.
+
+---
+
+## 13. FAQ / Dépannage
+
+**Q : Le README n’est pas à jour sur GitHub ?**
+A : Vérifiez que vous êtes bien sur la branche `main` et que le push a été effectué. Actualisez la page GitHub ou videz le cache du navigateur.
+
+**Q : J’ai une erreur de parsing de date.**
+A : Vérifiez que les dates sont bien au format ISO 8601 strict (`YYYY-MM-DDTHH:MM:SSZ`).
+
+**Q : Les scripts ne trouvent pas les fichiers de données.**
+A : Depuis la v2.0, tous les chemins sont absolus : exécutez les scripts depuis n’importe où, ils trouveront les bons dossiers.
+
+**Q : Comment ajouter un flux ou une catégorie ?**
+A : Modifiez les fichiers dans `config/` (voir sections dédiées ci-dessus).
+
+**Q : Comment sauvegarder avant modification ?**
+A : Toujours copier le script dans `archives/` avant toute modification (voir section Sauvegarde automatique).
+
+---
 
 
