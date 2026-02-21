@@ -41,15 +41,11 @@
 
 ## 1. Présentation
 
-WUDD.ai collecte des articles depuis des flux RSS/JSON (Reeder), en extrait le texte, génère des résumés en français via l'API EurIA (modèle Qwen3), puis produit des rapports thématiques en JSON, Markdown et PDF.
+WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de sources RSS/JSON gérées via Reeder, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
 
-**Fonctionnalités principales :**
-- Veille multi-flux automatisée
-- Résumés IA en français (Qwen3)
-- Rapports thématiques et analyse sociétale
-- Export JSON, Markdown, PDF
-- Extraction quotidienne par mot-clé
-- Orchestration complète via Docker/cron
+Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
+
+L'automatisation complète est assurée par un orchestrateur Docker utilisant des tâches cron internes au conteneur : collecte hebdomadaire des articles, extraction quotidienne par mot-clé, et surveillance régulière de la santé du service. Aucune dépendance n'est requise côté hôte. La configuration des flux, catégories et prompts repose sur des fichiers JSON éditables dans `config/`, et l'ajout d'une nouvelle source de veille ne nécessite qu'une ligne de configuration supplémentaire.
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
