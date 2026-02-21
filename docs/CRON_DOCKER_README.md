@@ -1,5 +1,15 @@
 # Configuration rapide : cron + Docker pour AnalyseActualités
 
+## Conformité (vérification 21/02/2026)
+
+- **Aucune tâche cron n’est programmée sur l’hôte.**
+- **Toutes les tâches planifiées sont gérées dans le conteneur Docker via la crontab personnalisée.**
+- **Liste des tâches actives dans Docker :**
+	- Extraction quotidienne par mot-clé (get-keyword-from-rss.py)
+	- Vérification santé du cron (check_cron_health.py)
+	- Scheduler d’articles (scheduler_articles.py)
+	- Tâche de test cron (cron_test.log)
+
 ## 1. Fonctionnement général
 - L’image Docker utilise `python:3.10` (non-slim) pour garantir le support de cron.
 - Les tâches planifiées sont définies dans `/etc/cron.d/scheduler_cron` (copiée depuis le fichier `crontab` du projet).

@@ -35,8 +35,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 ENV PYTHONUNBUFFERED=1
 
 
-# 7. Commande par défaut : lancer cron en mode foreground
-CMD ["cron", "-f"]
+
+# 7. Entrypoint : installation crontab personnalisée puis lancement cron
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Pour lancer un traitement manuel, overridez la commande :
 # docker run --rm -v $(pwd)/data:/app/data -v $(pwd)/rapports:/app/rapports <image> python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux <nom_flux> --date_debut ... --date_fin ...

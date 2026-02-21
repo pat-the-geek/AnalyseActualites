@@ -1,3 +1,7 @@
+# 21/02/2026 - Vérification conformité orchestrations
+
+- Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement dans Docker (cron du conteneur analyse-actualites).
+- Aucune tâche cron n’est programmée sur l’hôte.
 ### Ajout du script get-keyword-from-rss.py (20/02/2026)
 
 - Nouveau script : `get-keyword-from-rss.py` (extraction quotidienne par mot-clé depuis tous les flux RSS)

@@ -1,3 +1,4 @@
+# NOTE : Seul le service "analyse-actualites" doit être utilisé pour ce projet.
 version: '3.8'
 
 services:

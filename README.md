@@ -4,6 +4,27 @@ Plateforme de génération de résumés d'actualités avec l'API EurIA (Infomani
 
 ---
 
+
+## Orchestration et planification (Docker)
+
+**Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement à l’intérieur du conteneur Docker via cron.**
+
+**Aucune tâche n’est programmée sur l’hôte.**
+
+### Tâches cron actives dans Docker
+
+- **Extraction quotidienne par mot-clé** :
+  - `0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log`
+- **Vérification santé du cron toutes les 10 minutes** :
+  - `*/10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log`
+- **Scheduler d’articles chaque lundi à 6h** :
+  - `0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log`
+- **Tâche de test chaque minute** :
+  - `* * * * * root touch /app/cron_test.log && echo "cron ok $(date)" | tee -a /app/cron_test.log`
+
+**Note conformité :**
+> _Vérifié le 21/02/2026 : aucune tâche cron n’est programmée sur l’hôte, toute l’automatisation est contenue dans Docker pour garantir l’isolation et la portabilité._
+
 ## 1. Présentation générale
 
 WUDD.ai fait référence à la réplique « What's up, Doc? » de Bugs Bunny, symbole de curiosité et de veille, associée ici à l’IA. Le nom évoque une plateforme qui interroge l’actualité, synthétise et surveille l’information grâce à l’intelligence artificielle.
@@ -450,6 +471,29 @@ Utilisez la fonction `print_console()` définie dans les scripts pour des logs h
 print_console("Message de débogage")
 ```
 
+# 🐳 Maintenance Docker et déploiement
+
+## Nettoyage des anciens conteneurs
+
+Après plusieurs déploiements, il peut rester d'anciens conteneurs Docker inutilisés (ex : `wudd-ai-final`, `wuddai`).
+
+**Seul le conteneur `analyse-actualites` doit être actif pour ce projet.**
+
+Pour supprimer un ancien conteneur :
+
+```bash
+docker rm -f wudd-ai-final
+```
+
+Le déploiement officiel s'effectue toujours via :
+
+```bash
+docker-compose up --build -d
+```
+
+Ce qui (re)lance uniquement le conteneur `analyse-actualites` défini dans `docker-compose.yml`.
+
+
 ## ⚠️ Limitations
 
 - **Noms de fichiers fixes** : Certains scripts écrivent dans des fichiers prédéfinis (à adapter si besoin)
@@ -472,3 +516,5 @@ Projet personnel - Patrick Ostertag
 - **Modèle** : Qwen3
 - **URL** : https://euria.infomaniak.com
 - **Documentation prompts** : [docs/PROMPTS.md](docs/PROMPTS.md)
+
+---
