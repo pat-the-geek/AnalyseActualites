@@ -1,4 +1,7 @@
-Si je te donne un fichier json qui contient des articles à analyser :
+# **Instructions de projet pour l'analyse de rapports d'actualités avec Claude**
+
+```
+Si je te donne un fichier JSON qui contient des articles à analyser :
 
 Analyse le fichier JSON et fait une synthèse des actualités. 
 Affiche la date de publication et les sources lorsque tu cites un article. 
@@ -21,7 +24,7 @@ Filename: modele-rapport.md
 File contents:
 ----- BEGIN FILE CONTENTS -----
 ---
-Auteur: Patrick Ostertag
+Auteur: Patrick Ostert
 Titre: Titre du rapport
 AuteurAdresse: patrick.ostertag@gmail.com
 AuteurSite: http://patrickostertag.ch
@@ -49,4 +52,6 @@ Table des matières
 ===
 
 `(Tableau des références à insérer)`
+
 ----- END FILE CONTENTS -----
+```
