@@ -49,12 +49,6 @@ L'automatisation complète est assurée par un orchestrateur Docker utilisant de
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
-Le prompt utilisé pour générer ces présentations est disponible dans : [docs/prompt-for-claude-presentation.md](docs/prompt-for-claude-presentation.md)
-
-Des exemples de présentation générée par Claude à partir des données collectées :
-- [Présentation Markdown](samples/claude-generated-presentation.md)
-- [Présentation PDF](samples/claude-generated-presentation.pdf)
-
 ```mermaid
 mindmap
   root((WUDD.ai))
@@ -220,7 +214,13 @@ Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dan
 
 → [`docs/instructions-for-claude-report.md`](docs/instructions-for-claude-report.md)
 
----
+### Exemples de présentations générées par Claude
+
+Le prompt utilisé pour générer ces présentations est disponible dans : [docs/prompt-for-claude-presentation.md](docs/prompt-for-claude-presentation.md)
+
+Exemples de présentations générées par Claude à partir des données collectées :
+- [Présentation Markdown](samples/claude-generated-presentation.md)
+- [Présentation PDF](samples/claude-generated-presentation.pdf)
 
 ## 5. Configuration des flux
 
