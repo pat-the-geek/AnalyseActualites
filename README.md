@@ -181,6 +181,12 @@ Chaque entrée du fichier accepte deux collections optionnelles pour affiner la 
 
 > Les mots des collections `or` et `and` utilisent une correspondance par **frontière de mot** (`\b` regex) pour éviter les faux positifs (ex. `AI` ne matche pas `semaine`).
 
+### Analyse manuelle avec Claude
+
+Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dans Claude (ou tout autre LLM) pour produire un rapport, indépendamment de l'automatisation. Les instructions détaillées pour cette utilisation (format du rapport, modèle Markdown, regroupement thématique) sont disponibles dans :
+
+→ [`docs/instructions-for-claude-report`](docs/instructions-for-claude-report)
+
 ---
 
 ## 5. Configuration des flux
