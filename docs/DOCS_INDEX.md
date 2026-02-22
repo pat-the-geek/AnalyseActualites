@@ -32,9 +32,12 @@
 
 | Fichier | Description | Quand l'utiliser |
 |---------|-------------|------------------|
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architecture logicielle complète (20 KB) | Comprendre le système en profondeur |
-| **[STRUCTURE.md](STRUCTURE.md)** | Organisation des fichiers et conventions | Naviguer dans le projet |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architecture logicielle complète (20 KB) — 7 diagrammes Mermaid | Comprendre le système en profondeur |
+| **[STRUCTURE.md](STRUCTURE.md)** | Organisation des fichiers et conventions (v3.0) | Naviguer dans le projet |
 | **[PROMPTS.md](PROMPTS.md)** | Documentation complète des prompts EurIA | Comprendre/modifier les prompts IA |
+| **[CRON_DOCKER_README.md](CRON_DOCKER_README.md)** | Cron, Docker et monitoring (v2.0, fusion) | Déployer ou configurer le scheduler |
+| **[SCHEDULER_CRON.md](SCHEDULER_CRON.md)** | Planification cron locale (hôte) | Configurer les tâches cron sur le serveur |
+| **[SYNTHESE_MULTI_FLUX.md](SYNTHESE_MULTI_FLUX.md)** | Synthèse du fonctionnement multi-flux | Ajouter ou comprendre les flux JSON |
 
 ### Documentation de référence
 
@@ -62,12 +65,11 @@
 1. **[ARCHITECTURE.md](ARCHITECTURE.md)** - Décisions architecturales (ADRs)
 2. **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Patterns du projet
 3. **[CHANGELOG.md](CHANGELOG.md)** - Documenter les changements
-modifier un prompt IA"
+### "Je veux modifier un prompt IA"
 1. **[PROMPTS.md](PROMPTS.md)** - Comprendre les prompts actuels
 2. **[ARCHITECTURE.md](ARCHITECTURE.md)** - Impact sur l'architecture
 3. **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Règles à respecter
 
-### "Je veux 
 ### "Je veux comprendre le flux de données"
 → **[ARCHITECTURE.md](ARCHITECTURE.md)** (section Flux de données + diagrammes)
 
@@ -225,6 +227,42 @@ modifier un prompt IA"
 
 ---
 
+## 🗺️ Carte de navigation
+
+```mermaid
+flowchart TD
+    Start([🚀 Démarrer]) --> Q{Quel est votre profil ?}
+
+    Q --> U[Utilisateur]
+    Q --> D[Développeur]
+    Q --> A[Architecte]
+
+    U --> README([README.md])
+    U --> USAGE([scripts/USAGE.md])
+
+    D --> README
+    D --> STRUCTURE([STRUCTURE.md])
+    D --> COPILOT([copilot-instructions.md])
+    D --> CHANGELOG([CHANGELOG.md])
+
+    A --> ARCHI([ARCHITECTURE.md])
+    A --> STRUCTURE
+    A --> PROMPTS([PROMPTS.md])
+    A --> CRON([CRON_DOCKER_README.md])
+    A --> SCHEDULER([SCHEDULER_CRON.md])
+    A --> MULTIFLUX([SYNTHESE_MULTI_FLUX.md])
+
+    ARCHI -.-> DEPLOY([DEPLOY.md])
+    CRON -.-> DEPLOY
+
+    style Start fill:#4CAF50,color:#fff
+    style ARCHI fill:#2196F3,color:#fff
+    style README fill:#FF9800,color:#fff
+    style DEPLOY fill:#9C27B0,color:#fff
+```
+
+---
+
 ## 🎯 Parcours d'apprentissage recommandés
 
 ### Parcours 1 : Utilisateur débutant (30 min)
@@ -275,5 +313,5 @@ Pour toute question sur la documentation ou le projet, n'hésitez pas à me cont
 
 ---
 
-**Dernière mise à jour** : 23 janvier 2026 - Version 2.0  
-**Fichiers documentés** : 6 documents principaux (~50 KB de documentation)
+**Dernière mise à jour** : 22 février 2026 - Version 3.0  
+**Fichiers documentés** : 9 documents principaux (~80 KB de documentation)

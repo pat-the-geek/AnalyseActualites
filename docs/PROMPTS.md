@@ -13,7 +13,41 @@ Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour deux opérations
 
 ---
 
-## 🔧 Configuration API
+## � Cycle de vie des prompts
+
+```mermaid
+flowchart TD
+    subgraph P1["📝 Prompt 1 — Résumé d'article"]
+        A1([Article HTML]) --> B1[Extraction BeautifulSoup]
+        B1 --> C1[Nettoyage + troncature 15 000 chars]
+        C1 --> D1[Assemblage prompt résumé]
+        D1 --> E1{Appel API EurIA\ntimeout 60s}
+        E1 -->|✅ Succès| F1[Résumé JSON\n≤ 20 lignes]
+        E1 -->|❌ Erreur| G1{Tentative ≤ 3 ?}
+        G1 -->|Oui| E1
+        G1 -->|Non| H1[Fallback : message d'erreur]
+        F1 --> I1[(articles_generated_...json)]
+        H1 --> I1
+    end
+
+    subgraph P2["📊 Prompt 2 — Rapport synthétique"]
+        A2([JSON articles]) --> B2[Sérialisation JSON]
+        B2 --> C2[Assemblage prompt rapport]
+        C2 --> D2{Appel API EurIA\ntimeout 300s}
+        D2 -->|✅ Succès| E2[Rapport Markdown\npar catégories + images]
+        D2 -->|❌ Erreur| F2{Tentative ≤ 3 ?}
+        F2 -->|Oui| D2
+        F2 -->|Non| G2[Fallback : message d'erreur]
+        E2 --> H2[(rapports/markdown/...md)]
+        G2 --> H2
+    end
+
+    P1 --> P2
+```
+
+---
+
+## �🔧 Configuration API
 
 ### Endpoint
 ```

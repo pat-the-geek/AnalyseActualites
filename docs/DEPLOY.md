@@ -22,7 +22,7 @@ git status
 ### ✅ Étape 2 : Initialiser Git (si pas déjà fait)
 
 ```bash
-cd /Users/patrickostertag/Documents/DataForIA/AnalyseActualités
+cd /chemin/vers/WUDD.ai
 
 # Initialiser le dépôt
 git init
@@ -132,6 +132,23 @@ Protection de la branche `main` :
 
 ## 🔄 Workflow de Développement
 
+```mermaid
+flowchart LR
+    A([git init\n+ remote add]) --> B[git add .\ngit commit]
+    B --> C{Nouveau\ndéveloppement ?}
+    C -->|Oui| D[git checkout -b\nfeature/xxx]
+    D --> E[Modifications\n+ tests]
+    E --> F[git add . &&\ngit commit]
+    F --> G[git push origin\nfeature/xxx]
+    G --> H[Pull Request\nsur GitHub]
+    H --> I{Review OK ?}
+    I -->|Oui| J[Merge dans main]
+    I -->|Non| E
+    C -->|Non hotfix| K[git push origin main]
+    J --> K
+    K --> L([✅ Déployé])
+```
+
 ### Cloner sur une nouvelle machine
 
 ```bash
@@ -176,24 +193,31 @@ git push origin feature/nouvelle-fonctionnalite
 ## 📊 Structure du Dépôt sur GitHub
 
 ```
-AnalyseActualités/
+WUDD.ai/
 ├── .github/
 │   └── copilot-instructions.md    # Instructions pour GitHub Copilot
 ├── .gitignore                      # Fichiers à ignorer
 ├── .env.example                    # Template de configuration
-├── pre-commit-hook.sh              # Hook de sécurité
-├── SECURITY.md                     # Guide de sécurité
-├── DEPLOY.md                       # Ce fichier
+├── entrypoint.sh                   # Entrypoint Docker
+├── docker-compose.yml              # Configuration Docker Compose
+├── Dockerfile                      # Image Docker
 ├── README.md                       # Documentation principale
 ├── requirements.txt                # Dépendances Python
-├── ARCHITECTURE.md                 # Architecture du projet
 ├── CHANGELOG.md                    # Historique des versions
-├── STRUCTURE.md                    # Structure détaillée
-├── PROMPTS.md                      # Documentation des prompts IA
+├── docs/                           # Documentation technique
+│   ├── ARCHITECTURE.md             # Architecture du projet (v3.0)
+│   ├── STRUCTURE.md                # Structure détaillée (v3.0)
+│   ├── PROMPTS.md                  # Documentation des prompts IA
+│   ├── CRON_DOCKER_README.md       # Cron & Docker (v2.0, fusion)
+│   ├── SCHEDULER_CRON.md           # Planification cron locale
+│   ├── DEPLOY.md                   # Ce fichier
+│   ├── SYNTHESE_MULTI_FLUX.md      # Synthèse multi-flux
+│   └── DOCS_INDEX.md               # Index de la documentation
 ├── scripts/                        # Scripts Python
 ├── config/                         # Configuration
 ├── data/                           # Données (ignoré sur GitHub)
 ├── rapports/                       # Rapports (ignorés sur GitHub)
+├── archives/                       # Anciennes versions
 └── tests/                          # Tests unitaires
 ```
 
@@ -253,5 +277,5 @@ git filter-branch --force --index-filter \
 
 ---
 
-**Dernière mise à jour** : 23 janvier 2026  
-**Version** : 2.0
+**Dernière mise à jour** : 22 février 2026  
+**Version** : 3.0

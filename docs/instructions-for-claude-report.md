@@ -1,4 +1,4 @@
-si je te donne un fichier json qui contient des articles à analyser :
+Si je te donne un fichier json qui contient des articles à analyser :
 
 Analyse le fichier JSON et fait une synthèse des actualités. 
 Affiche la date de publication et les sources lorsque tu cites un article. 

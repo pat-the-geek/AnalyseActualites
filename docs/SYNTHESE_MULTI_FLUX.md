@@ -1,5 +1,47 @@
 # Synthèse et documentation du fonctionnement multi-flux
 
+> 📐 **Référence principale :** Section 2 de [ARCHITECTURE.md](ARCHITECTURE.md#2-architecture-multi-flux) pour les diagrammes complets (cloisonnement, pipeline ETL, ADRs).  
+> Ce document est un **guide opérationnel** : ajout de flux, commandes et structure des outputs.
+
+---
+
+## Schéma de cloisonnement multi-flux
+
+```mermaid
+flowchart LR
+    subgraph Config["⚙️ config/"]
+        FJS[flux_json_sources.json\nflux 1 ... flux N]
+    end
+
+    subgraph Scripts["🐍 scripts/"]
+        SCHED[scheduler_articles.py]
+        ETL[Get_data_from_JSONFile_AskSummary_v2.py\n--flux &lt;nom&gt;]
+        RPT[articles_json_to_markdown.py\n--flux &lt;nom&gt;]
+    end
+
+    subgraph Flux1["📁 Flux : Intelligence-artificielle"]
+        D1[data/articles/Intelligence-artificielle/]
+        C1[data/articles/cache/Intelligence-artificielle/]
+        R1[rapports/markdown/Intelligence-artificielle/]
+    end
+
+    subgraph Flux2["📁 Flux : Suisse"]
+        D2[data/articles/Suisse/]
+        C2[data/articles/cache/Suisse/]
+        R2[rapports/markdown/Suisse/]
+    end
+
+    FJS --> SCHED
+    SCHED -->|"--flux IA"| ETL
+    SCHED -->|"--flux Suisse"| ETL
+    ETL --> D1 & C1
+    ETL --> D2 & C2
+    D1 --> RPT --> R1
+    D2 --> RPT --> R2
+```
+
+---
+
 ## 1. Objectif
 Le système multi-flux permet de traiter plusieurs sources JSON d’actualités de façon totalement cloisonnée : chaque flux dispose de ses propres fichiers de données, cache, et rapports, garantissant l’indépendance et la traçabilité des traitements.
 
@@ -56,4 +98,4 @@ rapports/
 - Voir aussi : `docs/STRUCTURE.md`, `docs/ARCHITECTURE.md`, `scripts/USAGE.md`.
 
 ---
-*Documentation générée automatiquement le 17/02/2026.*
+*Documentation mise à jour le 22/02/2026.*

@@ -1,267 +1,317 @@
-# Résumé des changements multi-flux (février 2026)
+# Structure du projet — AnalyseActualités
 
-- Ajout d’un fichier de configuration centralisé (config/flux_json_sources.json) listant tous les flux à traiter, avec leur nom logique.
-- Tous les scripts principaux acceptent désormais un paramètre --flux (nom du flux) : chaque exécution est cloisonnée par flux.
-- Les fichiers de sortie (JSON, Markdown, PDF) sont générés dans des sous-répertoires dédiés à chaque flux (ex : data/articles/Intelligence-artificielle/).
-- Le scheduler exécute indépendamment chaque flux selon sa configuration, en respectant la fréquence et les règles propres à chaque source.
-- Le système de cache est cloisonné par flux, chaque flux ayant son propre sous-répertoire de cache.
-- La génération des rapports Markdown est également cloisonnée par flux, dans rapports/markdown/<nom-flux>/.
-- L’architecture reste headless : tout est pilotable en ligne de commande, sans interface graphique.
-- Les scripts et la structure du projet sont adaptés pour garantir l’isolation complète des traitements et des données par flux.
-# Documentation de la structure du projet
+> Organisation des fichiers et conventions de développement
+> Version 3.0 · 22 février 2026
 
-Date de restructuration : 23 janvier 2026  
-**Dernière mise à jour:** 23 janvier 2026 (v2.0 - chemins absolus)
+---
 
-## 📊 Vue d'ensemble
+## Table des matières
 
-Ce document décrit l'organisation du projet AnalyseActualités après restructuration et l'implémentation des chemins absolus automatiques.
+1. [Arborescence](#1-arborescence)
+2. [Description des dossiers](#2-description-des-dossiers)
+3. [Flux de données](#3-flux-de-données)
+4. [Conventions de développement](#4-conventions-de-développement)
+5. [Formats de données](#5-formats-de-données)
 
-## 🗂️ Arborescence complète
+---
 
-```
-AnalyseActualités/
-│
-├── .env                              # Variables d'environnement (non versionné)
-├── .gitignore                        # Fichiers à ignorer par Git
-├── README.md                         # Documentation principale du projet
-├── requirements.txt                  # Dépendances Python
-│
-├── .github/                          # Configuration GitHub
-│   └── copilot-instructions.md       # Instructions pour GitHub Copilot
-│
-├── scripts/                          # Scripts Python d'exécution
-│   ├── Get_data_from_JSONFile_AskSummary.py    # Collecte + résumés IA
-│   ├── Get_htmlText_From_JSONFile.py           # Extraction HTML
-│   ├── articles_json_to_markdown.py            # Conversion JSON → MD
-│   ├── analyse_thematiques.py                  # Analyse thématiques sociétales
-│   └── USAGE.md                                # Guide d'utilisation des scripts
-│
-├── config/                           # Fichiers de configuration
-│   ├── sites_actualite.json          # Liste des sources RSS/JSON (133 sources)
-│   ├── categories_actualite.json     # Catégories d'articles (215 catégories)
-│   ├── prompt-rapport.txt            # Template de prompt pour rapports
-│   └── thematiques_societales.json   # Thématiques sociétales (12 thèmes avec stats)
-│
-├── data/                             # Données générées par les scripts
-│   ├── articles/                     # Articles JSON structurés
-│   │   ├── articles_generated_2025-12-01_2025-12-28.json
-│   │   └── articles_generated_2026-01-01_2026-01-18.json
-│   │
-│   └── raw/                          # Données brutes (HTML, texte)
-│       └── all_articles.txt          # Texte consolidé de tous les articles
-│
-├── rapports/                         # Rapports générés
-│   ├── markdown/                     # Rapports au format Markdown
-│   │   ├── rapport_complet_ia_gouvernement.md
-│   │   ├── rapport_sommaire_articles_generated_2025-12-01_2025-12-28.md
-│   │   └── rapport_sommaire_articles_generated_2026-01-01_2026-01-18.md
-│   │
-│   └── pdf/                          # Rapports PDF (si générés)
-│       └── rapport_sommaire_articles_generated_2025-12-01_2025-12-28.pdf
-│
-├── archives/                         # Anciennes versions des scripts
-│   ├── Get_data_from_JSONFile_AskSummary copie.py
-│   ├── Get_data_from_JSONFile_AskSummary.py
-│   ├── Get_data_from_JSONFile_AskSummary_20260118_112119.py
-│   └── Get_htmlText_From_JSONFile_20260123_101156.py
-│
-└── tests/                            # Tests unitaires (à développer)
-```
+## 1. Arborescence
 
-## 📁 Description des dossiers
+```mermaid
+flowchart TD
+    ROOT["WUDD.ai/"]
 
-### `/scripts/`
-**Rôle** : Contient tous les scripts Python exécutables du projet.
+    ROOT --> ENV[".env\nCrédentials API (non versionné)"]
+    ROOT --> GITIGNORE[".gitignore"]
+    ROOT --> README["README.md"]
+    ROOT --> REQ["requirements.txt"]
+    ROOT --> DOCKER["Dockerfile + docker-compose.yml"]
 
-**Points clés** :
-- Les scripts utilisent des chemins relatifs (`../config/`, `../data/`, etc.)
-- Doivent être exécutés depuis ce dossier : `cd scripts/ && python3 script.py`
-- Chaque script a une documentation en en-tête (docstring)
+    ROOT --> SCRIPTS["scripts/"]
+    ROOT --> CONFIG["config/"]
+    ROOT --> DATA["data/"]
+    ROOT --> RAPPORTS["rapports/"]
+    ROOT --> DOCS["docs/"]
+    ROOT --> UTILS["utils/"]
+    ROOT --> TESTS["tests/"]
+    ROOT --> ARCHIVES["archives/"]
+    ROOT --> SAMPLES["samples/"]
 
-### `/config/`
-**Rôle** : Fichiers de configuration et paramétrage du projet.
+    SCRIPTS --> S1["Get_data_from_JSONFile_AskSummary_v2.py\nScript ETL principal"]
+    SCRIPTS --> S2["scheduler_articles.py\nOrchestration multi-flux"]
+    SCRIPTS --> S3["get-keyword-from-rss.py\nExtraction par mot-clé"]
+    SCRIPTS --> S4["articles_json_to_markdown.py\nConversion JSON → MD"]
+    SCRIPTS --> S5["analyse_thematiques.py\nAnalyse sociétale"]
+    SCRIPTS --> S6["check_cron_health.py\nMonitoring cron"]
+    SCRIPTS --> S7["generate_keyword_reports.py\nRapports par mot-clé"]
+    SCRIPTS --> USAGE["USAGE.md"]
 
-**Fichiers** :
-- `sites_actualite.json` : 133 sources d'actualités (RSS/JSON feeds)
-- `categories_actualite.json` : 215 catégories prédéfinies pour la classification
-- `prompt-rapport.txt` : Template de prompt pour la génération de rapports IA
-- `thematiques_societales.json` : 12 thématiques sociétales avec mots-clés de détection, statistiques d'occurrence et rangs (utilisé pour catégorisation automatique)
+    CONFIG --> C1["flux_json_sources.json\nFlux à traiter (nom + URL)"]
+    CONFIG --> C2["sites_actualite.json\n133 sources RSS/JSON"]
+    CONFIG --> C3["categories_actualite.json\n215 catégories"]
+    CONFIG --> C4["keyword-to-search.json\nMots-clés surveillés"]
+    CONFIG --> C5["thematiques_societales.json\n12 thématiques"]
 
-**Usage** : Modifiez ces fichiers pour ajouter/retirer des sources, catégories ou thématiques.
+    DATA --> DA["articles/\n  <flux>/articles_generated_*.json\n  cache/<flux>/"]
+    DATA --> DR["articles-from-rss/\n  <mot-clé>.json"]
+    DATA --> DRW["raw/\n  all_articles.txt"]
 
-### `/data/`
-**Rôle** : Stockage des données générées par les scripts.
+    RAPPORTS --> RM["markdown/\n  <flux>/rapport_sommaire_*.md"]
+    RAPPORTS --> RP["pdf/\n  *.pdf"]
 
-**Sous-dossiers** :
-- `articles/` : Fichiers JSON structurés avec résumés IA et métadonnées
-- `raw/` : Données brutes (texte HTML extrait, logs, etc.)
+    UTILS --> U1["api_client.py"]
+    UTILS --> U2["cache.py"]
+    UTILS --> U3["config.py"]
+    UTILS --> U4["date_utils.py"]
 
-**Important** : Ce dossier grandit avec le temps. Archivez régulièrement les anciens articles.
-
-### `/rapports/`
-**Rôle** : Rapports générés automatiquement ou manuellement.
-
-**Sous-dossiers** :
-- `markdown/` : Rapports au format Markdown (lisibles, versionnables)
-- `pdf/` : Rapports convertis en PDF (distribution, impression)
-
-**Convention de nommage** :
-- `rapport_sommaire_articles_generated_<date_debut>_<date_fin>.md`
-- `rapport_complet_<sujet>.md`
-
-### `/archives/`
-**Rôle** : Sauvegarde des anciennes versions de scripts avant modification.
-
-**Convention** :
-- Format : `nom_script_YYYYMMDD_HHMMSS.py`
-- Créer une sauvegarde avant toute modification : 
-  ```bash
-  cp script.py ../archives/script_$(date +%Y%m%d_%H%M%S).py
-  ```
-
-### `/tests/`
-**Rôle** : Tests unitaires et d'intégration (à développer).
-
-**Status** : Actuellement vide. À implémenter pour :
-- Tests de parsing JSON
-- Tests de l'extraction HTML
-- Tests de validation des résumés IA
-- Tests des chemins relatifs
-
-## 🔄 Flux de données
-
-```
-Source RSS/JSON
-     ↓
-[Get_data_from_JSONFile_AskSummary.py]
-     ↓
-Extraction HTML + Résumé IA
-     ↓
-data/articles/*.json
-     ↓
-[articles_json_to_markdown.py]
-     ↓
-rapports/markdown/*.md
+    classDef dir fill:#f5f5f5,stroke:#9e9e9e
+    classDef script fill:#e8f5e9,stroke:#388e3c,stroke-width:1px
+    classDef config fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
+    classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    class ROOT,SCRIPTS,CONFIG,DATA,RAPPORTS,DOCS,UTILS,TESTS,ARCHIVES,SAMPLES dir
+    class S1,S2,S3,S4,S5,S6,S7 script
+    class C1,C2,C3,C4,C5 config
+    class DA,DR,DRW,RM,RP data
 ```
 
-## 🛠️ Conventions de développement
-absolus (Architecture v2.0)
-**IMPORTANT :** Depuis la v2.0, les scripts utilisent des chemins absolus détectés automatiquement :
+### Arborescence textuelle complète
+
+```
+WUDD.ai/
+├── .env                                  # Credentials API (non versionné)
+├── .env.example                          # Template configuration
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── entrypoint.sh
+├── CHANGELOG.md
+│
+├── scripts/
+│   ├── Get_data_from_JSONFile_AskSummary_v2.py   # ETL principal
+│   ├── scheduler_articles.py                      # Orchestrateur multi-flux
+│   ├── get-keyword-from-rss.py                    # Extraction par mot-clé
+│   ├── articles_json_to_markdown.py               # Conversion JSON → MD
+│   ├── analyse_thematiques.py                     # Analyse sociétale
+│   ├── check_cron_health.py                       # Monitoring cron
+│   ├── generate_keyword_reports.py                # Rapports par mot-clé
+│   └── USAGE.md
+│
+├── config/
+│   ├── flux_json_sources.json            # Flux à traiter (nom + URL)
+│   ├── sites_actualite.json              # 133 sources RSS/JSON
+│   ├── categories_actualite.json         # 215 catégories
+│   ├── keyword-to-search.json            # Mots-clés surveillés
+│   ├── thematiques_societales.json       # 12 thématiques sociétales
+│   └── logging.conf
+│
+├── data/                                 # ⚠️ ignoré par Git
+│   ├── articles/
+│   │   ├── <flux>/
+│   │   │   └── articles_generated_YYYY-MM-DD_YYYY-MM-DD.json
+│   │   └── cache/
+│   │       └── <flux>/
+│   ├── articles-from-rss/
+│   │   └── <mot-clé>.json
+│   └── raw/
+│       └── all_articles.txt
+│
+├── rapports/                             # ⚠️ ignoré par Git
+│   ├── markdown/
+│   │   └── <flux>/
+│   │       └── rapport_sommaire_*.md
+│   └── pdf/
+│       └── *.pdf
+│
+├── utils/
+│   ├── __init__.py
+│   ├── api_client.py
+│   ├── cache.py
+│   ├── config.py
+│   └── date_utils.py
+│
+├── tests/
+│   ├── test_date_utils.py
+│   └── test_multi_flux.py
+│
+├── docs/                                 # Documentation technique
+│   ├── ARCHITECTURE.md
+│   ├── CRON_DOCKER_README.md
+│   ├── DEPLOY.md
+│   ├── DOCS_INDEX.md
+│   ├── PROMPTS.md
+│   ├── SCHEDULER_CRON.md
+│   ├── SECURITY.md
+│   ├── STRUCTURE.md              ← ce fichier
+│   └── SYNTHESE_MULTI_FLUX.md
+│
+├── archives/                             # Sauvegardes horodatées
+├── samples/                              # Exemples de sorties
+└── .github/
+    └── copilot-instructions.md
+```
+
+---
+
+## 2. Description des dossiers
+
+### `scripts/`
+Scripts Python exécutables. Tous utilisent des chemins absolus (voir section 4).
+
+| Script | Rôle | Mode |
+|--------|------|------|
+| `Get_data_from_JSONFile_AskSummary_v2.py` | ETL principal : collecte, résumés IA, stockage | CLI |
+| `scheduler_articles.py` | Orchestre le traitement de tous les flux | CLI / cron |
+| `get-keyword-from-rss.py` | Extrait les articles par mot-clé depuis Reeder.opml | CLI / cron |
+| `articles_json_to_markdown.py` | Convertit JSON → Markdown formaté | GUI / CLI |
+| `analyse_thematiques.py` | Analyse thématique sociétale des articles | CLI |
+| `check_cron_health.py` | Vérifie la santé des tâches cron | cron |
+| `generate_keyword_reports.py` | Génère rapports Markdown par mot-clé | CLI / cron |
+
+### `config/`
+Paramétrage de toute l'application. Modifiez ces fichiers pour ajouter des sources, flux, mots-clés ou thématiques sans toucher au code.
+
+### `data/`
+Données générées — **non versionnées** sur Git. Organisées par flux depuis février 2026 (multi-flux).
+
+### `rapports/`
+Rapports générés — **non versionnés** sur Git.  
+Convention de nommage : `rapport_sommaire_articles_generated_<date_debut>_<date_fin>.md`
+
+### `utils/`
+Bibliothèque partagée entre les scripts : gestion API, cache, config, dates.
+
+### `archives/`
+Sauvegardes horodatées avant chaque modification de script.  
+Convention : `<nom_script>_YYYYMMDD_HHMMSS.py`
+
+---
+
+## 3. Flux de données
+
+```mermaid
+flowchart LR
+    subgraph INPUT["Entrées"]
+        FLUX["flux_json_sources.json\nListe des flux"]
+        OPML["Reeder.opml\nFlux RSS"]
+        KW["keyword-to-search.json\nMots-clés"]
+    end
+
+    subgraph PROCESS["Traitement"]
+        ETL["Get_data_from_JSONFile_AskSummary_v2.py"]
+        SCHED["scheduler_articles.py"]
+        KWSCRIPT["get-keyword-from-rss.py"]
+    end
+
+    subgraph STORAGE["Stockage structuré"]
+        JSON["data/articles/<flux>/\narticles_generated_*.json"]
+        JSONKW["data/articles-from-rss/\n<mot-clé>.json"]
+        CACHE["data/articles/cache/<flux>/"]
+    end
+
+    subgraph OUTPUT["Sorties"]
+        MD["rapports/markdown/<flux>/\nrapport_sommaire_*.md"]
+        PDF["rapports/pdf/\n*.pdf"]
+    end
+
+    FLUX --> SCHED --> ETL
+    ETL --> JSON & CACHE
+    JSON --> MD --> PDF
+    OPML --> KWSCRIPT
+    KW --> KWSCRIPT
+    KWSCRIPT --> JSONKW
+
+    classDef in fill:#e1f5ff,stroke:#0288d1
+    classDef proc fill:#fff3e0,stroke:#f57c00
+    classDef store fill:#f3e5f5,stroke:#7b1fa2
+    classDef out fill:#e8f5e9,stroke:#388e3c
+    class FLUX,OPML,KW in
+    class ETL,SCHED,KWSCRIPT proc
+    class JSON,JSONKW,CACHE store
+    class MD,PDF out
+```
+
+---
+
+## 4. Conventions de développement
+
+### Chemins absolus (obligatoire depuis v2.0)
+
+Tous les scripts détectent automatiquement la racine du projet :
+
 ```python
-# Détection automatique du répertoire du projet
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
+SCRIPT_DIR            = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT          = os.path.dirname(SCRIPT_DIR)
+DATA_ARTICLES_DIR     = os.path.join(PROJECT_ROOT, "data", "articles")
+DATA_RAW_DIR          = os.path.join(PROJECT_ROOT, "data", "raw")
+RAPPORTS_MARKDOWN_DIR = os.path.join(PROJECT_ROOT, "rapports", "markdown")
 ```
 
-**Avantages :**
-- ✅ Fonctionne depuis n'importe quel répertoire (racine, scripts/, ou autre)
-- ✅ Compatible avec raccourcis macOS
-- ✅ Compatible avec cron jobs et automatisation
-- ✅ Création automatique des dossiers si absents
+✅ Fonctionne depuis n'importe quel répertoire, compatible cron et Docker.
 
-**Exemple d'exécution :**
+### Sauvegarde obligatoire avant modification
+
 ```bash
-# Depuis la racine
-cd /Users/.../AnalyseActualités
-python3 scripts/Get_data_from_JSONFile_AskSummary.py
-
-# Depuis scripts/
-cd /Users/.../AnalyseActualités/scripts
-python3 Get_data_from_JSONFile_AskSummary.py
-
-# Via raccourci macOS (depuis n'importe où)
-/Library/Frameworks/Python.framework/Versions/3.14/bin/python3 scripts/Get_data_from_JSONFile_AskSummary.py
-```
-
-### Chemins relatifs (OBSOLÈTE - ne plus utiliser)
-~~Tous les scripts utilisent des chemins relatifs depuis le dossier `scripts/` :~~
-```python
-# ❌ ANCIEN (ne fonctionne que depuis scripts/)
-with open('../config/sites_actualite.json', 'r') as f:
-
-# ✅ NOUVEAU (fonctionne partout)
-with open(os.path.join(PROJECT_ROOT, 'config', 'sites_actualite.json')
-with open('/Users/.../AnalyseActualités/config/sites_actualite.json', 'r') as f:
+cp scripts/script.py archives/script_$(date +%Y%m%d_%H%M%S).py
 ```
 
 ### Nommage des fichiers
-- **Articles JSON** : `articles_generated_YYYY-MM-DD_YYYY-MM-DD.json`
-- **Rapports** : `rapport_sommaire_<description>.md`
-- **Archives** : `<nom_script>_YYYYMMDD_HHMMSS.py`
 
-### Sauvegarde obligatoire
-**TOUJOURS** créer une sauvegarde avant de modifier un script :
-```bash
-cp script.py ../archives/script_$(date +%Y%m%d_%H%M%S).py
+| Type | Convention |
+|------|-----------|
+| Articles JSON | `articles_generated_YYYY-MM-DD_YYYY-MM-DD.json` |
+| Rapports | `rapport_sommaire_articles_generated_<debut>_<fin>.md` |
+| Archives | `<nom_script>_YYYYMMDD_HHMMSS.py` |
+
+### Logs
+
+```python
+def print_console(msg: str):
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}")
 ```
 
-## 📦 Formats de données
+Toujours utiliser `print_console()` — jamais `print()` seul.
 
-### Format d'entrée (flux JSON)
+---
+
+## 5. Formats de données
+
+### Entrée — Flux JSON
+
 ```json
 {
   "items": [
     {
-      "url": "https://exemple.com/article",
+      "url": "https://source.com/article",
       "date_published": "2026-01-23T10:00:00Z",
-      "authors": [{"name": "Nom Auteur"}]
+      "authors": [{ "name": "Auteur" }]
     }
   ]
 }
 ```
 
-### Format de sortie (articles JSON)
+### Sortie — Article enrichi
+
 ```json
 [
   {
     "Date de publication": "2026-01-23T10:00:00Z",
     "Sources": "Nom de la source",
     "URL": "https://...",
-    "Résumé": "Résumé généré par l'IA...",
-    "Images": ["url1", "url2", "url3"]
+    "Résumé": "Résumé généré par l'IA en français (max 20 lignes)...",
+    "Images": [
+      { "url": "https://image.jpg", "width": 1200, "height": 800, "area": 960000 }
+    ]
   }
 ]
 ```
 
-## 🔐 Sécurité
+> ⚠️ **Clés JSON françaises** : `Date de publication`, `Sources`, `URL`, `Résumé`, `Images`  
+> Ne jamais renommer sans mettre à jour tous les scripts.
 
-### Fichiers sensibles (`.gitignore`)
-- `.env` : Contient les tokens API (ne JAMAIS versionner)
-- `data/raw/*.txt` : Peut contenir des données volumineuses
-- `.DS_Store` : Fichiers système macOS
-
-### Variables d'environnement requises
-```env
-URL=https://api.infomaniak.com/euria/v1/chat/completions
-bearer=VOTRE_TOKEN_SECRET
-REEDER_JSON_URL=https://votre-flux.com/feed.json
-```
-
-## 📊 Statistiques du projet
-
-- **Scripts Python** : 3 principaux
-- **Sources d'actualités** : 133 flux RSS/JSON
-- **Catégories** : 215 catégories prédéfinies
-- **Articles archivés** : 2 périodes (déc. 2025 - jan. 2026)
-- **Rapports générés** : 3 rapports Markdown + 1 PDF
-
-## 🚀 Améliorations futures
-
-1. **Tests automatisés** : Implémenter des tests dans `/tests/`
-2. **CLI unifié** : Créer un script principal avec argparse
-3. **Docker** : Conteneuriser l'application pour déploiement
-4. **CI/CD** : Automatiser la génération de rapports quotidiens
-5. **Base de données** : Migrer de JSON vers SQLite/PostgreSQL
-6. **API REST** : Exposer les données via une API
-
-## 📞 Contact
-
-**Auteur** : Patrick Ostertag  
-**Email** : patrick.ostertag@gmail.com  
-**Site** : http://patrickostertag.ch
+> ⚠️ **Format de date strict** : `YYYY-MM-DDTHH:MM:SSZ`
 
 ---
 
-*Document généré le 23 janvier 2026 - Version 1.0*
+**Dernière mise à jour** : 22 février 2026 · Version 3.0

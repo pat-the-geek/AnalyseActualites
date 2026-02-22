@@ -53,6 +53,8 @@ Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_
 
 ## 2. Architecture
 
+> 📐 Documentation technique complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — diagrammes Mermaid, flux de données, modèle de données, ADRs, roadmap.
+
 ### Pipeline de traitement
 
 ```

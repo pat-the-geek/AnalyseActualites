@@ -1,785 +1,563 @@
-### 6. get-keyword-from-rss.py
+# Architecture — AnalyseActualités
 
-**Rôle** : Extraction quotidienne des articles contenant un mot-clé depuis tous les flux RSS de Reeder.opml
-
-**Flux** :
-1. Lecture de Reeder.opml (liste des flux RSS)
-2. Pour chaque flux, extraction des articles publiés il y a moins d'une semaine
-3. Filtrage par mot-clé (défini dans `config/keyword-to-search.json`)
-4. Génération d'un fichier JSON par mot-clé dans `data/articles-from-rss/` (sans doublon)
-5. Résumé IA (API EurIA) et extraction de l'image principale
-6. Exécution automatique via cron chaque jour à 1h00
-
-**Automatisation** :
-```
-0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
-```
-
-**Sortie** :
-- `data/articles-from-rss/<mot-clé>.json`
-
-**Contraintes** :
-- Pas de doublon (une URL par mot-clé)
-- Format de sortie conforme à `articles_generated_YYYY-MM-DD_YYYY-MM-DD.json`
-- Résumé IA en français, images principales extraites
-# Résumé des changements multi-flux (février 2026)
-
-- Ajout d’un fichier de configuration centralisé (config/flux_json_sources.json) listant tous les flux à traiter, avec leur nom logique.
-- Tous les scripts principaux acceptent désormais un paramètre --flux (nom du flux) : chaque exécution est cloisonnée par flux.
-- Les fichiers de sortie (JSON, Markdown, PDF) sont générés dans des sous-répertoires dédiés à chaque flux (ex : data/articles/Intelligence-artificielle/).
-- Le scheduler exécute indépendamment chaque flux selon sa configuration, en respectant la fréquence et les règles propres à chaque source.
-- Le système de cache est cloisonné par flux, chaque flux ayant son propre sous-répertoire de cache.
-- La génération des rapports Markdown est également cloisonnée par flux, dans rapports/markdown/<nom-flux>/.
-- L’architecture reste headless : tout est pilotable en ligne de commande, sans interface graphique.
-- Les scripts et la structure du projet sont adaptés pour garantir l’isolation complète des traitements et des données par flux.
-# Architecture du projet AnalyseActualités
-
-> Documentation technique de l'architecture du système  
-> Version 2.0 - 23 janvier 2026
-
-## 📋 Table des matières
-
-1. [Vue d'ensemble](#vue-densemble)
-2. [Architecture logicielle](#architecture-logicielle)
-3. [Flux de données](#flux-de-données)
-4. [Composants principaux](#composants-principaux)
-5. [Modèle de données](#modèle-de-données)
-6. [Intégrations externes](#intégrations-externes)
-7. [Gestion des chemins](#gestion-des-chemins)
-8. [Sécurité](#sécurité)
-9. [Performance et scalabilité](#performance-et-scalabilité)
-10. [Décisions architecturales](#décisions-architecturales)
+> Document de référence technique · Version 3.0 · 22 février 2026
 
 ---
 
-## 🎯 Vue d'ensemble
+## Table des matières
 
-### Objectif du système
-Pipeline automatisé de collecte, traitement et analyse d'articles d'actualité utilisant l'intelligence artificielle pour générer des résumés et rapports structurés.
+1. [Vue d'ensemble](#1-vue-densemble)
+2. [Architecture multi-flux](#2-architecture-multi-flux)
+3. [Flux de données détaillé](#3-flux-de-données-détaillé)
+4. [Composants principaux](#4-composants-principaux)
+5. [Modèle de données](#5-modèle-de-données)
+6. [Intégrations externes — API EurIA](#6-intégrations-externes--api-euria)
+7. [Infrastructure & Chemins](#7-infrastructure--chemins)
+8. [Sécurité](#8-sécurité)
+9. [Performance et scalabilité](#9-performance-et-scalabilité)
+10. [Décisions architecturales](#10-décisions-architecturales)
+11. [Roadmap](#11-roadmap)
 
-### Architecture générale
+---
 
-#### Diagramme ASCII
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Sources RSS/JSON                         │
-│              (133 flux d'actualités configurés)                  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   Script de collecte principal                   │
-│         (Get_data_from_JSONFile_AskSummary.py)                  │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   Collecte   │→ │  Extraction  │→ │   Résumé IA  │         │
-│  │   HTTP/JSON  │  │     HTML     │  │  (API EurIA) │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Stockage de données                         │
-│  ┌─────────────────────┐       ┌─────────────────────┐         │
-│  │  data/articles/     │       │   data/raw/         │         │
-│  │  (JSON structuré)   │       │  (HTML/texte brut)  │         │
-│  └─────────────────────┘       └─────────────────────┘         │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Génération de rapports                        │
-│         ┌────────────────────────────────────┐                  │
-│         │  Rapport Markdown synthétique      │                  │
-│         │  (classification par catégories)   │                  │
-│         └────────────────────────────────────┘                  │
-│                          │                                       │
-│                          ▼                                       │
-│              rapports/markdown/*.md                              │
-│              rapports/pdf/*.pdf                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+## 1. Vue d'ensemble
 
-#### Diagramme Mermaid interactif
+### Objectif
 
-```mermaid
-flowchart TB
-    %% Sources de données
-    RSS["Sources RSS/JSON<br/>(133 flux configurés)"]
-    ENV[".env<br/>Configuration API"]
-    CONFIG["config/<br/>sites_actualite.json<br/>categories_actualite.json<br/>prompt-rapport.txt"]
-    
-    %% Script principal
-    MAIN["Get_data_from_JSONFile_AskSummary.py<br/>Script principal ETL"]
-    
-    %% Étapes de traitement
-    FETCH["Collecte HTTP<br/>Requête vers flux JSON"]
-    PARSE["Parsing<br/>Extraction données article"]
-    HTML["Extraction HTML<br/>BeautifulSoup4"]
-    SUMMARY["Génération résumé IA<br/>API EurIA (Qwen3)<br/>Timeout: 60s"]
-    IMAGES["Extraction images<br/>Top 3 (largeur > 500px)"]
-    
-    %% Stockage
-    JSON_OUT["data/articles/<br/>articles_generated_YYYY-MM-DD.json"]
-    RAW_OUT["data/raw/<br/>all_articles.txt"]
-    
-    %% Génération rapport
-    REPORT["Génération rapport<br/>API EurIA (Qwen3)<br/>Timeout: 300s"]
-    MD_OUT["rapports/markdown/<br/>rapport_sommaire_*.md"]
-    PDF_OUT["rapports/pdf/<br/>rapport_*.pdf"]
-    
-    %% Scripts utilitaires
-    EXTRACT["Get_htmlText_From_JSONFile.py<br/>Extraction texte brut"]
-    CONVERT["articles_json_to_markdown.py<br/>Conversion JSON → MD"]
-    
-    %% Flux principal
-    RSS -->|Lecture| FETCH
-    ENV -->|Credentials| MAIN
-    CONFIG -->|Paramètres| MAIN
-    
-    MAIN --> FETCH
-    FETCH -->|Items JSON| PARSE
-    PARSE -->|URLs articles| HTML
-    HTML -->|Texte nettoyé| SUMMARY
-    HTML -->|Balises img| IMAGES
-    
-    SUMMARY -->|Résumé texte| JSON_OUT
-    IMAGES -->|Métadonnées| JSON_OUT
-    
-    JSON_OUT -->|Lecture| REPORT
-    REPORT -->|Markdown| MD_OUT
-    MD_OUT -->|Export| PDF_OUT
-    
-    %% Flux secondaires
-    RSS -->|Lecture| EXTRACT
-    EXTRACT -->|Dump texte| RAW_OUT
-    
-    JSON_OUT -->|Conversion| CONVERT
-    CONVERT -->|Formatage| MD_OUT
-    
-    %% Styling
-    classDef sourceStyle fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
-    classDef processStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef storageStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef aiStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
-    
-    class RSS,ENV,CONFIG sourceStyle
-    class FETCH,PARSE,HTML,EXTRACT,CONVERT processStyle
-    class JSON_OUT,RAW_OUT,MD_OUT,PDF_OUT storageStyle
-    class SUMMARY,REPORT,MAIN aiStyle
-```
+Pipeline ETL automatisé qui **collecte** des flux d'actualités (JSON/RSS), **extrait** le contenu HTML, **enrichit** chaque article par un résumé IA (API EurIA, modèle Qwen3) et **produit** des sorties structurées (JSON + rapports Markdown), cloisonnées par flux.
 
 ### Principes architecturaux
 
-1. **Séparation des préoccupations** : Scripts, configuration, données et rapports isolés
-2. **Chemins absolus dynamiques** : Détection automatique de la racine du projet via `__file__`
-3. **Résilience** : Retry automatique, gestion d'erreurs exhaustive
-4. **Traçabilité** : Logs horodatés, métadonnées complètes
-5. **Extensibilité** : Architecture modulaire facilitant l'ajout de nouvelles sources/fonctionnalités
+| # | Principe | Implication |
+|---|----------|-------------|
+| 1 | **Séparation des préoccupations** | Scripts, config, données et rapports dans des dossiers dédiés |
+| 2 | **Cloisonnement par flux** | Chaque source a ses propres dossiers de sortie et de cache |
+| 3 | **Chemins absolus dynamiques** | Résolution via `__file__` — indépendant du `cwd` |
+| 4 | **Résilience** | Retry automatique (3 tentatives), gestion exhaustive des erreurs |
+| 5 | **Headless first** | Tout est pilotable en CLI ; GUI uniquement pour scripts utilitaires |
+| 6 | **Langue française** | Clés JSON, messages, prompts IA — ne pas modifier sans mise à jour globale |
+
+### Architecture générale
+
+```mermaid
+flowchart TB
+    subgraph SOURCES["Sources de données"]
+        F1["Flux JSON 1\n(ex: IA généraliste)"]
+        F2["Flux JSON 2\n(ex: Tech & numérique)"]
+        FN["... N flux\n(config/flux_json_sources.json)"]
+        RSS["Flux RSS\n(data/Reeder.opml)"]
+    end
+
+    subgraph ORCHESTRATION["Orchestration"]
+        CRON["Cron job\n(0 1 * * *)"]
+        SCHED["scheduler_articles.py\nItère sur tous les flux"]
+        CRON --> SCHED
+    end
+
+    subgraph PIPELINE["Pipeline ETL par flux"]
+        COLLECT["Collecte HTTP\n(requests)"]
+        EXTRACT["Extraction HTML\n(BeautifulSoup4)"]
+        SUMMARIZE["Résumé IA\n(API EurIA · Qwen3 · 60s)"]
+        IMAGES["Extraction images\n(top 3 · largeur > 500px)"]
+    end
+
+    subgraph STORAGE["Stockage (cloisonné par flux)"]
+        JOUT["data/articles/<flux>/\narticles_generated_*.json"]
+        CACHE["data/articles/cache/<flux>/\nCache réponses API"]
+    end
+
+    subgraph REPORTS["Génération de rapports"]
+        REPORT["Rapport IA\n(API EurIA · 300s)"]
+        MDOUT["rapports/markdown/<flux>/\nrapport_sommaire_*.md"]
+        PDF["rapports/pdf/\n*.pdf"]
+    end
+
+    subgraph UTILS["Scripts utilitaires"]
+        KEYWORD["get-keyword-from-rss.py"]
+        THEMA["analyse_thematiques.py"]
+        MD2["articles_json_to_markdown.py"]
+    end
+
+    SOURCES --> SCHED
+    SCHED --> COLLECT
+    COLLECT --> EXTRACT
+    EXTRACT --> SUMMARIZE
+    EXTRACT --> IMAGES
+    SUMMARIZE --> JOUT
+    IMAGES --> JOUT
+    JOUT --> CACHE
+    JOUT --> REPORT
+    REPORT --> MDOUT
+    MDOUT --> PDF
+    RSS --> KEYWORD
+    JOUT --> THEMA
+    JOUT --> MD2
+
+    classDef source fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef process fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef storage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef ai fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef util fill:#fce4ec,stroke:#c62828,stroke-width:1px
+    class F1,F2,FN,RSS source
+    class COLLECT,EXTRACT,IMAGES process
+    class JOUT,CACHE,MDOUT,PDF storage
+    class SUMMARIZE,REPORT ai
+    class KEYWORD,THEMA,MD2 util
+```
 
 ---
 
-## 🏗️ Architecture logicielle
+## 2. Architecture multi-flux
 
-### Pattern architectural
-**Pipeline ETL (Extract, Transform, Load)** avec enrichissement IA
+### Principe de cloisonnement
+
+Depuis février 2026, chaque flux est traité de manière totalement indépendante.
+La configuration centralisée `config/flux_json_sources.json` définit la liste des flux et le scheduler les exécute séquentiellement (ou via cron).
+
+```mermaid
+flowchart LR
+    CFG["config/flux_json_sources.json\n{ nom, url, fréquence }"]
+    CFG --> S1["Flux: IA-generale"]
+    CFG --> S2["Flux: Tech-numerique"]
+    CFG --> SN["Flux: ..."]
+    S1 --> D1["data/articles/IA-generale/"]
+    S1 --> C1["cache/IA-generale/"]
+    S1 --> R1["rapports/markdown/IA-generale/"]
+    S2 --> D2["data/articles/Tech-numerique/"]
+    S2 --> C2["cache/Tech-numerique/"]
+    S2 --> R2["rapports/markdown/Tech-numerique/"]
+    classDef flux fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    class S1,S2,SN flux
+    class D1,D2,C1,C2,R1,R2 data
+```
+
+### Structure des dossiers de sortie
 
 ```
-Extract          Transform              Load
-   │                │                    │
-   ├─ Fetch JSON   ├─ Parse HTML        ├─ Save JSON
-   ├─ Parse feeds  ├─ Summarize (AI)    ├─ Generate MD
-   └─ Get images   └─ Categorize        └─ Export reports
+data/
+├── articles/
+│   ├── <nom-flux>/
+│   │   └── articles_generated_YYYY-MM-DD_YYYY-MM-DD.json
+│   └── cache/
+│       └── <nom-flux>/
+├── articles-from-rss/
+│   └── <mot-clé>.json
+└── raw/
+    └── all_articles.txt
+
+rapports/
+├── markdown/
+│   └── <nom-flux>/
+│       └── rapport_sommaire_*.md
+└── pdf/
+    └── *.pdf
 ```
-
-### Composants logiciels
-
-#### 1. **Layer de collecte** (`fetch_and_extract_text`)
-- Responsabilité : Récupération HTTP et parsing HTML
-- Entrée : URL d'article
-- Sortie : Texte brut extrait
-- Dépendances : `requests`, `beautifulsoup4`
-
-#### 2. **Layer d'enrichissement IA** (`askForResume`, `ask_for_ia`)
-- Responsabilité : Interaction avec l'API EurIA (Qwen3)
-- Entrée : Texte brut
-- Sortie : Résumé structuré en français
-- Features : Retry logic, timeout management, error handling
-
-#### 3. **Layer de traitement d'images** (`extract_top_3_largest_images`)
-- Responsabilité : Extraction et tri des images pertinentes
-- Algorithme : Filtre (largeur > 500px) + tri par surface
-- Sortie : Top 3 images avec métadonnées
-
-#### 4. **Layer de persistance**
-- Format primaire : JSON structuré
-- Format secondaire : Markdown pour rapports
-- Stratégie : Création automatique des dossiers si absents
-
-#### 5. **Layer de rapportage** (`create_report`)
-- Responsabilité : Génération de synthèses via IA
-- Entrée : Fichier JSON d'articles
-- Sortie : Rapport Markdown structuré par catégories
 
 ---
 
-## 🔄 Flux de données
+## 3. Flux de données détaillé
 
-### Flux principal (collecte et analyse)
+### Pipeline de traitement complet
 
 ```mermaid
 flowchart TD
-    A[Démarrage du script] --> B{Arguments CLI?}
-    B -->|Oui| C[Dates fournies]
-    B -->|Non| D[Dates par défaut: 1er du mois → aujourd'hui]
-    C --> E[Chargement .env]
-    D --> E
-    E --> F[Détection répertoire projet __file__]
-    F --> G[Création dossiers si nécessaires]
-    G --> H[Fetch JSON depuis REEDER_JSON_URL]
-    H --> I[Extraction items du feed]
-    I --> J[Pour chaque item...]
-    J --> K[Fetch HTML de l'URL]
-    K --> L[Extraction texte avec BS4]
-    L --> M[Envoi à API EurIA pour résumé]
-    M --> N[Extraction top 3 images]
-    N --> O[Filtrage par dates]
-    O -->|Dans période| P[Ajout à liste data]
-    O -->|Hors période| J
-    P --> Q{Plus d'items?}
-    Q -->|Oui| J
-    Q -->|Non| R[Sauvegarde JSON dans data/articles/]
-    R --> S[Génération rapport Markdown via IA]
-    S --> T[Sauvegarde rapport dans rapports/markdown/]
-    T --> U[Fin]
+    START([Démarrage]) --> ARGS{Arguments CLI ?}
+    ARGS -->|"--flux --date_debut --date_fin"| PARAMS[Paramètres fournis]
+    ARGS -->|Absent| DEFAULTS["Dates par défaut\n1er du mois à aujourd'hui"]
+    PARAMS --> ENV
+    DEFAULTS --> ENV
+    ENV["Chargement .env\nURL · BEARER · REEDER_JSON_URL"]
+    ENV --> PATHS["Résolution chemins absolus\nvia __file__"]
+    PATHS --> MKDIR["Création dossiers si absents\nos.makedirs(exist_ok=True)"]
+    MKDIR --> FETCH["GET flux JSON\n(requests · timeout 30s)"]
+    FETCH --> ITEMS["Extraction items du feed"]
+    ITEMS --> FILTER["Filtrage par plage de dates\nverifier_date_entre()"]
+    FILTER -->|Hors période| SKIP([Ignoré])
+    FILTER -->|Dans période| HTML["Fetch HTML article\n(requests · timeout 10s)"]
+    HTML --> BS4["Extraction texte\nBeautifulSoup4"]
+    BS4 --> CACHE_CHK{Cache existant ?}
+    CACHE_CHK -->|Oui| RESUME_CACHED["Résumé depuis cache"]
+    CACHE_CHK -->|Non| EURIA1["POST API EurIA\nPrompt résumé · 60s · 3 essais"]
+    EURIA1 --> RESUME_CACHED
+    BS4 --> IMG["Extraction images\nimg width > 500px"]
+    IMG --> SORT["Tri par surface\nwidth x height desc"]
+    SORT --> TOP3["Top 3 images"]
+    RESUME_CACHED --> BUILD["Construction objet article\n{Date · Sources · URL · Résumé · Images}"]
+    TOP3 --> BUILD
+    BUILD --> LOOP{Autre article ?}
+    LOOP -->|Oui| FILTER
+    LOOP -->|Non| SAVE["Sauvegarde JSON\ndata/articles/<flux>/articles_generated_*.json"]
+    SAVE --> EURIA2["POST API EurIA\nPrompt rapport · 300s · 3 essais"]
+    EURIA2 --> MDOUT["Rapport Markdown\nrapports/markdown/<flux>/rapport_*.md"]
+    MDOUT --> DONE([Fin])
 ```
 
-### Format des données
+### Formats de données
 
-#### Flux d'entrée (RSS/JSON)
+**Entrée (flux JSON)**
 ```json
 {
   "items": [
     {
       "url": "https://source.com/article",
       "date_published": "2026-01-23T10:00:00Z",
-      "authors": [{"name": "Auteur"}],
+      "authors": [{ "name": "Auteur" }],
       "title": "Titre de l'article"
     }
   ]
 }
 ```
 
-#### Données intermédiaires (après extraction)
-```python
-texts = {
-    "https://url1": "Texte extrait de l'article...",
-    "https://url2": "Texte extrait de l'article..."
-}
-```
-
-#### Format de sortie (JSON structuré)
+**Sortie (JSON structuré)**
 ```json
 [
   {
     "Date de publication": "2026-01-23T10:00:00Z",
     "Sources": "Nom de la source",
     "URL": "https://...",
-    "Résumé": "Résumé généré par l'IA en français...",
+    "Résumé": "Résumé généré par l'IA en français (max 20 lignes)...",
     "Images": [
-      {
-        "url": "https://image.jpg",
-        "title": "Titre",
-        "alt": "Description",
-        "width": 1200,
-        "height": 800,
-        "area": 960000
-      }
+      { "url": "https://image.jpg", "width": 1200, "height": 800, "area": 960000 }
     ]
   }
 ]
 ```
 
+> ⚠️ **Format de date strict** : `YYYY-MM-DDTHH:MM:SSZ`
+> Parser Python : `datetime.strptime(d, "%Y-%m-%dT%H:%M:%SZ")`
+
 ---
 
-## 🧩 Composants principaux
+## 4. Composants principaux
 
-### 1. Get_data_from_JSONFile_AskSummary.py
+### Vue d'ensemble des scripts
 
-**Rôle** : Script principal de collecte et analyse
+```mermaid
+flowchart LR
+    subgraph AUTO["Automatisés (cron / scheduler)"]
+        SCHED["scheduler_articles.py\nOrchestration multi-flux"]
+        MAIN["Get_data_from_JSONFile_AskSummary_v2.py\nScript ETL principal"]
+        KW["get-keyword-from-rss.py\nExtraction par mot-clé RSS"]
+    end
 
-**Architecture interne** :
+    subgraph UTIL["Utilitaires (CLI / GUI)"]
+        TXT["Get_htmlText_From_JSONFile.py\nExtraction texte brut · GUI"]
+        MD["articles_json_to_markdown.py\nConversion JSON vers MD · GUI"]
+        TH["analyse_thematiques.py\nAnalyse thématique · CLI"]
+        HEALTH["check_cron_health.py\nMonitoring cron"]
+    end
+
+    subgraph LIB["utils/ (bibliothèque partagée)"]
+        API["api_client.py\nAppels EurIA"]
+        CACHE_M["cache.py\nGestion cache"]
+        CFG["config.py\nChargement config"]
+        DATE["date_utils.py\nGestion dates"]
+    end
+
+    SCHED --> MAIN
+    MAIN --> API
+    MAIN --> CACHE_M
+    MAIN --> CFG
+    MAIN --> DATE
+    KW --> API
+
+    classDef auto fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef util fill:#fff3e0,stroke:#f57c00,stroke-width:1px
+    classDef lib fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
+    class SCHED,MAIN,KW auto
+    class TXT,MD,TH,HEALTH util
+    class API,CACHE_M,CFG,DATE lib
+```
+
+### Détail des scripts principaux
+
+#### `Get_data_from_JSONFile_AskSummary_v2.py` — Script ETL central
+
 ```
 Main Program
-├── Configuration Loading (load_dotenv)
-├── Path Detection & Setup (SCRIPT_DIR, PROJECT_ROOT)
-├── Directory Creation (os.makedirs)
-├── Data Fetching (requests.get)
+├── Configuration Loading    → load_dotenv() + utils/config.py
+├── Path Detection & Setup   → SCRIPT_DIR, PROJECT_ROOT
+├── Directory Creation       → os.makedirs(exist_ok=True)
+├── Data Fetching            → requests.get(REEDER_JSON_URL)
 ├── Processing Loop
-│   ├── Text Extraction (fetch_and_extract_text)
-│   ├── AI Summarization (askForResume)
-│   ├── Image Extraction (extract_top_3_largest_images)
-│   └── Date Filtering (verifier_date_entre)
-├── Data Persistence (json.dump)
-└── Report Generation (create_report)
+│   ├── Date Filtering       → verifier_date_entre()
+│   ├── Text Extraction      → fetch_and_extract_text()   [requests + BS4]
+│   ├── AI Summarization     → askForResume()             [API EurIA · 60s]
+│   ├── Image Extraction     → extract_top_3_largest_images()
+│   └── Cache Management     → utils/cache.py
+├── Data Persistence         → json.dump vers data/articles/<flux>/
+└── Report Generation        → create_report()            [API EurIA · 300s]
 ```
 
-**Variables globales** :
-- `SCRIPT_DIR` : Répertoire du script (détection via `__file__`)
-- `PROJECT_ROOT` : Racine du projet (parent de SCRIPT_DIR)
-- `DATA_ARTICLES_DIR` : `{PROJECT_ROOT}/data/articles`
-- `DATA_RAW_DIR` : `{PROJECT_ROOT}/data/raw`
-- `RAPPORTS_MARKDOWN_DIR` : `{PROJECT_ROOT}/rapports/markdown`
-- `URL`, `BEARER` : Credentials API EurIA
-
-**Points d'entrée** :
-```python
-# Sans arguments (dates par défaut)
-python Get_data_from_JSONFile_AskSummary.py
-
-# Avec période spécifique
-python Get_data_from_JSONFile_AskSummary.py 2026-01-01 2026-01-31
+**Invocation :**
+```bash
+python scripts/Get_data_from_JSONFile_AskSummary_v2.py \
+  --flux "Intelligence-artificielle" \
+  --date_debut 2026-02-01 \
+  --date_fin 2026-02-28
 ```
 
-### 2. Get_htmlText_From_JSONFile.py
+#### `scheduler_articles.py` — Orchestrateur multi-flux
 
-**Rôle** : Extraction texte brut depuis flux JSON
+- Lit `config/flux_json_sources.json`
+- Lance le script ETL pour chaque flux et chaque période configurée
+- Déclenchement via cron (`0 1 * * *`) ou manuellement
 
-**Flux** :
-1. Sélection fichier JSON (GUI tkinter)
-2. Parsing et extraction URLs
-3. Fetch HTML pour chaque URL
-4. Extraction texte avec BeautifulSoup
-5. Consolidation dans `all_articles.txt`
+#### `get-keyword-from-rss.py` — Extraction par mot-clé
 
-**Sortie** : `data/raw/all_articles.txt` (format texte structuré)
-
-### 3. articles_json_to_markdown.py
-
-**Rôle** : Conversion JSON → Markdown
-
-**Transformation** :
-```
-JSON Article → Markdown Block
-{                # Date — Source
-  "Date": "...", → [Lien](URL)
-  "URL": "...",  → 
-  "Résumé": "..." → Résumé
-}                → ---
-```
+- Lit `data/Reeder.opml` (liste flux RSS)
+- Filtre les articles des 7 derniers jours par mot-clé (`config/keyword-to-search.json`)
+- Produit `data/articles-from-rss/<mot-clé>.json` sans doublon
+- Résumé IA + image principale par article
+- Cron : `0 1 * * *`
 
 ---
 
-## 📊 Modèle de données
+## 5. Modèle de données
 
-### Entité principale : Article
+### Schéma entité-relation
 
-| Champ | Type | Source | Description |
-|-------|------|--------|-------------|
-| `Date de publication` | ISO 8601 String | Flux JSON (`date_published`) | Date originale de publication |
-| `Sources` | String | Flux JSON (`authors[0].name`) | Nom de la source/auteur |
-| `URL` | URL String | Flux JSON (`url`) | Lien vers l'article original |
-| `Résumé` | Text | API EurIA (généré) | Résumé concis en français (max 20 lignes) |
-| `Images` | Array[ImageObject] | Extraction HTML (généré) | Top 3 images par surface |
-
-### Sous-entité : ImageObject
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| `url` | URL String | URL absolue de l'image |
-| `title` | String | Attribut title de la balise `<img>` |
-| `alt` | String | Texte alternatif |
-| `width` | Integer | Largeur en pixels |
-| `height` | Integer | Hauteur en pixels |
-| `area` | Integer | Surface calculée (width × height) |
+```mermaid
+erDiagram
+    FLUX ||--o{ ARTICLE : contient
+    FLUX {
+        string nom
+        string url
+        string frequence
+    }
+    ARTICLE {
+        string flux_nom
+        datetime date_publication
+        string source
+        string url
+        string resume
+    }
+    ARTICLE ||--o{ IMAGE : illustre
+    IMAGE {
+        string url
+        int width
+        int height
+        int area
+    }
+    ARTICLE }o--o{ AUTEUR : ecrit_par
+    AUTEUR {
+        string nom
+    }
+    ARTICLE }o--|| RAPPORT : inclus_dans
+    RAPPORT {
+        string fichier
+        datetime date_generation
+        string flux_nom
+    }
+```
 
 ### Contraintes métier
 
-- **Date** : Format obligatoire `YYYY-MM-DDTHH:MM:SSZ`
-- **Images** : Largeur minimale 500px, URLs absolues uniquement
-- **Résumé** : Maximum 20 lignes, langue française
-- **Période** : `date_debut < date_fin` (validation stricte)
+| Champ | Type | Contrainte |
+|-------|------|------------|
+| `Date de publication` | ISO 8601 String | Format `YYYY-MM-DDTHH:MM:SSZ` obligatoire |
+| `Sources` | String | `authors[0].name` du flux |
+| `Résumé` | Text | Max 20 lignes · Langue française |
+| `Images[].url` | URL | Doit commencer par `https://` |
+| `Images[].width` | Integer | > 500 px |
+| Période | Dates | `date_debut < date_fin` |
 
 ---
 
-## 🔌 Intégrations externes
+## 6. Intégrations externes — API EurIA
 
-### API EurIA (Infomaniak)
+### Appel API standard
 
-**Endpoint** : `https://api.infomaniak.com/euria/v1/chat/completions`
-
-**Authentification** :
-```http
-Authorization: Bearer {BEARER_TOKEN}
-Content-Type: application/json
-```
-
-**Payload** :
-```json
-{
-  "messages": [
-    {
-      "content": "Prompt utilisateur...",
-      "role": "user"
-    }
-  ],
-  "model": "qwen3",
-  "enable_web_search": true
-}
-```
-
-**Réponse** :
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "content": "Réponse de l'IA..."
-      }
-    }
-  ]
-}
-```
-
-**Prompts utilisés dans le projet** :
-
-#### 1. Prompt de résumé d'article (fonction `askForResume`)
-```
-faire un résumé de ce texte sur maximum 20 lignes en français, 
-ne donne que le résumé, sans commentaire ni remarque : {TextToResume}
-```
-
-**Paramètres** :
-- `TextToResume` : Texte HTML extrait de l'article
-- Timeout : 60s
-- Max attempts : 3
-
-**Objectif** : Générer un résumé concis en français de chaque article
-
-#### 2. Prompt de génération de rapport (fonction `create_report`)
-```
-Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
-Affiche la date de publication et les sources lorsque tu cites un article. 
-Groupe les acticles par catégories que tu auras identifiées. 
-En fin de synthèse fait un tableau avec les références (date de publication, sources et URL)
-pour chaque article dans la rubrique "Images" il y a des liens d'images.
-Lorsque cela est possible, publie le lien de l'image sous la forme <img src='{URL}' /> 
-sur une nouvelle ligne en fin de paragraphe de catégorie. N'utilise qu'une image par 
-paragraphe et assure-toi qu'une même URL d'image n'apparaisse qu'une seule fois dans 
-tout le rapport.
-
-Filename: {file_output}
-File contents:
------ BEGIN FILE CONTENTS -----
-{json_str}
------ END FILE CONTENTS -----
-```
-
-**Paramètres** :
-- `file_output` : Chemin du fichier JSON source
-- `json_str` : Contenu JSON complet des articles
-- Timeout : 300s (5 minutes)
-- Max attempts : 3
-
-**Objectif** : Créer un rapport Markdown structuré avec :
-- Classement par catégories automatique
-- Citations avec dates et sources
-- Tableau récapitulatif des références
-- Intégration d'images pertinentes
-
-**Gestion des erreurs** :
-- **Retry logic** : 3 tentatives par défaut
-- **Timeout** : 60s (résumé), 300s (rapport)
-- **Fallback** : Message d'erreur standardisé
-
-**Rate limiting** : Non implémenté (à considérer pour usage intensif)
-
----
-
-## 🗂️ Gestion des chemins
-
-### Stratégie de résolution (post-refactoring v2.0)
-
-**Problème résolu** : Scripts fonctionnent indépendamment du répertoire d'exécution
-
-**Solution** :
 ```python
-# Détection automatique de la racine du projet
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-
-# Construction de chemins absolus
-DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
+response = requests.post(
+    URL,  # depuis .env
+    json={
+        "messages": [{"content": prompt, "role": "user"}],
+        "model": "qwen3",
+        "enable_web_search": True
+    },
+    headers={"Authorization": f"Bearer {BEARER}"},
+    timeout=60
+)
+content = response.json()["choices"][0]["message"]["content"]
 ```
 
-**Avantages** :
-- ✅ Fonctionne depuis n'importe quel répertoire
-- ✅ Compatible avec raccourcis macOS
-- ✅ Compatible avec cron jobs / automatisation
-- ✅ Pas de dépendance au `cwd` du terminal
+### Prompts utilisés
 
-### Mapping des chemins
+| Usage | Timeout | Tentatives | Prompt |
+|-------|---------|------------|--------|
+| Résumé article | 60 s | 3 | `faire un résumé de ce texte sur maximum 20 lignes en français, ne donne que le résumé, sans commentaire ni remarque : {texte}` |
+| Génération rapport | 300 s | 3 | Analyse JSON, groupe par catégories, tableau références, intègre images |
 
-| Constante | Chemin absolu | Usage |
-|-----------|---------------|-------|
-| `PROJECT_ROOT` | `/Users/.../AnalyseActualités` | Racine du projet |
-| `SCRIPT_DIR` | `{PROJECT_ROOT}/scripts` | Localisation des scripts |
-| `DATA_ARTICLES_DIR` | `{PROJECT_ROOT}/data/articles` | Stockage JSON |
-| `DATA_RAW_DIR` | `{PROJECT_ROOT}/data/raw` | Données brutes |
-| `RAPPORTS_MARKDOWN_DIR` | `{PROJECT_ROOT}/rapports/markdown` | Rapports générés |
+### Gestion des erreurs & retry
+
+```mermaid
+flowchart TD
+    CALL["Appel API EurIA"] --> OK{HTTP 200 ?}
+    OK -->|Oui| RETURN["Retour contenu"]
+    OK -->|Non| A1["Tentative 1/3"]
+    A1 -->|Échec| A2["Tentative 2/3"]
+    A2 -->|Échec| A3["Tentative 3/3"]
+    A3 -->|Échec| FALLBACK["Message erreur standardisé\nstocké dans Résumé"]
+    classDef ok fill:#e8f5e9,stroke:#388e3c
+    classDef err fill:#ffebee,stroke:#c62828
+    class RETURN ok
+    class FALLBACK err
+```
+
+> Amélioration future : backoff exponentiel `time.sleep(2 ** attempt)` (2 s, 4 s, 8 s…)
 
 ---
 
-## 🔒 Sécurité
+## 7. Infrastructure & Chemins
+
+### Résolution des chemins
+
+Tous les scripts utilisent des chemins absolus construits depuis `__file__` :
+
+```python
+SCRIPT_DIR            = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT          = os.path.dirname(SCRIPT_DIR)
+DATA_ARTICLES_DIR     = os.path.join(PROJECT_ROOT, "data", "articles")
+DATA_RAW_DIR          = os.path.join(PROJECT_ROOT, "data", "raw")
+RAPPORTS_MARKDOWN_DIR = os.path.join(PROJECT_ROOT, "rapports", "markdown")
+```
+
+Avantage : fonctionne depuis n'importe quel répertoire, compatible cron, raccourcis macOS et Docker.
+
+### Cartographie des dossiers
+
+```mermaid
+flowchart TD
+    ROOT["PROJECT_ROOT"]
+    ROOT --> SCRIPTS["scripts/\nScripts Python exécutables"]
+    ROOT --> CONFIG2["config/\nflux_json_sources.json\ncategories_actualite.json\nkeyword-to-search.json\nthematiques_societales.json"]
+    ROOT --> DATA2["data/"]
+    ROOT --> RAPPORTS2["rapports/"]
+    ROOT --> UTILS2["utils/\nBibliothèque partagée"]
+    ROOT --> ARCHIVES2["archives/\nSauvegardes horodatées"]
+    ROOT --> TESTS2["tests/\npytest"]
+    DATA2 --> ART["articles/<flux>/\narticles_generated_*.json\ncache/<flux>/"]
+    DATA2 --> ARSS["articles-from-rss/\n<mot-clé>.json"]
+    DATA2 --> RAW2["raw/\nall_articles.txt"]
+    RAPPORTS2 --> MD3["markdown/<flux>/\nrapport_sommaire_*.md"]
+    RAPPORTS2 --> PDF2["pdf/\n*.pdf"]
+    classDef dir fill:#f5f5f5,stroke:#9e9e9e
+    class ROOT,SCRIPTS,CONFIG2,DATA2,RAPPORTS2,UTILS2,ARCHIVES2,TESTS2,ART,ARSS,RAW2,MD3,PDF2 dir
+```
+
+### Déploiement Docker
+
+Le projet inclut `Dockerfile` + `docker-compose.yml`. L'`entrypoint.sh` démarre le scheduler au lancement du conteneur.
+
+---
+
+## 8. Sécurité
 
 ### Gestion des secrets
 
-**Fichier** : `.env` à la racine du projet
-
-**Variables sensibles** :
-```env
-bearer=TOKEN_API_CONFIDENTIEL
-REEDER_JSON_URL=URL_PRIVEE_DU_FLUX
-```
-
-**Protection** :
-- ✅ `.env` dans `.gitignore` (jamais versionné)
-- ✅ Chargement via `python-dotenv`
-- ✅ Pas de hardcoding des credentials
+- Toutes les credentials dans `.env` (jamais versionné — `.gitignore`)
+- Chargement exclusif via `python-dotenv`
+- Variables sensibles : `bearer`, `REEDER_JSON_URL`
 
 ### Validation des entrées
 
-**URLs** :
-- Validation implicite via `requests.get()` (exceptions levées)
-- Vérification `startswith(('http://', 'https://'))` pour images
+| Vecteur | Validation |
+|---------|-----------|
+| URLs | `startswith(('http://', 'https://'))` + `raise_for_status()` |
+| Dates | `datetime.strptime()` strict + `date_debut < date_fin` |
+| JSON | `try/except` sur `json.load()` et `response.json()` |
+| Images | Largeur > 500 px + URL absolue |
 
-**Dates** :
-- Parsing strict avec `datetime.strptime()`
-- Validation `date_debut < date_fin`
+---
 
-**JSON** :
-- Try/except sur `json.load()` et `response.json()`
+## 9. Performance et scalabilité
 
-### Gestion des erreurs réseau
+### Métriques (traitement séquentiel actuel)
 
-```python
-try:
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-except requests.exceptions.HTTPError:
-    # HTTP 4xx / 5xx
-except requests.exceptions.ConnectionError:
-    # Pas de connexion
-except requests.exceptions.Timeout:
-    # Timeout dépassé
-except requests.exceptions.RequestException:
-    # Autres erreurs réseau
+| Opération | Temps moyen |
+|-----------|-------------|
+| Fetch HTML | 1–3 s |
+| Extraction texte (BS4) | < 100 ms |
+| Résumé IA | 5–10 s |
+| Extraction + tri images | 1–2 s |
+| **Total / article** | **7–15 s** |
+
+> 100 articles ≈ 12–25 minutes
+
+### Priorité des optimisations
+
+```mermaid
+quadrantChart
+    title Priorité des optimisations (effort vs impact)
+    x-axis Effort faible --> Effort élevé
+    y-axis Impact faible --> Impact élevé
+    quadrant-1 Planifier
+    quadrant-2 Priorité haute
+    quadrant-3 Déprioritiser
+    quadrant-4 Évaluer
+    Filtrage anticipé par date: [0.15, 0.75]
+    Cache HTTP requests-cache: [0.25, 0.65]
+    Backoff exponentiel retry: [0.20, 0.50]
+    Parallélisation asyncio: [0.55, 0.90]
+    Migration PostgreSQL: [0.80, 0.60]
+    Queue Celery+Redis: [0.85, 0.70]
 ```
 
 ---
 
-## ⚡ Performance et scalabilité
+## 10. Décisions architecturales
 
-### Goulots d'étranglement actuels
-
-1. **Séquentiel** : Traitement article par article (pas de parallélisation)
-2. **Réseau** : Latence cumulée des requêtes HTTP (fetch + API IA)
-3. **API IA** : Temps de génération ~5-10s par résumé
-
-### Métriques estimées
-
-| Opération | Temps moyen | Commentaire |
-|-----------|-------------|-------------|
-| Fetch HTML | 1-3s | Dépend de la source |
-| Extraction texte | <100ms | Très rapide (local) |
-| Résumé IA | 5-10s | API externe (variable) |
-| Extraction images | 1-2s | Fetch + parsing |
-| **Total par article** | **7-15s** | Sans parallélisation |
-
-**Pour 100 articles** : ~12-25 minutes
-
-### Optimisations possibles
-
-#### Court terme
-1. **Filtrage anticipé** : Filtrer par date AVANT extraction
-   ```python
-   # TODO déjà noté dans le code
-   items_filtered = [i for i in items if date_in_range(i['date_published'])]
-   ```
-
-2. **Cache HTTP** : Utiliser `requests-cache` pour éviter re-fetch
-
-3. **Batch AI requests** : Grouper plusieurs résumés en une requête
-
-#### Moyen terme
-1. **Parallélisation** : `concurrent.futures` ou `asyncio`
-   ```python
-   with ThreadPoolExecutor(max_workers=5) as executor:
-       texts = executor.map(fetch_and_extract_text, urls)
-   ```
-
-2. **Queue system** : Redis + Celery pour traitement asynchrone
-
-3. **Incremental processing** : Ne traiter que les nouveaux articles
-
-#### Long terme
-1. **Base de données** : Migration JSON → PostgreSQL/SQLite
-2. **Cache distribué** : Redis pour textes extraits
-3. **Microservices** : Séparer collecte / enrichissement IA / rapports
+| ADR | Décision | Justification | Limite |
+|-----|----------|---------------|--------|
+| **ADR-001** | Chemins absolus via `__file__` | Compatible cron, macOS, Docker | Légèrement plus verbeux |
+| **ADR-002** | JSON comme stockage primaire | Natif Python, lisible, sans setup DB | Pas de requêtes complexes |
+| **ADR-003** | Résumés IA en français uniquement | Sources et utilisateurs francophones | Limite réutilisabilité |
+| **ADR-004** | Retry sans backoff | Simple à implémenter | Risque surcharge API en erreur systémique |
+| **ADR-005** | GUI tkinter (scripts utilitaires) | User-friendly en usage manuel | Incompatible headless / CI |
+| **ADR-006** | Cloisonnement par flux (fév. 2026) | Isolation complète des données | Duplication de dossiers |
 
 ---
 
-## 🎯 Décisions architecturales
+## 11. Roadmap
 
-### ADR-001 : Chemins absolus vs relatifs
-
-**Contexte** : Scripts v1.0 utilisaient chemins relatifs (`../data/`), causaient erreurs avec raccourcis macOS
-
-**Décision** : Détection automatique via `__file__` + construction chemins absolus
-
-**Conséquences** :
-- ✅ Fonctionne depuis n'importe quel répertoire
-- ✅ Compatible automatisation
-- ⚠️ Légèrement plus verbeux
-
-### ADR-002 : JSON comme format de stockage primaire
-
-**Alternatives considérées** : CSV, SQLite, PostgreSQL
-
-**Décision** : JSON structuré
-
-**Justification** :
-- Simple à manipuler (natif Python)
-- Lisible par humains
-- Compatible avec la plupart des outils
-- Pas de setup de DB requis
-
-**Limites** :
-- ❌ Pas de requêtes complexes
-- ❌ Pas de relations entre entités
-- ❌ Performance limitée pour gros volumes
-
-### ADR-003 : Résumés IA en français uniquement
-
-**Décision** : Forcer langue française dans les prompts
-
-**Justification** :
-- Sources principalement francophones
-- Utilisateur francophone
-- Cohérence des rapports
-
-**Impact** : Limite réutilisabilité pour sources non-françaises
-
-### ADR-004 : Retry automatique sans backoff exponentiel
-
-**Implémentation actuelle** :
-```python
-for attempt in range(max_attempts):
-    try:
-        response = requests.post(...)
-        # ...
-    except:
-        continue  # Retry immédiat
+```mermaid
+gantt
+    title Roadmap technique AnalyseActualités
+    dateFormat  YYYY-MM
+    section Phase 1 — Stabilisation
+    Tests unitaires pytest           :2026-01, 2026-03
+    CI/CD GitHub Actions             :2026-02, 2026-03
+    Backoff exponentiel retry        :2026-02, 2026-03
+    section Phase 2 — Performance
+    Filtrage anticipé par date       :2026-03, 2026-04
+    Cache HTTP requests-cache        :2026-03, 2026-05
+    Parallélisation asyncio          :2026-04, 2026-06
+    section Phase 3 — Scalabilité
+    Migration PostgreSQL              :2026-06, 2026-09
+    Queue Celery + Redis              :2026-07, 2026-09
+    section Phase 4 — Features
+    Analyse de sentiment              :2026-09, 2026-12
+    Export multi-formats PDF/EPUB     :2026-10, 2026-12
+    API REST exposition données       :2026-10, 2026-12
 ```
-
-**Risque** : Peut surcharger API en cas d'erreur systémique
-
-**Amélioration future** : Implémenter backoff exponentiel
-```python
-time.sleep(2 ** attempt)  # 2s, 4s, 8s...
-```
-
-### ADR-005 : Interface GUI (tkinter) pour sélection fichiers
-
-**Contexte** : Scripts `Get_htmlText_From_JSONFile.py` et `articles_json_to_markdown.py` utilisent dialogs
-
-**Avantages** :
-- ✅ User-friendly
-- ✅ Pas d'arguments CLI à mémoriser
-
-**Inconvénients** :
-- ❌ Incompatible environnements headless
-- ❌ Bloque automatisation complète
-
-**Alternative** : Ajouter support arguments CLI optionnels
 
 ---
 
-## 📈 Métriques et monitoring
+## Références
 
-### Logs actuels
-
-**Format** :
-```
-YYYY-MM-DD HH:MM:SS Message
-```
-
-**Implémentation** :
-```python
-def print_console(msg: str):
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}")
-```
-
-**Améliorations suggérées** :
-1. Niveau de log (DEBUG/INFO/WARNING/ERROR)
-2. Output vers fichier en plus de stdout
-3. Structured logging (JSON)
-
-### Métriques à suivre
-
-| Métrique | Comment la calculer | Utilité |
-|----------|-------------------|---------|
-| Articles traités/jour | Count dans JSON | Tendance volume |
-| Temps moyen/article | Timestamps début/fin | Optimisation |
-| Taux d'erreur extraction | Failed / Total | Qualité sources |
-| Taux d'erreur API IA | Retry count | Fiabilité API |
-| Taille rapports générés | File size | Monitoring stockage |
+| Ressource | Lien |
+|-----------|------|
+| Structure détaillée | [docs/STRUCTURE.md](STRUCTURE.md) |
+| Guide déploiement | [docs/DEPLOY.md](DEPLOY.md) |
+| Guide scripts | [scripts/USAGE.md](../scripts/USAGE.md) |
+| Historique | [CHANGELOG.md](../CHANGELOG.md) |
+| BeautifulSoup4 | https://www.crummy.com/software/BeautifulSoup/bs4/doc/ |
+| API EurIA Infomaniak | https://euria.infomaniak.com |
+| ISO 8601 | https://www.iso.org/iso-8601-date-and-time-format.html |
 
 ---
 
-## 🔮 Évolutions futures
-
-### Roadmap technique
-
-#### Phase 1 : Stabilisation (Q1 2026)
-- [ ] Tests unitaires (pytest)
-- [ ] CI/CD avec GitHub Actions
-- [ ] Documentation API (Sphinx)
-- [ ] Backoff exponentiel pour retry
-
-#### Phase 2 : Performance (Q2 2026)
-- [ ] Parallélisation avec asyncio
-- [ ] Cache HTTP (requests-cache)
-- [ ] Filtrage anticipé par dates
-
-#### Phase 3 : Scalabilité (Q3 2026)
-- [ ] Migration vers PostgreSQL
-- [ ] Queue system (Celery + Redis)
-- [ ] API REST pour exposer les données
-
-#### Phase 4 : Features (Q4 2026)
-- [ ] Détection automatique de catégories
-- [ ] Analyse de sentiment
-- [ ] Génération graphiques/visualisations
-- [ ] Export multi-formats (PDF, EPUB)
-
----
-
-## 📚 Références
-
-### Documentation externe
-- [BeautifulSoup4 Docs](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-- [Requests Docs](https://requests.readthedocs.io/)
-- [Python-dotenv](https://github.com/theskumar/python-dotenv)
-- [API EurIA Infomaniak](https://euria.infomaniak.com)
-
-### Standards suivis
-- [PEP 8](https://peps.python.org/pep-0008/) – Style Guide for Python Code
-- [ISO 8601](https://www.iso.org/iso-8601-date-and-time-format.html) – Date and time format
-- [Semantic Versioning](https://semver.org/) – Versioning scheme
-
----
-
-**Document maintenu par** : Patrick Ostertag  
-**Dernière mise à jour** : 23 janvier 2026  
-**Version** : 2.0
+**Maintenu par** : Patrick Ostertag · patrick.ostertag@gmail.com
+**Dernière mise à jour** : 22 février 2026 · Version 3.0
