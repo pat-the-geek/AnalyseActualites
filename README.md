@@ -185,7 +185,7 @@ Chaque entrée du fichier accepte deux collections optionnelles pour affiner la 
 
 Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dans Claude (ou tout autre LLM) pour produire un rapport, indépendamment de l'automatisation. Les instructions détaillées pour cette utilisation (format du rapport, modèle Markdown, regroupement thématique) sont disponibles dans :
 
-→ [`docs/instructions-for-claude-report`](docs/instructions-for-claude-report)
+→ [`docs/instructions-for-claude-report.md`](docs/instructions-for-claude-report.md)
 
 ---
 
