@@ -49,6 +49,31 @@ L'automatisation complète est assurée par un orchestrateur Docker utilisant de
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
+```mermaid
+mindmap
+  root((WUDD.ai))
+    Collecte multi-flux
+      Sources RSS / JSON
+      Gestion via Reeder
+      Multi-flux cloisonnés
+    Résumé IA
+      API EurIA · Qwen3
+      20 lignes · français
+      3 images par article
+    Analyse thématique
+      12 thématiques sociétales
+      Statistiques de couverture
+      Classement automatique
+    Mots-clés & alertes
+      Surveillance quotidienne
+      Rapport JSON + résumé IA
+      Configurable dans config/
+    Automatisation Docker
+      Cron intégré au conteneur
+      Sorties JSON · Markdown · PDF
+      Zéro dépendance côté hôte
+```
+
 ---
 
 ## 2. Architecture
