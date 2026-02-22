@@ -1,0 +1,11 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Exécution quotidienne du script get-keyword-from-rss.py à 1h00
+0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
+# Vérification automatique du cron toutes les 10 minutes
+*/10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log
+# Exécute le scheduler chaque lundi à 6h du matin
+0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log
+
+
