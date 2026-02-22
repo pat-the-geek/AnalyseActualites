@@ -94,7 +94,7 @@ WUDD.ai/
 | `config/flux_json_sources.json` | Liste des flux RSS/JSON et paramètres cron |
 | `config/sites_actualite.json` | Sources RSS disponibles |
 | `config/categories_actualite.json` | Catégories d'articles |
-| `config/keyword-to-search.json` | Mots-clés pour extraction quotidienne |
+| `config/keyword-to-search.json` | Mots-clés pour extraction quotidienne (avec filtres OR/AND optionnels) |
 | `config/thematiques_societales.json` | 12 thématiques sociétales |
 | `config/prompt-rapport.txt` | Template de prompt pour rapports |
 
@@ -162,6 +162,24 @@ python3 scripts/get-keyword-from-rss.py
 ```
 
 Génère un fichier JSON dans `data/articles-from-rss/` pour chaque mot-clé configuré, avec résumé IA et images principales.
+
+#### Filtrage avancé OR / AND dans `config/keyword-to-search.json`
+
+Chaque entrée du fichier accepte deux collections optionnelles pour affiner la sélection des articles :
+
+- **`or`** : si le mot-clé principal n'est pas trouvé dans le titre, l'article est quand même sélectionné si **au moins un** des mots de la liste est présent.
+- **`and`** : si l'article est présélectionné (via le mot-clé ou via `or`), il n'est retenu que si **au moins un** des mots de cette liste est également présent dans le titre.
+
+```json
+[
+  { "keyword": "Trump" },
+  { "keyword": "David Bowie", "or": ["Ziggy Stardust", "Thin White Duke"] },
+  { "keyword": "UBS", "and": ["banque", "bank"] },
+  { "keyword": "Intelligence artificielle", "or": ["AI", "IA"] }
+]
+```
+
+> Les mots des collections `or` et `and` utilisent une correspondance par **frontière de mot** (`\b` regex) pour éviter les faux positifs (ex. `AI` ne matche pas `semaine`).
 
 ---
 

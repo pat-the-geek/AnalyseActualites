@@ -15,6 +15,7 @@ Pour chaque flux RSS dans Reeder.opml :
 
 
 import os
+import re
 import sys
 import json
 import requests
@@ -45,11 +46,11 @@ one_week_ago = now - timedelta(days=7)
 
 one_week_ago = now - timedelta(days=7)
 
-# Charger les mots-clés
+# Charger les mots-clés (objets complets pour accéder aux collections or/and)
 print_console("Chargement des mots-clés depuis keyword-to-search.json...")
 with open(KEYWORDS_PATH, "r", encoding="utf-8") as f:
-    keywords = [k["keyword"] for k in json.load(f)]
-print_console(f"{len(keywords)} mots-clés chargés : {keywords}")
+    keywords = json.load(f)
+print_console(f"{len(keywords)} mots-clés chargés : {[k['keyword'] for k in keywords]}")
 
 # Charger les flux RSS depuis OPML
 print_console("Chargement des flux RSS depuis Reeder.opml...")
@@ -70,7 +71,7 @@ print_console("Initialisation du client IA EurIA...")
 api_client = EurIAClient()
 
 # Index par mot-clé
-results = {kw: {} for kw in keywords}
+results = {kw_obj["keyword"]: {} for kw_obj in keywords}
 
 total_feeds = len(feeds)
 for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
@@ -94,35 +95,53 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 continue
             if pub_dt < one_week_ago:
                 continue
-            for kw in keywords:
-                if kw.lower() in title.lower():
-                    out_path = OUTPUT_DIR / f"{kw.replace(' ', '-').lower()}.json"
-                    # Charger existant pour éviter doublons
-                    if out_path.exists():
-                        with open(out_path, "r", encoding="utf-8") as f:
-                            existing_urls = {a["URL"] for a in json.load(f)}
-                    else:
-                        existing_urls = set()
-                    # Vérifier si déjà traité
-                    if link in existing_urls or link in results[kw]:
-                        print_console(f"    [Article {idx}] Déjà présent pour '{kw}', ignoré.", level="debug")
-                        continue
-                    print_console(f"    [Article {idx}] Mot-clé '{kw}' trouvé dans le titre.")
-                    print_console(f"      Extraction du texte de l'article...")
-                    text = fetch_and_extract_text(link)
-                    print_console(f"      Génération du résumé IA...")
-                    resume = api_client.generate_summary(text, max_lines=20)
-                    print_console(f"      Extraction de l'image principale...")
-                    images = extract_top_n_largest_images(link, n=1, min_width=500)
-                    article = {
-                        "Date de publication": pub_date,
-                        "Sources": feed_title,
-                        "URL": link,
-                        "Résumé": resume,
-                        "Images": images
-                    }
-                    results[kw][link] = article
-                    print_console(f"      ✓ Article ajouté pour '{kw}'.")
+            for kw_obj in keywords:
+                kw = kw_obj["keyword"]
+                or_words = kw_obj.get("or", [])
+                and_words = kw_obj.get("and", [])
+                title_lower = title.lower()
+
+                # 1. Correspondance sur le mot-clé principal
+                matched = kw.lower() in title_lower
+
+                # 2. Si pas trouvé, tester les mots de la collection "or" (frontière de mot)
+                if not matched and or_words:
+                    matched = any(re.search(r'\b' + re.escape(w.lower()) + r'\b', title_lower) for w in or_words)
+
+                # 3. Si correspondance, vérifier la contrainte "and" (au moins un mot présent, frontière de mot)
+                if matched and and_words:
+                    matched = any(re.search(r'\b' + re.escape(w.lower()) + r'\b', title_lower) for w in and_words)
+
+                if not matched:
+                    continue
+
+                out_path = OUTPUT_DIR / f"{kw.replace(' ', '-').lower()}.json"
+                # Charger existant pour éviter doublons
+                if out_path.exists():
+                    with open(out_path, "r", encoding="utf-8") as f:
+                        existing_urls = {a["URL"] for a in json.load(f)}
+                else:
+                    existing_urls = set()
+                # Vérifier si déjà traité
+                if link in existing_urls or link in results[kw]:
+                    print_console(f"    [Article {idx}] Déjà présent pour '{kw}', ignoré.", level="debug")
+                    continue
+                print_console(f"    [Article {idx}] Mot-clé '{kw}' trouvé dans le titre.")
+                print_console(f"      Extraction du texte de l'article...")
+                text = fetch_and_extract_text(link)
+                print_console(f"      Génération du résumé IA...")
+                resume = api_client.generate_summary(text, max_lines=20)
+                print_console(f"      Extraction de l'image principale...")
+                images = extract_top_n_largest_images(link, n=1, min_width=500)
+                article = {
+                    "Date de publication": pub_date,
+                    "Sources": feed_title,
+                    "URL": link,
+                    "Résumé": resume,
+                    "Images": images
+                }
+                results[kw][link] = article
+                print_console(f"      ✓ Article ajouté pour '{kw}'.")
     except Exception as e:
         print_console(f"Erreur flux {feed_url}: {e}", level="error")
 

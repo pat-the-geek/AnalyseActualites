@@ -3,6 +3,24 @@
 **Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de Reeder.opml.
 Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
 
+**Filtrage avancé (OR / AND)**
+
+Chaque entrée de `keyword-to-search.json` supporte deux collections optionnelles :
+
+| Champ | Comportement |
+|---|---|
+| `or` | Si le mot-clé principal est absent du titre, sélectionne l'article si **au moins un** mot de la liste est présent |
+| `and` | Après une présélection (mot-clé ou `or`), exige qu'**au moins un** mot de la liste soit présent dans le titre |
+
+Exemples :
+```json
+{ "keyword": "David Bowie", "or": ["Ziggy Stardust", "Thin White Duke"] }
+{ "keyword": "UBS", "and": ["banque", "bank"] }
+{ "keyword": "Intelligence artificielle", "or": ["AI", "IA"] }
+```
+
+> La correspondance des mots `or`/`and` utilise des frontières de mot (`\b` regex) pour éviter les faux positifs.
+
 **Utilisation** :
 ```bash
 python3 get-keyword-from-rss.py
