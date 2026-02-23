@@ -37,24 +37,27 @@ def send_mail(subject, body):
 
 
 def check_cron_health():
-    # Vérification du cron_test.log désactivée (aucune action)
-    try:
-        mtime = os.path.getmtime(CRON_LOG)
-        last = datetime.fromtimestamp(mtime)
-        if datetime.now() - last > timedelta(minutes=MAX_MINUTES):
+    # Vérification du cron_test.log (désactivée si CRON_LOG est None)
+    if CRON_LOG is not None:
+        try:
+            mtime = os.path.getmtime(CRON_LOG)
+            last = datetime.fromtimestamp(mtime)
+            if datetime.now() - last > timedelta(minutes=MAX_MINUTES):
+                send_mail(
+                    "[ALERTE] Cron ne s'exécute plus !",
+                    f"Le fichier {CRON_LOG} n'a pas été mis à jour depuis {last}."
+                )
+                print(f"[ALERTE] Cron inactif depuis {last}")
+            else:
+                print(f"[OK] Cron actif, dernière exécution: {last}")
+        except Exception as e:
             send_mail(
-                "[ALERTE] Cron ne s'exécute plus !",
-                f"Le fichier {CRON_LOG} n'a pas été mis à jour depuis {last}."
+                "[ALERTE] Cron log introuvable !",
+                f"Impossible de lire {CRON_LOG}: {e}"
             )
-            print(f"[ALERTE] Cron inactif depuis {last}")
-        else:
-            print(f"[OK] Cron actif, dernière exécution: {last}")
-    except Exception as e:
-        send_mail(
-            "[ALERTE] Cron log introuvable !",
-            f"Impossible de lire {CRON_LOG}: {e}"
-        )
-        print(f"[ERREUR] Impossible de lire {CRON_LOG}: {e}")
+            print(f"[ERREUR] Impossible de lire {CRON_LOG}: {e}")
+    else:
+        print("[INFO] Vérification cron_test.log désactivée (CRON_LOG=None)")
 
     # Vérifie la présence d'erreurs dans le log du scheduler
     try:
