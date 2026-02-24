@@ -222,6 +222,12 @@ Exemples de présentations générées par Claude à partir des données collect
 - [Présentation Markdown](samples/claude-generated-presentation.md)
 - [Présentation PDF](samples/claude-generated-presentation.pdf)
 
+### Utilisation avec NotebookLM
+
+Les fichiers Markdown générés (rapports de synthèse, présentations) peuvent être importés directement dans **[NotebookLM](https://notebooklm.google.com/)** comme sources de connaissances. NotebookLM permet ensuite de générer des résumés, des FAQ, des podcasts audio ou des infographies à partir du contenu collecté. Exemples de sorties produites :
+- [Présentation NotebookLM (PDF)](samples/NotebookLM%20-%20Presentation.pdf)
+- [Infographie NotebookLM](samples/NotebookLM%20-%20infographie.png)
+
 ## 5. Configuration des flux
 
 ### Format `config/flux_json_sources.json`
