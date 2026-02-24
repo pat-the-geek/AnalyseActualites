@@ -490,19 +490,19 @@ Le projet inclut `Dockerfile` + `docker-compose.yml`. L'`entrypoint.sh` démarre
 
 ```mermaid
 quadrantChart
-    title Priorité des optimisations (effort vs impact)
-    x-axis Effort faible --> Effort élevé
-    y-axis Impact faible --> Impact élevé
+    title Priorite des optimisations (effort vs impact)
+    x-axis Effort faible --> Effort eleve
+    y-axis Impact faible --> Impact eleve
     quadrant-1 Planifier
-    quadrant-2 Priorité haute
-    quadrant-3 Déprioritiser
-    quadrant-4 Évaluer
-    Filtrage anticipé par date: [0.15, 0.75]
-    Cache HTTP requests-cache: [0.25, 0.65]
-    Backoff exponentiel retry: [0.20, 0.50]
-    Parallélisation asyncio: [0.55, 0.90]
-    Migration PostgreSQL: [0.80, 0.60]
-    Queue Celery+Redis: [0.85, 0.70]
+    quadrant-2 Priorite haute
+    quadrant-3 Deprioritiser
+    quadrant-4 Evaluer
+    Filtrage par date: [0.10, 0.82]
+    Cache HTTP: [0.32, 0.68]
+    Backoff exponentiel: [0.18, 0.38]
+    Parallelisation asyncio: [0.60, 0.88]
+    Migration PostgreSQL: [0.72, 0.52]
+    Queue Celery Redis: [0.88, 0.72]
 ```
 
 ---
