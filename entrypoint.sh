@@ -1,15 +1,16 @@
 #!/bin/sh
-# Entrypoint pour installer la crontab personnalisée et lancer cron en foreground
+# Entrypoint : génère .env, installe la crontab, démarre le viewer Flask,
+# puis lance cron en foreground.
 set -e
 
-# ── Exporter les variables d'environnement vers /app/.env ──────────────────────
+# ── 1. Exporter les variables d'environnement vers /app/.env ─────────────────
 # Cron ne propage pas les vars injectées par docker-compose env_file.
 # On les écrit dans /app/.env pour que load_dotenv() les retrouve à chaque job.
 echo "Génération de /app/.env depuis l'environnement Docker..."
 printenv | grep -E '^(URL|bearer|REEDER_JSON_URL|max_attempts|timeout_resume|timeout_rapport|default_error_message|CRON_ALERT_MAIL|CRON_ALERT_FROM|CRON_ALERT_SMTP|CRON_ALERT_PORT|CRON_ALERT_USER|CRON_ALERT_PASS)=' > /app/.env
 echo "/app/.env généré avec $(wc -l < /app/.env) variable(s)."
 
-# Installer la crontab personnalisée si présente
+# ── 2. Installer la crontab personnalisée ────────────────────────────────────
 # Le fichier archives/crontab utilise le format /etc/cron.d/ (avec champ utilisateur)
 # Il doit donc être copié dans /etc/cron.d/ et NON installé via 'crontab'
 if [ -f /app/archives/crontab ]; then
@@ -22,5 +23,12 @@ else
     echo "Aucune crontab personnalisée trouvée."
 fi
 
-# Lancer cron en foreground
+# ── 3. Démarrer le viewer Flask en arrière-plan ──────────────────────────────
+echo "Démarrage du viewer WUDD.ai sur le port 5050..."
+mkdir -p /app/rapports
+python3 /app/viewer/app.py >> /app/rapports/viewer.log 2>&1 &
+VIEWER_PID=$!
+echo "Viewer démarré (PID : $VIEWER_PID) — http://localhost:5050"
+
+# ── 4. Lancer cron en foreground ─────────────────────────────────────────────
 exec cron -f

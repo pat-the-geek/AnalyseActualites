@@ -187,3 +187,7 @@ archives/
 *.gif
 Unused-Code/
 .github/
+
+# Viewer — artefacts de build (générés via npm run build)
+viewer/node_modules/
+viewer/dist/

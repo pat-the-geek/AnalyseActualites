@@ -1,4 +1,4 @@
-# NOTE : Seul le service "analyse-actualites" doit être utilisé pour ce projet.
+# NOTE : Seul le service "analyse-actualites" doit être utilisé pour ce projet.
 
 services:
   analyse-actualites:
@@ -14,9 +14,8 @@ services:
       - ./samples:/app/samples
       - ./archives:/app/archives
       - ./config:/app/config
+    ports:
+      - "5050:5050"   # Viewer WUDD.ai → http://localhost:5050
     restart: unless-stopped
     tty: true
-    # Expose cron logs if needed
-    # ports:
-    #   - "8080:8080"
     # command: supprimé — entrypoint.sh appelle déjà exec cron -f
