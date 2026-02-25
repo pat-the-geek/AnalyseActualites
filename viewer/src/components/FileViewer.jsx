@@ -1,4 +1,5 @@
-import { Download, FileJson, FileText, Calendar, HardDrive, ChevronRight } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Download, FileJson, FileText, Calendar, HardDrive, ChevronRight, Images } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 
@@ -13,6 +14,181 @@ function formatDate(timestamp) {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+/** Extrait toutes les images des articles JSON (champ Images[].URL). */
+function extractImages(jsonContent) {
+  try {
+    const data = JSON.parse(jsonContent)
+    const articles = Array.isArray(data) ? data : [data]
+    const images = []
+    articles.forEach(article => {
+      if (!Array.isArray(article?.Images)) return
+      article.Images.forEach(img => {
+        if (img?.URL) {
+          images.push({
+            url: img.URL,
+            width: img.Width ?? null,
+            source: article['Sources'] ?? '',
+            date: article['Date de publication'] ?? '',
+            articleUrl: article['URL'] ?? '',
+          })
+        }
+      })
+    })
+    return images
+  } catch {
+    return []
+  }
+}
+
+function ImageGallery({ content }) {
+  const images = useMemo(() => extractImages(content), [content])
+  const [failedUrls, setFailedUrls] = useState(new Set())
+  const [lightbox, setLightbox] = useState(null) // index de l'image agrandie
+
+  const visible = images.filter(img => !failedUrls.has(img.url))
+  if (!visible.length) return null
+
+  const handleError = (url) =>
+    setFailedUrls(prev => new Set([...prev, url]))
+
+  return (
+    <div className="mt-6">
+      {/* En-tête section */}
+      <div className="flex items-center gap-2 mb-3">
+        <Images size={14} className="text-slate-400" />
+        <span className="text-sm font-semibold text-slate-300">
+          Images
+        </span>
+        <span className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">
+          {visible.length}
+        </span>
+      </div>
+
+      {/* Grille */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {visible.map((img, i) => (
+          <button
+            key={i}
+            onClick={() => setLightbox(i)}
+            className="group text-left rounded-xl overflow-hidden bg-slate-800 border border-slate-700 hover:border-blue-500/60 transition-all hover:shadow-lg hover:shadow-blue-900/20 focus:outline-none focus:border-blue-500"
+          >
+            {/* Vignette */}
+            <div className="aspect-video overflow-hidden bg-slate-900 relative">
+              <img
+                src={img.url}
+                alt={img.source}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                loading="lazy"
+                onError={() => handleError(img.url)}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+            </div>
+            {/* Méta */}
+            {(img.source || img.date) && (
+              <div className="px-2.5 py-2">
+                {img.source && (
+                  <div className="text-[11px] text-slate-300 truncate font-medium">{img.source}</div>
+                )}
+                {img.date && (
+                  <div className="text-[10px] text-slate-500 mt-0.5">{img.date}</div>
+                )}
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox !== null && (
+        <Lightbox
+          images={visible}
+          index={lightbox}
+          onClose={() => setLightbox(null)}
+          onNav={(idx) => setLightbox(idx)}
+        />
+      )}
+    </div>
+  )
+}
+
+function Lightbox({ images, index, onClose, onNav }) {
+  const img = images[index]
+
+  // Navigation clavier
+  useMemo(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowRight') onNav(Math.min(index + 1, images.length - 1))
+      if (e.key === 'ArrowLeft') onNav(Math.max(index - 1, 0))
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [index, images.length, onClose, onNav])
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center gap-3">
+        {/* Image */}
+        <img
+          src={img.url}
+          alt={img.source}
+          className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl"
+        />
+
+        {/* Méta + actions */}
+        <div className="flex items-center gap-4 text-sm text-slate-300">
+          {img.source && <span className="font-medium">{img.source}</span>}
+          {img.date && <span className="text-slate-500">{img.date}</span>}
+          {img.width && <span className="text-slate-600 text-xs">{img.width}px</span>}
+          <a
+            href={img.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-xs text-blue-400 hover:text-blue-300 underline"
+            onClick={e => e.stopPropagation()}
+          >
+            Ouvrir l'original ↗
+          </a>
+        </div>
+
+        {/* Compteur */}
+        <div className="text-xs text-slate-600 select-none">
+          {index + 1} / {images.length}
+        </div>
+
+        {/* Bouton fermer */}
+        <button
+          onClick={onClose}
+          className="absolute -top-2 -right-2 w-8 h-8 bg-slate-700 hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-300 transition-colors"
+        >
+          ✕
+        </button>
+
+        {/* Flèches de navigation */}
+        {index > 0 && (
+          <button
+            onClick={() => onNav(index - 1)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors"
+          >
+            ‹
+          </button>
+        )}
+        {index < images.length - 1 && (
+          <button
+            onClick={() => onNav(index + 1)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors"
+          >
+            ›
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function FileViewer({ file, content, loading, onDownload }) {
@@ -87,9 +263,12 @@ export default function FileViewer({ file, content, loading, onDownload }) {
         ) : content === null ? (
           <div className="text-slate-500 text-sm">Contenu indisponible</div>
         ) : file.type === 'json' ? (
-          <div className="bg-slate-950 rounded-xl p-6 border border-slate-800/60 overflow-auto">
-            <JsonViewer content={content} />
-          </div>
+          <>
+            <div className="bg-slate-950 rounded-xl p-6 border border-slate-800/60">
+              <JsonViewer content={content} />
+            </div>
+            <ImageGallery content={content} />
+          </>
         ) : (
           <MarkdownViewer content={content} />
         )}
