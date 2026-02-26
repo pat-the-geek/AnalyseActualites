@@ -191,3 +191,4 @@ Unused-Code/
 # Viewer — artefacts de build (générés via npm run build)
 viewer/node_modules/
 viewer/dist/
+viewer/package-lock.json
