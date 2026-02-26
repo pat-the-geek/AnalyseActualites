@@ -238,11 +238,18 @@ WUDD.ai inclut une interface web locale permettant de naviguer, lire et éditer 
 
 ### Démarrage
 
+Un script raccourci est disponible à la racine du projet :
+
 ```bash
-bash viewer/start.sh
+bash start-viewer.sh           # mode développement (Flask + Vite)
+bash start-viewer.sh docker    # production via Docker Compose
+bash start-viewer.sh stop      # arrêter le conteneur Docker
 ```
 
-L'interface est disponible à l'adresse **http://localhost:5173** (dev) ou **http://localhost:5050** (production Flask).
+| Mode | URL |
+|---|---|
+| Développement (Vite) | http://localhost:5173 |
+| Production (Flask / Docker) | http://localhost:5050 |
 
 ### Fonctionnalités
 
