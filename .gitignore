@@ -193,5 +193,6 @@ Unused-Code/
 # Viewer — artefacts de build (générés via npm run build)
 viewer/node_modules/
 viewer/dist/
-viewer/package-lock.json
-package-lock.json
+# package-lock.json à la racine uniquement (viewer/package-lock.json doit
+# être versionné pour que `npm ci` fonctionne dans le build Docker)
+/package-lock.json
