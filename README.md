@@ -73,6 +73,12 @@ mindmap
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
       Zéro dépendance côté hôte
+    Viewer web
+      Navigation par flux
+      JSON · Markdown · images
+      Recherche plein texte ⌘K
+      Édition & sauvegarde inline
+      Gestion flux & planification
 ```
 
 ---
