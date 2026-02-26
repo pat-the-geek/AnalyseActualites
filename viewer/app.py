@@ -12,7 +12,10 @@ from flask import Flask, jsonify, send_file, request, abort, send_from_directory
 app = Flask(__name__)
 
 # La racine du projet est le dossier parent de viewer/
-PROJECT_ROOT = (Path(__file__).parent.parent).resolve()
+# resolve() AVANT parent.parent : __file__ peut être un chemin relatif
+# ('app.py') quand Flask est lancé via `python3 app.py` depuis viewer/,
+# auquel que (Path('app.py').parent.parent).resolve() → cwd au lieu de la racine.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
