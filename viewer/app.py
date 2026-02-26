@@ -57,6 +57,9 @@ def collect_files() -> list:
     scan(PROJECT_ROOT / "data" / "articles", "json")
     scan(PROJECT_ROOT / "data" / "articles-from-rss", "json", "RSS")
     scan(PROJECT_ROOT / "rapports" / "markdown", "markdown")
+    # Fichiers d'exemple (toujours présents tant que data/ et rapports/ sont vides)
+    scan(PROJECT_ROOT / "samples", "json",     "Samples")
+    scan(PROJECT_ROOT / "samples", "markdown", "Samples")
     return sorted(files, key=lambda x: x["modified"], reverse=True)
 
 
