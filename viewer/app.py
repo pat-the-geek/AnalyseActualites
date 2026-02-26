@@ -250,7 +250,9 @@ def api_scheduler():
                 flux_list = json.loads(flux_file.read_text(encoding="utf-8"))
                 for flux in flux_list:
                     title = flux.get("title", "Flux inconnu")
-                    cron = flux.get("cron", "0 6 * * 1")
+                    # Support format plat (cron) et format imbriqué (scheduler.cron)
+                    cron = (flux.get("cron")
+                            or flux.get("scheduler", {}).get("cron", "0 6 * * 1"))
                     flux_dir = PROJECT_ROOT / "data" / "articles" / title
                     last_run = latest_mtime(flux_dir)
                     next_run = next_cron_occurrence(cron, now)
@@ -268,6 +270,55 @@ def api_scheduler():
             break  # Utiliser uniquement le premier fichier de config existant
 
     return jsonify({"tasks": tasks, "now": now.isoformat()})
+
+
+@app.route("/api/keywords", methods=["GET"])
+def api_get_keywords():
+    path = PROJECT_ROOT / "config" / "keyword-to-search.json"
+    if not path.exists():
+        return jsonify([])
+    try:
+        return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return jsonify([])
+
+
+@app.route("/api/keywords", methods=["POST"])
+def api_save_keywords():
+    data = request.get_json(force=True)
+    if not isinstance(data, list):
+        abort(400, "Format invalide : tableau attendu")
+    path = PROJECT_ROOT / "config" / "keyword-to-search.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/flux-sources", methods=["GET"])
+def api_get_flux_sources():
+    path = PROJECT_ROOT / "config" / "flux_json_sources.json"
+    if not path.exists():
+        # Retourner le fichier exemple si disponible
+        example = PROJECT_ROOT / "config" / "flux_json_sources.example.json"
+        if example.exists():
+            try:
+                return jsonify(json.loads(example.read_text(encoding="utf-8")))
+            except json.JSONDecodeError:
+                pass
+        return jsonify([])
+    try:
+        return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return jsonify([])
+
+
+@app.route("/api/flux-sources", methods=["POST"])
+def api_save_flux_sources():
+    data = request.get_json(force=True)
+    if not isinstance(data, list):
+        abort(400, "Format invalide : tableau attendu")
+    path = PROJECT_ROOT / "config" / "flux_json_sources.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True})
 
 
 # ── Serveur frontend React (production) ──────────────────────────────────────
