@@ -192,3 +192,4 @@ Unused-Code/
 viewer/node_modules/
 viewer/dist/
 viewer/package-lock.json
+package-lock.json
