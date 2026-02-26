@@ -18,6 +18,7 @@ This file provides essential context for AI assistants working in this codebase.
 ```
 WUDD.ai/
 ├── scripts/            # Executable Python scripts (entry points)
+├── viewer/             # Local web UI — Flask backend + React frontend
 ├── utils/              # Shared utility modules (importable package)
 ├── config/             # JSON configuration files and logging config
 ├── tests/              # Pytest test suite
@@ -112,13 +113,13 @@ python3 scripts/analyse_thematiques.py
 
 ```bash
 # Build and start the container (runs cron jobs automatically)
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop
-docker-compose down
+docker compose down
 ```
 
 The Docker container installs `archives/crontab` at startup and runs `cron -f` in the foreground.
@@ -158,9 +159,27 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | `utils/api_client.py` | EurIA API client with retry/backoff logic |
 | `utils/http_utils.py` | HTTP session with `urllib3` retry adapter |
 | `utils/date_utils.py` | Multi-format date parsing and validation |
-| `utils/logging.py` | Centralized timestamped logging |
+| `utils/logging.py` | Centralized timestamped logging (`print_console()`) |
 | `utils/cache.py` | File-based TTL cache (24h default, MD5 keys) |
 | `utils/parallel.py` | `ThreadPoolExecutor` wrapper for I/O-bound parallelism |
+
+## Viewer (`viewer/`)
+
+Local web interface for browsing, reading and editing generated JSON/Markdown files.
+
+- **Backend:** Flask (`viewer/app.py`) — REST API for file listing, content, search, scheduler status, flux/keyword config
+- **Frontend:** React 18 + Vite + Tailwind CSS — compiled to `viewer/dist/` for production
+- **Port:** 5050 (Flask / Docker) / 5173 (Vite dev server)
+- **Start (dev):** `bash viewer/start.sh` (from project root)
+- **In Docker:** started automatically by `entrypoint.sh` on port 5050
+
+| Component | Role |
+|---|---|
+| `JsonViewer.jsx` | Syntax-highlighted JSON with inline edit/save |
+| `MarkdownViewer.jsx` | Rendered Markdown with image support |
+| `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
+| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config |
+| `Sidebar.jsx` | File navigation by flux and type |
 
 ### Using Config
 

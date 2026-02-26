@@ -28,6 +28,7 @@ flowchart TD
     ROOT --> DOCKER["Dockerfile + docker-compose.yml"]
 
     ROOT --> SCRIPTS["scripts/"]
+    ROOT --> VIEWER["viewer/"]
     ROOT --> CONFIG["config/"]
     ROOT --> DATA["data/"]
     ROOT --> RAPPORTS["rapports/"]
@@ -59,16 +60,25 @@ flowchart TD
     RAPPORTS --> RM["markdown/\n  <flux>/rapport_sommaire_*.md"]
     RAPPORTS --> RP["pdf/\n  *.pdf"]
 
+    VIEWER --> V1["app.py\nBackend Flask"]
+    VIEWER --> V2["src/\nFrontend React"]
+    VIEWER --> V3["start.sh"]
+
     UTILS --> U1["api_client.py"]
     UTILS --> U2["cache.py"]
     UTILS --> U3["config.py"]
     UTILS --> U4["date_utils.py"]
+    UTILS --> U5["http_utils.py"]
+    UTILS --> U6["logging.py"]
+    UTILS --> U7["parallel.py"]
 
     classDef dir fill:#f5f5f5,stroke:#9e9e9e
     classDef script fill:#e8f5e9,stroke:#388e3c,stroke-width:1px
     classDef config fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
     classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
-    class ROOT,SCRIPTS,CONFIG,DATA,RAPPORTS,DOCS,UTILS,TESTS,ARCHIVES,SAMPLES dir
+    classDef viewer fill:#fff3e0,stroke:#e65100,stroke-width:1px
+    class ROOT,SCRIPTS,CONFIG,DATA,RAPPORTS,DOCS,UTILS,TESTS,ARCHIVES,SAMPLES,VIEWER dir
+    class V1,V2,V3 viewer
     class S1,S2,S3,S4,S5,S6,S7 script
     class C1,C2,C3,C4,C5 config
     class DA,DR,DRW,RM,RP data
@@ -129,7 +139,26 @@ WUDD.ai/
 │   ├── api_client.py
 │   ├── cache.py
 │   ├── config.py
-│   └── date_utils.py
+│   ├── date_utils.py
+│   ├── http_utils.py
+│   ├── logging.py
+│   └── parallel.py
+│
+├── viewer/                               # Interface web locale
+│   ├── app.py                            # Backend Flask (API REST)
+│   ├── requirements.txt                  # flask>=3.0.0
+│   ├── package.json                      # Dépendances React/Vite
+│   ├── start.sh                          # Démarrage dev (Flask + Vite)
+│   └── src/
+│       ├── App.jsx
+│       └── components/
+│           ├── FileViewer.jsx
+│           ├── JsonViewer.jsx
+│           ├── MarkdownViewer.jsx
+│           ├── SearchOverlay.jsx
+│           ├── SettingsPanel.jsx
+│           ├── SchedulerPanel.jsx
+│           └── Sidebar.jsx
 │
 ├── tests/
 │   ├── test_date_utils.py
@@ -144,7 +173,8 @@ WUDD.ai/
 │   ├── SCHEDULER_CRON.md
 │   ├── SECURITY.md
 │   ├── STRUCTURE.md              ← ce fichier
-│   └── SYNTHESE_MULTI_FLUX.md
+│   ├── SYNTHESE_MULTI_FLUX.md
+│   └── Screen-captures/          # Captures d'écran du Viewer
 │
 ├── archives/                             # Sauvegardes horodatées
 ├── samples/                              # Exemples de sorties
