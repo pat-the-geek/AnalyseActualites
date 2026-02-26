@@ -185,6 +185,8 @@ archives/
 *.jpg
 *.jpeg
 *.gif
+# Exception : captures d'écran de documentation
+!docs/Screen-captures/*.png
 Unused-Code/
 .github/
 
