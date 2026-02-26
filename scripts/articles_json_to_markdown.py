@@ -43,11 +43,13 @@ def json_to_markdown(input_file, output_file=None):
                 if isinstance(images, list):
                     for img in images:
                         if isinstance(img, dict) and 'url' in img:
-                            markdown_content.append(f"![]({img['url']})\n")
+                            alt = img.get('alt') or img.get('title') or ''
+                            markdown_content.append(f"![{alt}]({img['url']})\n")
                 # Si c'est un dict (erreur ou image unique)
                 elif isinstance(images, dict):
                     if 'url' in images:
-                        markdown_content.append(f"![]({images['url']})\n")
+                        alt = images.get('alt') or images.get('title') or ''
+                        markdown_content.append(f"![{alt}]({images['url']})\n")
                     elif 'error' in images:
                         markdown_content.append(f"_Image non disponible : {images['error']}_\n")
                 # Si c'est une chaîne (erreur ou url brute)

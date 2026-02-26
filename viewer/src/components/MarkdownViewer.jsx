@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { useMemo } from 'react'
 
 /** Parse le frontmatter YAML entre --- et retourne { meta, body } */
@@ -53,6 +54,7 @@ export default function MarkdownViewer({ content }) {
       {/* Rendu Markdown */}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           h1: ({ children }) => (
             <h1 className="text-2xl font-bold text-slate-100 mt-8 mb-4 pb-2 border-b border-slate-700 first:mt-0">
