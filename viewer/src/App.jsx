@@ -58,6 +58,20 @@ export default function App() {
     document.body.removeChild(a)
   }, [selectedFile])
 
+  const saveContent = useCallback(async (path, newContent) => {
+    const r = await fetch('/api/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content: newContent }),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      throw new Error(err.description || 'Erreur lors de la sauvegarde')
+    }
+    // Mettre à jour le contenu affiché avec la version sauvegardée
+    setFileContent(newContent)
+  }, [])
+
   const filteredFiles = files.filter(f => {
     if (typeFilter !== 'all' && f.type !== typeFilter) return false
     if (nameSearch && !f.name.toLowerCase().includes(nameSearch.toLowerCase())) return false
@@ -117,6 +131,7 @@ export default function App() {
           content={fileContent}
           loading={contentLoading}
           onDownload={downloadFile}
+          onContentSaved={saveContent}
         />
       </div>
 

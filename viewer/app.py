@@ -171,6 +171,34 @@ def api_content():
     return jsonify({"path": path, "content": f.read_text(encoding="utf-8", errors="replace")})
 
 
+@app.route("/api/content", methods=["POST"])
+def api_save_content():
+    data = request.get_json(force=True)
+    if not data or "path" not in data or "content" not in data:
+        abort(400, "Champs 'path' et 'content' requis")
+    rel = data["path"]
+    # Restriction : uniquement data/ et config/ sont modifiables
+    if not (rel.startswith("data/") or rel.startswith("config/")):
+        abort(403, "Modification non autorisée hors de data/ et config/")
+    target = (PROJECT_ROOT / rel).resolve()
+    if not str(target).startswith(str(PROJECT_ROOT) + "/"):
+        abort(403, "Accès refusé")
+    if not target.exists():
+        abort(404, "Fichier non trouvé")
+    # Validation JSON si extension .json
+    content = data["content"]
+    if target.suffix == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as e:
+            abort(400, f"JSON invalide : {e}")
+    try:
+        target.write_text(content, encoding="utf-8")
+    except OSError as e:
+        abort(500, f"Erreur d'écriture : {e}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/search")
 def api_search():
     q = request.args.get("q", "").strip()
