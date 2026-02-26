@@ -54,10 +54,11 @@ def collect_files() -> list:
                 except OSError:
                     continue
 
-    scan(PROJECT_ROOT / "data" / "articles", "json")
-    scan(PROJECT_ROOT / "data" / "articles-from-rss", "json", "RSS")
-    scan(PROJECT_ROOT / "rapports" / "markdown", "markdown")
-    # Fichiers d'exemple (toujours présents tant que data/ et rapports/ sont vides)
+    # Scan large de data/ : couvre articles/, articles-from-rss/, et toute
+    # autre structure que l'utilisateur pourrait avoir sous data/
+    scan(PROJECT_ROOT / "data", "json")
+    scan(PROJECT_ROOT / "rapports", "markdown")
+    # Fichiers d'exemple (visibles tant que data/ et rapports/ sont vides)
     scan(PROJECT_ROOT / "samples", "json",     "Samples")
     scan(PROJECT_ROOT / "samples", "markdown", "Samples")
     return sorted(files, key=lambda x: x["modified"], reverse=True)
