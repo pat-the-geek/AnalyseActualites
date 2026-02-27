@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Download, FileText, Calendar, HardDrive, ChevronRight, Images } from 'lucide-react'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 
@@ -192,6 +192,31 @@ function Lightbox({ images, index, onClose, onNav }) {
 }
 
 export default function FileViewer({ file, content, loading, onDownload, onContentSaved }) {
+  const scrollRef = useRef(null)
+  const imagesRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  // Écoute le scroll du conteneur principal (re-attaché à chaque changement de fichier)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => setScrollTop(el.scrollTop)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [file])
+
+  // Remet le scroll à 0 lors d'un changement de fichier
+  useEffect(() => { setScrollTop(0) }, [file])
+
+  // Détecte si le JSON contient des images (même logique qu'ImageGallery)
+  const hasImages = useMemo(() => {
+    if (!content || file?.type !== 'json') return false
+    return extractImages(content).length > 0
+  }, [content, file])
+
+  const scrollToTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  const scrollToImages = () => imagesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
   if (!file) {
     return (
       <main className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-900 select-none">
@@ -209,7 +234,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   const pathParts = file.path.split('/')
 
   return (
-    <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900">
+    <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900 relative">
       {/* ── Barre de fichier ── */}
       <div className="flex items-center gap-3 px-5 py-2.5 bg-white/70 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {/* Fil d'Ariane */}
@@ -254,7 +279,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
       </div>
 
       {/* ── Contenu ── */}
-      <div className="flex-1 overflow-auto p-6">
+      <div ref={scrollRef} className="flex-1 overflow-auto p-6">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 dark:text-slate-500">
             <div className="w-5 h-5 border-2 border-slate-300 dark:border-slate-600 border-t-blue-500 rounded-full animate-spin" />
@@ -270,12 +295,33 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
                 onSave={onContentSaved ? (newContent) => onContentSaved(file.path, newContent) : undefined}
               />
             </div>
-            <ImageGallery content={content} />
+            <div ref={imagesRef}><ImageGallery content={content} /></div>
           </>
         ) : (
           <MarkdownViewer content={content} />
         )}
       </div>
+      {/* ── Boutons de navigation flottants ── */}
+      {scrollTop > 50 && (
+        <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
+          {hasImages && (
+            <button
+              onClick={scrollToImages}
+              title="Aller aux images"
+              className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-blue-500/20 transition-all"
+            >
+              <Images size={16} />
+            </button>
+          )}
+          <button
+            onClick={scrollToTop}
+            title="Retour en haut"
+            className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-blue-500/20 transition-all"
+          >
+            <ArrowUp size={16} />
+          </button>
+        </div>
+      )}
     </main>
   )
 }
