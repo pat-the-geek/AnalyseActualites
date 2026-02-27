@@ -44,7 +44,7 @@
 
 WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de sources RSS/JSON gérées via Reeder, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
 
-Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
+Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. Un extracteur d'**entités nommées (NER)** peut enrichir a posteriori l'ensemble des articles existants en identifiant automatiquement personnes, organisations, pays, produits, événements, montants, etc. (18 types au total). L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
 
 L'automatisation complète est assurée par un orchestrateur Docker utilisant des tâches cron internes au conteneur : collecte hebdomadaire des articles, extraction quotidienne par mot-clé, et surveillance régulière de la santé du service. Aucune dépendance n'est requise côté hôte. La configuration des flux, catégories et prompts repose sur des fichiers JSON éditables dans `config/`, et l'ajout d'une nouvelle source de veille ne nécessite qu'une ligne de configuration supplémentaire.
 
@@ -69,6 +69,10 @@ mindmap
       Surveillance quotidienne
       Rapport JSON + résumé IA
       Configurable dans config/
+    Entités nommées (NER)
+      18 types (PERSON, ORG, GPE…)
+      Enrichissement a posteriori
+      Intégré aux flux & mots-clés
     Automatisation Docker
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
@@ -104,6 +108,7 @@ WUDD.ai/
 │   ├── analyse_thematiques.py                    # Analyse sociétale
 │   ├── scheduler_articles.py                     # Scheduler multi-flux
 │   ├── get-keyword-from-rss.py                   # Extraction par mot-clé
+│   ├── enrich_entities.py                        # Enrichissement NER (entités nommées)
 │   └── check_cron_health.py                      # Monitoring cron
 ├── config/            # Sources, catégories, prompts, thématiques
 ├── data/              # Articles JSON générés (par flux)
@@ -198,7 +203,7 @@ Traite automatiquement tous les flux définis dans `config/flux_json_sources.jso
 python3 scripts/get-keyword-from-rss.py
 ```
 
-Génère un fichier JSON dans `data/articles-from-rss/` pour chaque mot-clé configuré, avec résumé IA et images principales.
+Génère un fichier JSON dans `data/articles-from-rss/` pour chaque mot-clé configuré, avec résumé IA, images principales et entités nommées.
 
 #### Filtrage avancé OR / AND dans `config/keyword-to-search.json`
 
@@ -217,6 +222,39 @@ Chaque entrée du fichier accepte deux collections optionnelles pour affiner la 
 ```
 
 > Les mots des collections `or` et `and` utilisent une correspondance par **frontière de mot** (`\b` regex) pour éviter les faux positifs (ex. `AI` ne matche pas `semaine`).
+
+### Enrichissement NER (entités nommées)
+
+```bash
+# Enrichir tous les articles (flux + mots-clés)
+python3 scripts/enrich_entities.py
+
+# Un flux spécifique uniquement
+python3 scripts/enrich_entities.py --flux Intelligence-artificielle
+
+# Simulation sans appel API ni écriture
+python3 scripts/enrich_entities.py --dry-run
+```
+
+Ajoute un champ `entities` à chaque article possédant un champ `Résumé`, en interrogeant l'API EurIA. Le champ contient un dictionnaire de 18 types d'entités nommées :
+
+| Types | Exemples |
+|---|---|
+| `PERSON`, `ORG`, `GPE` | personnes, organisations, pays/villes |
+| `PRODUCT`, `EVENT`, `LAW` | produits, événements, textes de loi |
+| `DATE`, `MONEY`, `PERCENT` | dates, montants, pourcentages |
+| `LOC`, `FAC`, `NORP`, `WORK_OF_ART` | lieux, bâtiments, groupes, œuvres |
+
+```json
+"entities": {
+  "PERSON": ["Sam Altman"],
+  "ORG": ["OpenAI", "Infomaniak"],
+  "GPE": ["États-Unis"],
+  "PRODUCT": ["Qwen3"]
+}
+```
+
+Les articles déjà enrichis sont ignorés (sauf avec `--force`). La sauvegarde est atomique : écriture dans un `.tmp` puis remplacement. Voir [scripts/USAGE.md](scripts/USAGE.md) pour la liste complète des arguments.
 
 ### Radar thématique
 

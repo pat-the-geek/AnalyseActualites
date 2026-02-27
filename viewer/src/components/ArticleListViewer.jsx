@@ -122,7 +122,7 @@ function ArticleCard({ article, index, highlight }) {
     <article className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       {imgUrl && (
         <div className="h-40 overflow-hidden bg-slate-100 dark:bg-slate-900">
-          <img src={imgUrl} alt={titre || article['Sources'] ?? ''} className="w-full h-full object-cover"
+          <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover"
             loading="lazy" onError={e => { e.currentTarget.parentElement.style.display = 'none' }} />
         </div>
       )}

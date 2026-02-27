@@ -99,6 +99,15 @@ python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py \
 # Run the multi-flux scheduler (processes all configured fluxes)
 python3 scripts/scheduler_articles.py
 
+# Enrich existing articles with named entities (NER) — all sources
+python3 scripts/enrich_entities.py
+
+# Enrich a specific flux only
+python3 scripts/enrich_entities.py --flux Intelligence-artificielle
+
+# Dry-run (no API call, no save)
+python3 scripts/enrich_entities.py --dry-run
+
 # Convert an articles JSON file to Markdown report
 python3 scripts/articles_json_to_markdown.py data/articles/MyFlux/articles_generated_2026-02-01_2026-02-28.json
 
@@ -143,6 +152,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `get-keyword-from-rss.py` | Daily keyword extraction from OPML RSS | (none; reads `config/keyword-to-search.json`) |
 | `articles_json_to_markdown.py` | JSON articles → Markdown report | positional path to JSON file |
 | `analyse_thematiques.py` | Thematic classification statistics | (none; reads `data/articles/`) |
+| `enrich_entities.py` | Enrich existing articles with named entities (NER) | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Keyword-based report generation | (none) |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
@@ -156,7 +166,7 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | Module | Purpose |
 |---|---|
 | `utils/config.py` | Singleton `Config` class — loads `.env`, validates vars, provides typed paths |
-| `utils/api_client.py` | EurIA API client with retry/backoff logic |
+| `utils/api_client.py` | EurIA API client with retry/backoff logic — `generate_summary()`, `generate_entities()` (NER), `generate_report()` |
 | `utils/http_utils.py` | HTTP session with `urllib3` retry adapter |
 | `utils/date_utils.py` | Multi-format date parsing and validation |
 | `utils/logging.py` | Centralized timestamped logging (`print_console()`) |
@@ -247,12 +257,20 @@ rapports/
     "Résumé": "20-line AI-generated summary in French",
     "Images": [
       {"URL": "https://...", "Width": 1200}
-    ]
+    ],
+    "entities": {
+      "PERSON": ["Emmanuel Macron"],
+      "ORG": ["OpenAI", "Infomaniak"],
+      "GPE": ["France", "Paris"],
+      "PRODUCT": ["ChatGPT"]
+    }
   }
 ]
 ```
 
 Images are filtered to width > 500px (up to 3 per article).
+
+The `entities` field is optional — added by `enrich_entities.py` or `get-keyword-from-rss.py`. It uses 18 NER category types (PERSON, ORG, GPE, LOC, PRODUCT, EVENT, DATE, MONEY, etc.). Absent from older articles until enriched.
 
 ---
 
