@@ -4,11 +4,101 @@ Fournit une interface robuste pour envoyer des prompts à l'API EurIA
 avec retry automatique et gestion d'erreurs avancée.
 """
 
+import json
+import re
 import time
 import requests
 from typing import Optional
 from .logging import default_logger
 from .config import get_config
+
+# ── Extraction d'entités nommées (NER) ───────────────────────────────────────
+
+_PROMPT_ENTITIES = """Tu es un extracteur d'entités nommées (NER). Analyse le texte suivant et extrait toutes les entités nommées.
+
+Retourne UNIQUEMENT un objet JSON valide, sans aucun commentaire ni texte avant ou après.
+Omets les catégories qui ne contiennent aucune entité.
+Chaque valeur est un tableau de chaînes dédupliquées.
+
+Catégories :
+- PERSON : personnes physiques nommées
+- NORP : nationalités, groupes religieux ou politiques
+- ORG : organisations, entreprises, institutions
+- GPE : pays, villes, régions géopolitiques
+- LOC : lieux géographiques non géopolitiques
+- FAC : bâtiments, aéroports, monuments nommés
+- PRODUCT : produits, services, technologies nommés
+- EVENT : événements nommés (conférences, sommets, crises…)
+- WORK_OF_ART : titres d'œuvres (livres, films, rapports…)
+- LAW : lois, règlements, articles de loi nommés
+- LANGUAGE : langues nommées
+- DATE : dates et périodes explicites
+- TIME : heures et moments de la journée
+- PERCENT : pourcentages et fractions
+- MONEY : montants monétaires
+- QUANTITY : quantités mesurables
+- ORDINAL : ordinaux (premier, troisième…)
+- CARDINAL : nombres cardinaux significatifs
+
+Texte à analyser :
+{resume}"""
+
+_ENTITY_TYPES = [
+    "PERSON", "NORP", "ORG", "GPE", "LOC", "FAC",
+    "PRODUCT", "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE",
+    "DATE", "TIME", "PERCENT", "MONEY", "QUANTITY", "ORDINAL", "CARDINAL",
+]
+
+
+def _parse_entities_response(raw: str) -> dict:
+    """Extrait un dict d'entités depuis une réponse brute de l'API.
+
+    Gère les blocs ```json … ```, les balises <think>…</think> (Qwen3)
+    et les réponses contenant du texte parasite autour du JSON.
+    Retourne {} si l'extraction échoue.
+    """
+    # Supprimer les blocs <think>…</think>
+    text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE).strip()
+
+    # Extraire le contenu d'un bloc ```json … ``` ou ``` … ```
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if fence:
+        text = fence.group(1).strip()
+
+    # Tentative de parsing direct
+    try:
+        raw_entities = json.loads(text)
+    except json.JSONDecodeError:
+        # Dernier recours : extraire le premier objet JSON du texte
+        obj_match = re.search(r"\{[\s\S]*\}", text)
+        if not obj_match:
+            default_logger.warning("Impossible d'extraire du JSON depuis la réponse NER")
+            return {}
+        try:
+            raw_entities = json.loads(obj_match.group(0))
+        except json.JSONDecodeError:
+            default_logger.warning("JSON NER invalide après extraction")
+            return {}
+
+    if not isinstance(raw_entities, dict):
+        return {}
+
+    # Normaliser : garder uniquement les types connus, dédupliquer
+    result = {}
+    for etype in _ENTITY_TYPES:
+        values = raw_entities.get(etype, [])
+        if not isinstance(values, list):
+            continue
+        seen: set[str] = set()
+        dedup = []
+        for v in values:
+            if isinstance(v, str) and v.strip() and v.strip() not in seen:
+                seen.add(v.strip())
+                dedup.append(v.strip())
+        if dedup:
+            result[etype] = dedup
+
+    return result
 
 
 class EurIAClient:
@@ -201,6 +291,32 @@ class EurIAClient:
         )
         return self.ask(prompt, timeout=timeout)
     
+    def generate_entities(
+        self,
+        resume: str,
+        timeout: int = 60
+    ) -> dict:
+        """Extrait les entités nommées (NER) d'un texte via l'API IA.
+
+        Args:
+            resume: Texte à analyser (typiquement le champ "Résumé" d'un article)
+            timeout: Timeout en secondes (défaut : 60)
+
+        Returns:
+            Dictionnaire { type_entité: [valeur, …] }.
+            Retourne {} silencieusement en cas d'échec (ne bloque pas le pipeline).
+        """
+        if not resume or not isinstance(resume, str) or not resume.strip():
+            return {}
+
+        prompt = _PROMPT_ENTITIES.format(resume=resume.strip())
+        try:
+            raw = self.ask(prompt, max_attempts=3, timeout=timeout, max_tokens=800)
+            return _parse_entities_response(raw)
+        except Exception as e:
+            default_logger.warning(f"Extraction NER échouée : {e}")
+            return {}
+
     def generate_report(
         self,
         json_content: str,

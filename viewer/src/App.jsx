@@ -3,7 +3,9 @@ import Sidebar from './components/Sidebar'
 import FileViewer from './components/FileViewer'
 import SearchOverlay from './components/SearchOverlay'
 import SettingsPanel from './components/SettingsPanel'
-import { Search, Settings, Sun, Moon, Monitor } from 'lucide-react'
+import EntitySearchModal from './components/EntitySearchModal'
+import EntityDashboard from './components/EntityDashboard'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2 } from 'lucide-react'
 
 const THEME_OPTIONS = [
   { key: 'jour', Icon: Sun,     title: 'Jour' },
@@ -31,6 +33,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [typeFilter, setTypeFilter] = useState('all')
   const [nameSearch, setNameSearch] = useState('')
+  const [entitySearch, setEntitySearch] = useState(null) // { value, type } | null
+  const [dashboardOpen, setDashboardOpen] = useState(false)
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -146,6 +150,16 @@ export default function App() {
           ))}
         </div>
 
+        {/* Dashboard entités */}
+        <button
+          onClick={() => setDashboardOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Dashboard des entités nommées"
+        >
+          <BarChart2 size={13} />
+          <span className="hidden sm:inline">Entités</span>
+        </button>
+
         {/* Réglages */}
         <button
           onClick={() => setSettingsOpen(true)}
@@ -186,6 +200,7 @@ export default function App() {
           loading={contentLoading}
           onDownload={downloadFile}
           onContentSaved={saveContent}
+          onEntitySearch={(value, type) => setEntitySearch({ value, type })}
         />
       </div>
 
@@ -198,6 +213,27 @@ export default function App() {
       )}
       {settingsOpen && (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
+      )}
+      {dashboardOpen && (
+        <EntityDashboard
+          onClose={() => setDashboardOpen(false)}
+          onEntitySearch={(value, type) => {
+            setDashboardOpen(false)
+            setEntitySearch({ value, type })
+          }}
+        />
+      )}
+      {entitySearch && (
+        <EntitySearchModal
+          query={entitySearch.value}
+          entityType={entitySearch.type}
+          onClose={() => setEntitySearch(null)}
+          onSelectFile={(file) => {
+            const full = files.find(f => f.path === file.path) ?? file
+            selectFile(full)
+            setEntitySearch(null)
+          }}
+        />
       )}
     </div>
   )

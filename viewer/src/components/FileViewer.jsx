@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp } from 'lucide-react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp, Tag, Braces, LayoutList } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
+import EntityPanel from './EntityPanel'
+import ArticleListViewer from './ArticleListViewer'
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} o`
@@ -191,10 +193,12 @@ function Lightbox({ images, index, onClose, onNav }) {
   )
 }
 
-export default function FileViewer({ file, content, loading, onDownload, onContentSaved }) {
+export default function FileViewer({ file, content, loading, onDownload, onContentSaved, onEntitySearch }) {
   const scrollRef = useRef(null)
+  const entitiesRef = useRef(null)
   const imagesRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
+  const [viewMode, setViewMode] = useState('json') // 'json' | 'articles'
 
   // Écoute le scroll du conteneur principal (re-attaché à chaque changement de fichier)
   useEffect(() => {
@@ -205,16 +209,36 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
     return () => el.removeEventListener('scroll', onScroll)
   }, [file])
 
-  // Remet le scroll à 0 lors d'un changement de fichier
-  useEffect(() => { setScrollTop(0) }, [file])
+  // Remet le scroll à 0 et la vue JSON lors d'un changement de fichier
+  useEffect(() => { setScrollTop(0); setViewMode('json') }, [file])
 
-  // Détecte si le JSON contient des images (même logique qu'ImageGallery)
+  // Détecte si le JSON contient des images
   const hasImages = useMemo(() => {
     if (!content || file?.type !== 'json') return false
     return extractImages(content).length > 0
   }, [content, file])
 
+  // Détecte si le JSON contient des entités nommées
+  const hasEntities = useMemo(() => {
+    if (!content || file?.type !== 'json') return false
+    try {
+      const data = JSON.parse(content)
+      const articles = Array.isArray(data) ? data : [data]
+      return articles.some(a => a?.entities && Object.keys(a.entities).length > 0)
+    } catch { return false }
+  }, [content, file])
+
+  // Détecte si le JSON est un tableau d'articles (champ "Résumé" présent)
+  const isArticleArray = useMemo(() => {
+    if (!content || file?.type !== 'json') return false
+    try {
+      const data = JSON.parse(content)
+      return Array.isArray(data) && data.length > 0 && 'Résumé' in data[0]
+    } catch { return false }
+  }, [content, file])
+
   const scrollToTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  const scrollToEntities = () => entitiesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   const scrollToImages = () => imagesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   if (!file) {
@@ -268,6 +292,34 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
           </span>
         </div>
 
+        {/* Toggle JSON / Articles (uniquement pour les tableaux d'articles) */}
+        {isArticleArray && (
+          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode('json')}
+              title="Vue JSON brut"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+                viewMode === 'json'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Braces size={12} /> JSON
+            </button>
+            <button
+              onClick={() => setViewMode('articles')}
+              title="Vue articles annotés"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+                viewMode === 'articles'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <LayoutList size={12} /> Articles
+            </button>
+          </div>
+        )}
+
         {/* Bouton télécharger */}
         <button
           onClick={onDownload}
@@ -288,15 +340,20 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
         ) : content === null ? (
           <div className="text-slate-400 dark:text-slate-500 text-sm">Contenu indisponible</div>
         ) : file.type === 'json' ? (
-          <>
-            <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-6 border border-slate-200 dark:border-slate-800/60">
-              <JsonViewer
-                content={content}
-                onSave={onContentSaved ? (newContent) => onContentSaved(file.path, newContent) : undefined}
-              />
-            </div>
-            <div ref={imagesRef}><ImageGallery content={content} /></div>
-          </>
+          viewMode === 'articles' && isArticleArray ? (
+            <ArticleListViewer content={content} />
+          ) : (
+            <>
+              <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-6 border border-slate-200 dark:border-slate-800/60">
+                <JsonViewer
+                  content={content}
+                  onSave={onContentSaved ? (newContent) => onContentSaved(file.path, newContent) : undefined}
+                />
+              </div>
+              <div ref={entitiesRef}><EntityPanel content={content} onEntitySearch={onEntitySearch} /></div>
+              <div ref={imagesRef}><ImageGallery content={content} /></div>
+            </>
+          )
         ) : (
           <MarkdownViewer content={content} />
         )}
@@ -311,6 +368,15 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
               className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-blue-500/20 transition-all"
             >
               <Images size={16} />
+            </button>
+          )}
+          {hasEntities && (
+            <button
+              onClick={scrollToEntities}
+              title="Aller aux entités nommées"
+              className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-violet-500/20 transition-all"
+            >
+              <Tag size={16} />
             </button>
           )}
           <button

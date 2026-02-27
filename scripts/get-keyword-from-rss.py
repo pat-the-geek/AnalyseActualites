@@ -131,15 +131,20 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 text = fetch_and_extract_text(link)
                 print_console(f"      Génération du résumé IA...")
                 resume = api_client.generate_summary(text, max_lines=20)
+                print_console(f"      Extraction des entités nommées...")
+                entities = api_client.generate_entities(resume)
                 print_console(f"      Extraction de l'image principale...")
                 images = extract_top_n_largest_images(link, n=1, min_width=500)
                 article = {
+                    "Titre": title,
                     "Date de publication": pub_date,
                     "Sources": feed_title,
                     "URL": link,
                     "Résumé": resume,
-                    "Images": images
+                    "Images": images,
                 }
+                if entities:
+                    article["entities"] = entities
                 results[kw][link] = article
                 print_console(f"      ✓ Article ajouté pour '{kw}'.")
     except Exception as e:

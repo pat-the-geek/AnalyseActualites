@@ -289,7 +289,15 @@ def main():
                 timeout=config.timeout_resume
             )
             cache.set(resume_cache_key, resume)
-        
+
+        # Extraire les entités nommées (avec cache)
+        entities_cache_key = f"entities:{url}:{date_published}"
+        entities = cache.get(entities_cache_key, ttl=604800)  # 7 jours
+        if not entities:
+            entities = api_client.generate_entities(resume, timeout=60)
+            if entities:
+                cache.set(entities_cache_key, entities)
+
         # Extraire la source
         authors = item.get('authors', [])
         if authors and isinstance(authors, list) and len(authors) > 0:
@@ -302,13 +310,17 @@ def main():
         
         print_console(f"[{i}/{len(filtered_items)}] {source}: {len(resume)} car. | {len(images) if isinstance(images, list) else 0} images", level="debug")
         
-        articles_data.append({
+        article = {
+            "Titre": item.get('title', ''),
             "Date de publication": date_published,
             "Sources": source,
             "URL": url,
             "Résumé": resume,
-            "Images": images
-        })
+            "Images": images,
+        }
+        if entities:
+            article["entities"] = entities
+        articles_data.append(article)
     
     # Sauvegarde des résultats dans un fichier JSON (dans le sous-répertoire du flux)
     file_output = output_dir / f"articles_generated_{date_debut}_{date_fin}.json"

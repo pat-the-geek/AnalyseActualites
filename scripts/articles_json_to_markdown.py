@@ -34,9 +34,27 @@ def json_to_markdown(input_file, output_file=None):
 
         markdown_content = []
         for article in articles:
-            markdown_content.append(f"## {article.get('Sources', 'Source inconnue')} - {article.get('Date de publication', '')}\n")
+            titre = article.get('Titre', '').strip()
+            source_line = f"{article.get('Sources', 'Source inconnue')} - {article.get('Date de publication', '')}"
+            markdown_content.append(f"## {titre if titre else source_line}\n")
+            if titre:
+                markdown_content.append(f"*{source_line}*\n\n")
             markdown_content.append(f"**URL**: {article.get('URL', '')}\n\n")
             markdown_content.append(f"**Résumé**:\n{article.get('Résumé', '')}\n\n")
+
+            # Entités nommées
+            entities = article.get('entities')
+            if entities and isinstance(entities, dict):
+                entity_lines = []
+                for etype, values in entities.items():
+                    if isinstance(values, list) and values:
+                        entity_lines.append(f"**{etype}** : {', '.join(values)}")
+                if entity_lines:
+                    markdown_content.append("**Entités nommées** :\n")
+                    for line in entity_lines:
+                        markdown_content.append(f"- {line}\n")
+                    markdown_content.append("\n")
+
             images = article.get('Images')
             if images:
                 # Si c'est une liste d'images
