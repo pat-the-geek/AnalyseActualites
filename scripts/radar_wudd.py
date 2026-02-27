@@ -159,23 +159,154 @@ def call_api(client: EurIAClient, corpus_t0, corpus_t1, t0_label, t1_label, t0_c
         else:
             raise ValueError(f"Pas de JSON valide dans la reponse: {raw[:300]}")
 
-    # Calcul de freq (= freqT0) et vel normalisée côté Python
+    # Calcul de freq (= freqT0) et vel côté Python
+    # Toujours recalculer vel : Qwen3 renvoie souvent 0.5 pour tous les thèmes
+    # quand le corpus T1 est trop petit pour discriminer les vélocités.
     for item in items:
         ft0 = float(item.get("freqT0", item.get("freq", 0.05)))
         ft1 = float(item.get("freqT1", 0.05))
-        # Assurer que freq est bien freqT0
         item["freq"] = ft0
         item["freqT0"] = ft0
         item["freqT1"] = ft1
-        # Recalculer vel si freq=0 (modèle n'a pas suivi les règles)
-        if "vel" not in item or item["vel"] == 0.0:
-            if ft1 == 0:
-                item["vel"] = 0.8 if ft0 > 0.1 else 0.5
-            else:
-                ratio = ft0 / ft1
-                item["vel"] = min(1.0, max(0.0, 0.5 + (ratio - 1.0) * 0.3))
+        if ft1 == 0:
+            item["vel"] = 0.8 if ft0 > 0.1 else 0.5
+        else:
+            ratio = ft0 / ft1
+            # Multiplicateur 1.5 pour amplifier les petites différences de ratio
+            item["vel"] = min(1.0, max(0.0, 0.5 + (ratio - 1.0) * 1.5))
+
+    # Normalisation par rang : garantit que vel couvre [0.1, 0.9]
+    # même quand tous les ratios freqT0/freqT1 sont proches de 1.0
+    sorted_by_vel = sorted(items, key=lambda x: x["vel"])
+    n = len(sorted_by_vel)
+    if n > 1:
+        for i, item in enumerate(sorted_by_vel):
+            item["vel"] = round(0.1 + 0.8 * i / (n - 1), 3)
 
     return items
+
+# ─── GÉNÉRATION MERMAID ───────────────────────────────────────────────────────
+
+def _get_quadrant(item):
+    freq = float(item.get("freq", item.get("freqT0", 0.05)))
+    vel  = float(item.get("vel", 0.5))
+    if freq >= 0.5 and vel >= 0.5: return "d"
+    if freq <  0.5 and vel >  0.5: return "e"
+    if freq >= 0.5 and vel <  0.5: return "h"
+    return "x"
+
+
+def _top_by_quadrant(results, n=10, min_dist=0.0):
+    """Top N par quadrant, trié par freq décroissant.
+    Si min_dist > 0, filtre les points trop proches (distance euclidienne) pour
+    éviter les chevauchements dans les rendus statiques (Mermaid).
+    """
+    groups = {"d": [], "e": [], "h": [], "x": []}
+    for item in results:
+        groups[_get_quadrant(item)].append(item)
+    out = []
+    for q in ("d", "e", "h", "x"):
+        candidates = sorted(groups[q], key=lambda x: x.get("freq", 0), reverse=True)
+        if min_dist <= 0:
+            out.extend(candidates[:n])
+        else:
+            selected = []
+            for c in candidates:
+                cx = float(c.get("freq", 0.05))
+                cy = float(c.get("vel", 0.5))
+                too_close = any(
+                    ((cx - float(s.get("freq", 0.05))) ** 2
+                     + (cy - float(s.get("vel", 0.5))) ** 2) ** 0.5 < min_dist
+                    for s in selected
+                )
+                if not too_close:
+                    selected.append(c)
+                if len(selected) >= n:
+                    break
+            out.extend(selected)
+    return out
+
+
+def _spread_vel(items):
+    """Redistribue les coordonnées vel par rang dans chaque quadrant.
+    Préserve l'ordre relatif mais étale les points sur toute la hauteur du quadrant,
+    évitant le cas où l'API renvoie des vel très proches (tous sur la même ligne).
+    Stocke le résultat dans _dvel (display vel) sans modifier la donnée originale.
+    """
+    MARGIN = 0.07
+    by_q = {"d": [], "e": [], "h": [], "x": []}
+    for item in items:
+        by_q[_get_quadrant(item)].append(item)
+    for q, group in by_q.items():
+        if not group:
+            continue
+        vel_lo = 0.5 + MARGIN if q in ("d", "e") else MARGIN
+        vel_hi = 1.0 - MARGIN if q in ("d", "e") else 0.5 - MARGIN
+        group.sort(key=lambda x: x.get("vel", 0.5))
+        n = len(group)
+        for i, item in enumerate(group):
+            item["_dvel"] = round(
+                vel_lo if n == 1 else vel_lo + (vel_hi - vel_lo) * i / (n - 1), 2
+            )
+
+
+def generate_mermaid(results, meta, total_n=10):
+    """Génère un bloc Mermaid quadrantChart à partir des résultats du radar.
+    total_n : nombre total de thèmes à afficher (répartis équitablement entre quadrants).
+    Sélection : ceil(total_n/4) candidats par quadrant avec espacement min 0.12,
+    puis top total_n globaux par freq pour atteindre exactement le quota.
+    """
+    # Récupère tous les thèmes disponibles par quadrant (sans filtre de distance)
+    # puis prend les total_n meilleurs globalement par freq.
+    candidates = _top_by_quadrant(results, n=total_n, min_dist=0.0)
+    top = sorted(candidates, key=lambda x: x.get("freq", 0), reverse=True)[:total_n]
+    _spread_vel(top)
+
+    lines = [
+        "# Radar Thématique WUDD.ai",
+        "",
+        f"**T0 :** {meta.get('t0_label', '')} — {meta.get('t0_count', 0)} articles  ",
+        f"**T1 :** {meta.get('t1_label', '')} — {meta.get('t1_count', 0)} articles  ",
+        f"**Total :** {meta.get('total', 0)} articles · Généré le {meta.get('generated', '')}",
+        "",
+        "```mermaid",
+        "quadrantChart",
+        f"    title Radar WUDD.ai — {meta.get('t0_label', '')}",
+        "    x-axis Rare --> Frequent",
+        "    y-axis Declin --> Hausse",
+        "    quadrant-1 Dominants",
+        "    quadrant-2 Emergents",
+        "    quadrant-3 Declinants",
+        "    quadrant-4 Habituels",
+    ]
+    for item in top:
+        vel_raw = float(item.get("vel", 0.5))
+        arrow   = "+" if vel_raw > 0.55 else ("--" if vel_raw < 0.45 else "=")
+        name    = f"{item.get('theme', '?')} {arrow}"
+        freq    = max(0.01, min(0.99, round(float(item.get("freq", 0.05)), 2)))
+        vel     = max(0.01, min(0.99, item.get("_dvel", round(vel_raw, 2))))
+        lines.append(f"    {name}: [{freq}, {vel}]")
+
+    lines += [
+        "```",
+        "",
+        "| Thème | Quadrant | Freq T0 | Freq T1 | Vélocité | Articles |",
+        "|---|---|---|---|---|---|",
+    ]
+    ql = {"d": "Dominant", "e": "Emergent", "h": "Habituel", "x": "Déclinant"}
+    for item in top:
+        q    = _get_quadrant(item)
+        vel_pct = f"{(item.get('vel', 0.5) - 0.5) * 200:+.0f}%"
+        lines.append(
+            f"| {item.get('theme')} | {ql[q]} "
+            f"| {item.get('freqT0', 0):.0%} "
+            f"| {item.get('freqT1', 0):.0%} "
+            f"| {vel_pct} "
+            f"| {item.get('art', 0)} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
 
 # ─── GÉNÉRATION HTML ──────────────────────────────────────────────────────────
 
@@ -312,7 +443,19 @@ const cardsEl = document.getElementById("cards");
   cardsEl.appendChild(el);
 }});
 
-const sorted = [...RESULTS].sort((a,b) => {{
+function topByQuadrant(arr, n) {{
+  const groups = {{d:[],e:[],h:[],x:[]}};
+  arr.forEach(d => groups[getQ(d)].push(d));
+  const out = [];
+  ["d","e","h","x"].forEach(q => {{
+    groups[q].sort((a,b) => b.freq-a.freq);
+    out.push(...groups[q].slice(0,n));
+  }});
+  return out;
+}}
+const TOP_N = 10;
+const TOP_RESULTS = topByQuadrant(RESULTS, TOP_N);
+const sorted = [...TOP_RESULTS].sort((a,b) => {{
   const o = {{d:0,e:1,h:2,x:3}};
   return o[getQ(a)]-o[getQ(b)] || b.freq-a.freq;
 }});
@@ -329,7 +472,7 @@ sorted.forEach(d => {{
 }});
 
 document.getElementById("status-msg").textContent =
-  RESULTS.length + " themes analyses · T0=" + META.t0_label + " · T1=" + META.t1_label + " · " + META.total + " articles · genere le {meta['generated']}";
+  TOP_RESULTS.length + "/" + RESULTS.length + " themes affiches (top " + TOP_N + "/quadrant) · T0=" + META.t0_label + " · T1=" + META.t1_label + " · " + META.total + " articles · genere le {meta['generated']}";
 
 const svg = document.getElementById("chart");
 const tip = document.getElementById("tooltip");
@@ -383,7 +526,7 @@ function draw() {{
   qlabel(pl+7, my+13, "Declinants", "#f76a7c");
   qlabel(mx+7, my+13, "Habituels",  "#6af7b8");
 
-  RESULTS.forEach(d => {{
+  TOP_RESULTS.forEach(d => {{
     const q=getQ(d), c=QC[q];
     const x=tx(d.freq), y=ty(d.vel);
     const r = Math.max(4, Math.min(4+(d.art||1)*0.45, 13));
@@ -486,6 +629,11 @@ def main():
     now = datetime.now()
     t0_label = now.strftime("%B %Y")
     t1_label = f"{oldest.strftime('%d/%m')} -> {week_end.strftime('%d/%m/%Y')}"
+
+    # Plage de dates réelles du corpus T0 pour le nommage des fichiers
+    t0_dates = [a["_dt"] for a in t0 if "_dt" in a]
+    t0_start = min(t0_dates).strftime("%Y-%m-%d") if t0_dates else now.strftime("%Y-%m-01")
+    t0_end   = max(t0_dates).strftime("%Y-%m-%d") if t0_dates else now.strftime("%Y-%m-%d")
     print_console(f"      T0 ({t0_label}): {len(t0)} articles", level="info")
     print_console(f"      T1 ({t1_label}): {len(t1)} articles", level="info")
 
@@ -520,12 +668,24 @@ def main():
         "generated": now.strftime("%d/%m/%Y %H:%M"),
     }
 
-    print_console(f"[4/4] Génération HTML → {output_path} ...", level="info")
+    print_console(f"[4/4] Génération des sorties → {output_path.parent} ...", level="info")
+
     html = generate_html(results, meta)
     output_path.write_text(html, encoding="utf-8")
     size_kb = output_path.stat().st_size // 1024
-    print_console(f"      {size_kb} KB écrits", level="info")
+    print_console(f"      HTML  : {size_kb} KB → {output_path.name}", level="info")
+
+    md_content = generate_mermaid(results, meta)
+
+    radar_md_dir = PROJECT_ROOT / "rapports" / "markdown" / "radar"
+    radar_md_dir.mkdir(parents=True, exist_ok=True)
+    radar_md_name = f"radar_articles_generated_{t0_start}_{t0_end}.md"
+    radar_md_path = radar_md_dir / radar_md_name
+    radar_md_path.write_text(md_content, encoding="utf-8")
+    print_console(f"      Radar MD : {radar_md_path.stat().st_size // 1024} KB → rapports/markdown/radar/{radar_md_name}", level="info")
+
     print_console(f'✓  open "{output_path.resolve()}"', level="info")
+    print_console(f'✓  open "{radar_md_path.resolve()}"', level="info")
 
 
 if __name__ == "__main__":

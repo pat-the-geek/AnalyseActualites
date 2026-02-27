@@ -1,7 +1,26 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
+import mermaid from 'mermaid'
+
+mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
+
+function MermaidBlock({ code }) {
+  const ref = useRef(null)
+  const id = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
+
+  useEffect(() => {
+    if (!ref.current) return
+    mermaid.render(id.current, code).then(({ svg }) => {
+      if (ref.current) ref.current.innerHTML = svg
+    }).catch(err => {
+      if (ref.current) ref.current.textContent = `Erreur Mermaid : ${err.message}`
+    })
+  }, [code])
+
+  return <div ref={ref} className="my-6 flex justify-center overflow-x-auto" />
+}
 
 /** Parse le frontmatter YAML entre --- et retourne { meta, body } */
 function parseFrontmatter(content) {
@@ -83,12 +102,21 @@ export default function MarkdownViewer({ content }) {
               {children}
             </a>
           ),
-          pre: ({ children }) => (
-            <pre className="bg-slate-950 rounded-xl p-4 overflow-x-auto mb-4 border border-slate-800">
-              {children}
-            </pre>
-          ),
+          pre: ({ children }) => {
+            const child = Array.isArray(children) ? children[0] : children
+            if (child?.props?.className === 'language-mermaid') {
+              return <>{children}</>
+            }
+            return (
+              <pre className="bg-slate-950 rounded-xl p-4 overflow-x-auto mb-4 border border-slate-800">
+                {children}
+              </pre>
+            )
+          },
           code: ({ className, children }) => {
+            if (className === 'language-mermaid') {
+              return <MermaidBlock code={String(children).trim()} />
+            }
             const isBlock = className || String(children).includes('\n')
             if (!isBlock) {
               return (

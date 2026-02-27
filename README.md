@@ -218,6 +218,31 @@ Chaque entrée du fichier accepte deux collections optionnelles pour affiner la 
 
 > Les mots des collections `or` et `and` utilisent une correspondance par **frontière de mot** (`\b` regex) pour éviter les faux positifs (ex. `AI` ne matche pas `semaine`).
 
+### Radar thématique
+
+```bash
+python3 scripts/radar_wudd.py
+```
+
+Analyse la distribution thématique de tous les articles collectés et génère un **radar visuel** sous deux formes :
+
+- **HTML interactif** (`rapports/radar_wudd.html`) — graphique SVG à bulles, filtrable par quadrant
+- **Markdown Mermaid** (`rapports/markdown/radar/radar_articles_generated_YYYY-MM-DD_YYYY-MM-DD.md`) — lisible directement dans le Viewer
+
+Chaque thème est positionné dans un quadrant selon deux axes :
+
+- **Horizontal (Rare → Fréquent)** : part des articles qui mentionnent ce thème
+- **Vertical (Déclin → Hausse)** : vélocité = évolution de la fréquence entre la période précédente (T1) et la période courante (T0)
+
+| Quadrant | Signification |
+|---|---|
+| **Dominants** | Thèmes fréquents et en hausse |
+| **Émergents** | Thèmes rares mais en forte progression |
+| **Habituels** | Thèmes fréquents mais stables ou en léger déclin |
+| **Déclinants** | Thèmes rares et en recul |
+
+Le script sélectionne les 10 thèmes les plus représentatifs et les répartit sur le graphique. Il est planifié automatiquement le dernier jour de chaque mois à 5h00 (voir [§8 Docker](#8-orchestration-docker)).
+
 ### Analyse manuelle avec Claude
 
 Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dans Claude (ou tout autre LLM) pour produire un rapport, indépendamment de l'automatisation. Les instructions détaillées pour cette utilisation (format du rapport, modèle Markdown, regroupement thématique) sont disponibles dans :
@@ -263,7 +288,7 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 |---|---|
 | Navigation latérale | Liste tous les fichiers JSON et Markdown par flux |
 | Visionneuse JSON | Coloration syntaxique, mode édition/sauvegarde intégré |
-| Visionneuse Markdown | Rendu HTML avec images |
+| Visionneuse Markdown | Rendu HTML avec images et graphiques Mermaid |
 | Recherche plein texte | Recherche dans tous les fichiers via **⌘K** / **Ctrl+K** |
 | Panneau réglages | Gestion des flux, des planifications et des thématiques |
 
@@ -280,6 +305,9 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 **Vue Markdown des rapports**
 
 ![Vue Markdown](docs/Screen-captures/WWUD.ai-Viewer-markdown.png)
+
+**Radar thématique — vue Markdown avec graphique Mermaid**
+![Radar thématique](docs/Screen-captures/WWUD.ai-Viewer-markdown-radar.png)
 
 **Recherche plein texte (⌘K)**
 
@@ -446,7 +474,7 @@ docker rm -f wudd-ai-final   # ou wuddai, etc.
 | `0 1 * * *` | Extraction par mot-clé (`get-keyword-from-rss.py`) |
 | `0 6 * * 1` | Scheduler articles chaque lundi (`scheduler_articles.py`) |
 | `*/10 * * * *` | Vérification santé du cron (`check_cron_health.py`) |
-| `* * * * *` | Test cron (écriture dans `cron_test.log`) |
+| `0 5 28-31 * *` | Radar thématique le dernier jour du mois (`radar_wudd.py`) |
 
 Tous les logs sont disponibles dans `rapports/`.
 

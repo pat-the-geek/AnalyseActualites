@@ -255,10 +255,23 @@ def api_scheduler():
             "script": "check_cron_health.py",
             "cron": "*/10 * * * *",
             "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_health.log",
+        },
+        {
+            "name": "Radar thématique",
+            "script": "radar_wudd.py",
+            "cron": "0 5 28-31 * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_radar.log",
         },
     ]
     for t in fixed:
-        last_run = latest_mtime(t["data_dir"]) if t["data_dir"] else None
+        if t.get("data_dir"):
+            last_run = latest_mtime(t["data_dir"])
+        elif t.get("log_file") and t["log_file"].exists():
+            last_run = datetime.datetime.fromtimestamp(t["log_file"].stat().st_mtime)
+        else:
+            last_run = None
         next_run = next_cron_occurrence(t["cron"], now)
         tasks.append({
             "name": t["name"],
@@ -281,7 +294,7 @@ def api_scheduler():
                     # Support format plat (cron) et format imbriqué (scheduler.cron)
                     cron = (flux.get("cron")
                             or flux.get("scheduler", {}).get("cron", "0 6 * * 1"))
-                    flux_dir = PROJECT_ROOT / "data" / "articles" / title
+                    flux_dir = PROJECT_ROOT / "data" / "articles" / title.strip().replace(" ", "-").replace("\u00a0", "-")
                     last_run = latest_mtime(flux_dir)
                     next_run = next_cron_occurrence(cron, now)
                     tasks.append({
