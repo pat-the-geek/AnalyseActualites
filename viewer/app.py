@@ -362,6 +362,147 @@ def api_save_flux_sources():
     return jsonify({"ok": True})
 
 
+@app.route("/api/search/entity")
+def api_search_entity():
+    """Recherche cross-fichiers d'une valeur d'entité nommée."""
+    q = request.args.get("q", "").strip()
+    entity_type = request.args.get("type", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+
+    q_lower = q.lower()
+    results = []
+
+    data_dirs = [
+        PROJECT_ROOT / "data" / "articles",
+        PROJECT_ROOT / "data" / "articles-from-rss",
+    ]
+
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(data_dir).parts:
+                continue
+            try:
+                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(articles, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            for article in articles:
+                ents = article.get("entities")
+                if not ents or not isinstance(ents, dict):
+                    continue
+
+                matched_types = []
+                for etype, values in ents.items():
+                    if entity_type and etype != entity_type:
+                        continue
+                    if not isinstance(values, list):
+                        continue
+                    if any(q_lower in str(v).lower() for v in values):
+                        matched_types.append(etype)
+
+                if not matched_types:
+                    continue
+
+                resume = article.get("Résumé", "")
+                idx = resume.lower().find(q_lower)
+                if idx >= 0:
+                    start = max(0, idx - 80)
+                    end = min(len(resume), idx + len(q) + 80)
+                    excerpt = (
+                        ("…" if start > 0 else "")
+                        + resume[start:end]
+                        + ("…" if end < len(resume) else "")
+                    )
+                else:
+                    excerpt = resume[:160] + ("…" if len(resume) > 160 else "")
+
+                rel = json_file.relative_to(PROJECT_ROOT)
+                results.append({
+                    "path": str(rel).replace("\\", "/"),
+                    "name": json_file.name,
+                    "source": article.get("Sources", ""),
+                    "date": article.get("Date de publication", ""),
+                    "url": article.get("URL", ""),
+                    "excerpt": excerpt,
+                    "types": matched_types,
+                })
+
+    results.sort(key=lambda r: r["date"], reverse=True)
+    return jsonify(results[:100])
+
+
+@app.route("/api/entities/dashboard")
+def api_entities_dashboard():
+    """Agrège les entités de tous les fichiers JSON et retourne des stats globales."""
+    data_dirs = [
+        PROJECT_ROOT / "data" / "articles",
+        PROJECT_ROOT / "data" / "articles-from-rss",
+    ]
+
+    total_files = 0
+    total_articles = 0
+    total_with_entities = 0
+    # { type: { value: count } }
+    by_type: dict[str, dict[str, int]] = {}
+
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(data_dir).parts:
+                continue
+            try:
+                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(articles, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            total_files += 1
+            total_articles += len(articles)
+
+            for article in articles:
+                ents = article.get("entities")
+                if not ents or not isinstance(ents, dict):
+                    continue
+                has_ent = False
+                for etype, values in ents.items():
+                    if not isinstance(values, list) or not values:
+                        continue
+                    has_ent = True
+                    if etype not in by_type:
+                        by_type[etype] = {}
+                    for v in values:
+                        if isinstance(v, str) and v.strip():
+                            key = v.strip()
+                            by_type[etype][key] = by_type[etype].get(key, 0) + 1
+                if has_ent:
+                    total_with_entities += 1
+
+    result_types = []
+    for etype, value_counts in by_type.items():
+        sorted_values = sorted(value_counts.items(), key=lambda x: x[1], reverse=True)
+        result_types.append({
+            "type": etype,
+            "unique_count": len(sorted_values),
+            "mention_count": sum(c for _, c in sorted_values),
+            "top": [{"value": v, "count": c} for v, c in sorted_values[:15]],
+        })
+    result_types.sort(key=lambda x: x["mention_count"], reverse=True)
+
+    return jsonify({
+        "total_files": total_files,
+        "total_articles": total_articles,
+        "total_with_entities": total_with_entities,
+        "by_type": result_types,
+    })
+
+
 # ── Serveur frontend React (production) ──────────────────────────────────────
 
 @app.route("/", defaults={"path": ""})

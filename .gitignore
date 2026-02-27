@@ -1,6 +1,9 @@
 config/
 # Exclure la configuration sensible
 config/
+
+# Fichiers de configuration Claude Desktop (permissions locales)
+.claude/
 !config/flux_json_sources.example.json
 # Byte-compiled / optimized / DLL files
 __pycache__/

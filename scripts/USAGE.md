@@ -1,4 +1,4 @@
-### 5. get-keyword-from-rss.py
+### 6. get-keyword-from-rss.py
 
 **Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de Reeder.opml.
 Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
@@ -175,7 +175,82 @@ pip install -r requirements.txt
 cd scripts/
 ```
 
-### 4. analyse_thematiques.py
+### 4. enrich_entities.py
+
+**Description** : Enrichit les fichiers JSON d'articles existants avec les **entités nommées (NER)** extraites via l'API EurIA. Parcourt `data/articles/` (flux) et `data/articles-from-rss/` (mots-clés) et ajoute le champ `entities` à chaque article qui dispose d'un `Résumé`.
+
+**Utilisation** :
+```bash
+# Tout traiter (flux + rss)
+python3 scripts/enrich_entities.py
+
+# Un flux spécifique uniquement
+python3 scripts/enrich_entities.py --flux Intelligence-artificielle
+
+# Un mot-clé spécifique uniquement
+python3 scripts/enrich_entities.py --keyword anthropic
+
+# Simulation (aucun appel API, aucune écriture)
+python3 scripts/enrich_entities.py --dry-run
+
+# Réduire la cadence (délai entre appels, défaut 1.0 s)
+python3 scripts/enrich_entities.py --delay 2.0
+
+# Ré-enrichir même les articles déjà traités
+python3 scripts/enrich_entities.py --force
+```
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--flux NOM` | Restreindre au sous-dossier `data/articles/<NOM>/` | tous les flux |
+| `--keyword MOT` | Restreindre au fichier `data/articles-from-rss/<MOT>.json` | tous les mots-clés |
+| `--dry-run` | Mode simulation : aucun appel API, aucune sauvegarde | désactivé |
+| `--delay SEC` | Pause en secondes entre chaque appel API | 1.0 |
+| `--force` | Re-traiter les articles ayant déjà le champ `entities` | désactivé |
+
+**Catégories NER extraites** (18 types) :
+
+| Type | Contenu |
+|---|---|
+| `PERSON` | Personnes physiques nommées |
+| `ORG` | Organisations, entreprises, institutions |
+| `GPE` | Pays, villes, régions géopolitiques |
+| `LOC` | Lieux géographiques non géopolitiques |
+| `PRODUCT` | Produits, services, technologies |
+| `EVENT` | Événements nommés (conférences, crises…) |
+| `NORP` | Nationalités, groupes politiques/religieux |
+| `FAC` | Bâtiments, monuments nommés |
+| `WORK_OF_ART` | Titres d'œuvres (livres, films, rapports…) |
+| `LAW` | Lois, règlements nommés |
+| `DATE` / `TIME` | Dates et heures explicites |
+| `MONEY` / `PERCENT` | Montants et pourcentages |
+| `QUANTITY` / `CARDINAL` / `ORDINAL` | Mesures et nombres |
+
+**Format ajouté dans chaque article** :
+```json
+"entities": {
+  "PERSON": ["Emmanuel Macron", "Sam Altman"],
+  "ORG": ["OpenAI", "Infomaniak"],
+  "GPE": ["France", "États-Unis"],
+  "PRODUCT": ["ChatGPT", "Qwen3"]
+}
+```
+
+**Comportement** :
+- Sauvegarde atomique (écriture dans `.tmp` puis remplacement) pour éviter la corruption
+- Les articles sans champ `Résumé` sont ignorés
+- Les articles ayant déjà `entities` sont ignorés (sauf avec `--force`)
+- Rapport de stats en fin d'exécution : total / enrichis / déjà présents / erreurs / ignorés
+
+**Prérequis** :
+- Fichiers JSON dans `data/articles/` ou `data/articles-from-rss/`
+- Fichier `.env` avec `URL` et `bearer` configurés
+
+---
+
+### 5. analyse_thematiques.py
 
 **Description** : Analyse les thématiques sociétales présentes dans tous les articles collectés et génère un rapport statistique détaillé.
 
@@ -267,18 +342,25 @@ Vérifiez :
    python3 Get_data_from_JSONFile_AskSummary.py 2026-01-01 2026-01-31
    ```
 
-2. **Analyse des thématiques sociétales**
+2. **Enrichissement avec entités nommées (NER)** (optionnel)
+   ```bash
+   python3 scripts/enrich_entities.py
+   # Ou pour un flux spécifique :
+   python3 scripts/enrich_entities.py --flux Intelligence-artificielle
+   ```
+
+3. **Analyse des thématiques sociétales**
    ```bash
    python3 analyse_thematiques.py
    ```
 
-3. **Conversion en Markdown personnalisé** (optionnel)
+4. **Conversion en Markdown personnalisé** (optionnel)
    ```bash
    python3 articles_json_to_markdown.py
    # Sélectionner : ../data/articles/articles_generated_2026-01-01_2026-01-31.json
    ```
 
-4. **Extraction texte brut** (pour analyse manuelle)
+5. **Extraction texte brut** (pour analyse manuelle)
    ```bash
    python3 Get_htmlText_From_JSONFile.py
    # Sélectionner un flux JSON source
