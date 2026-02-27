@@ -4,7 +4,7 @@ import rehypeRaw from 'rehype-raw'
 import { useMemo, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
 
-mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
+mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
 
 function MermaidBlock({ code }) {
   const ref = useRef(null)
@@ -55,15 +55,15 @@ export default function MarkdownViewer({ content }) {
     <div className="max-w-3xl mx-auto">
       {/* Métadonnées frontmatter */}
       {meta && (
-        <div className="mb-6 p-4 bg-slate-800/60 rounded-xl border border-slate-700 text-sm">
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3">
+        <div className="mb-6 p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-sm">
+          <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">
             Métadonnées du rapport
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5">
             {Object.entries(meta).map(([k, v]) => (
               <div key={k} className="contents">
-                <dt className="text-slate-500 text-xs">{k}</dt>
-                <dd className="text-slate-300 text-xs">{v}</dd>
+                <dt className="text-slate-400 dark:text-slate-500 text-xs">{k}</dt>
+                <dd className="text-slate-700 dark:text-slate-300 text-xs">{v}</dd>
               </div>
             ))}
           </dl>
@@ -76,28 +76,28 @@ export default function MarkdownViewer({ content }) {
         rehypePlugins={[rehypeRaw]}
         components={{
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold text-slate-100 mt-8 mb-4 pb-2 border-b border-slate-700 first:mt-0">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-8 mb-4 pb-2 border-b border-slate-200 dark:border-slate-700 first:mt-0">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-semibold text-slate-100 mt-7 mb-3">{children}</h2>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mt-7 mb-3">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-base font-semibold text-slate-200 mt-5 mb-2">{children}</h3>
+            <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-2">{children}</h3>
           ),
           h4: ({ children }) => (
-            <h4 className="text-sm font-semibold text-slate-300 mt-4 mb-1">{children}</h4>
+            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-4 mb-1">{children}</h4>
           ),
           p: ({ children }) => (
-            <p className="text-slate-300 mb-4 leading-7">{children}</p>
+            <p className="text-slate-700 dark:text-slate-300 mb-4 leading-7">{children}</p>
           ),
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline underline-offset-2"
             >
               {children}
             </a>
@@ -108,7 +108,7 @@ export default function MarkdownViewer({ content }) {
               return <>{children}</>
             }
             return (
-              <pre className="bg-slate-950 rounded-xl p-4 overflow-x-auto mb-4 border border-slate-800">
+              <pre className="bg-slate-100 dark:bg-slate-950 rounded-xl p-4 overflow-x-auto mb-4 border border-slate-200 dark:border-slate-800">
                 {children}
               </pre>
             )
@@ -120,63 +120,63 @@ export default function MarkdownViewer({ content }) {
             const isBlock = className || String(children).includes('\n')
             if (!isBlock) {
               return (
-                <code className="bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded text-[0.85em] font-mono">
+                <code className="bg-slate-100 dark:bg-slate-800 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[0.85em] font-mono">
                   {children}
                 </code>
               )
             }
             return (
-              <code className={`text-slate-300 text-sm font-mono leading-relaxed ${className || ''}`}>
+              <code className={`text-slate-700 dark:text-slate-300 text-sm font-mono leading-relaxed ${className || ''}`}>
                 {children}
               </code>
             )
           },
           ul: ({ children }) => (
-            <ul className="list-disc text-slate-300 mb-4 space-y-1 ml-5">{children}</ul>
+            <ul className="list-disc text-slate-700 dark:text-slate-300 mb-4 space-y-1 ml-5">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal text-slate-300 mb-4 space-y-1 ml-5">{children}</ol>
+            <ol className="list-decimal text-slate-700 dark:text-slate-300 mb-4 space-y-1 ml-5">{children}</ol>
           ),
-          li: ({ children }) => <li className="text-slate-300 leading-relaxed">{children}</li>,
+          li: ({ children }) => <li className="text-slate-700 dark:text-slate-300 leading-relaxed">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-blue-500/60 pl-4 italic text-slate-400 my-4">
+            <blockquote className="border-l-4 border-blue-500/60 pl-4 italic text-slate-500 dark:text-slate-400 my-4">
               {children}
             </blockquote>
           ),
           table: ({ children }) => (
-            <div className="overflow-x-auto mb-4 rounded-lg border border-slate-700">
-              <table className="w-full text-sm text-slate-300">{children}</table>
+            <div className="overflow-x-auto mb-4 rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-sm text-slate-700 dark:text-slate-300">{children}</table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-slate-800 text-slate-200">{children}</thead>
+            <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="border-b border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider">
+            <th className="border-b border-slate-200 dark:border-slate-700 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-slate-700/50 px-4 py-2.5">{children}</td>
+            <td className="border-b border-slate-200/50 dark:border-slate-700/50 px-4 py-2.5">{children}</td>
           ),
           img: ({ src, alt }) => (
             <figure className="my-6">
               <img
                 src={src}
                 alt={alt}
-                className="max-w-full rounded-xl border border-slate-700"
+                className="max-w-full rounded-xl border border-slate-200 dark:border-slate-700"
                 loading="lazy"
               />
               {alt && (
-                <figcaption className="text-center text-slate-500 text-sm mt-2 italic">{alt}</figcaption>
+                <figcaption className="text-center text-slate-400 dark:text-slate-500 text-sm mt-2 italic">{alt}</figcaption>
               )}
             </figure>
           ),
-          hr: () => <hr className="border-slate-700 my-8" />,
+          hr: () => <hr className="border-slate-200 dark:border-slate-700 my-8" />,
           strong: ({ children }) => (
-            <strong className="text-slate-100 font-semibold">{children}</strong>
+            <strong className="text-slate-900 dark:text-slate-100 font-semibold">{children}</strong>
           ),
-          em: ({ children }) => <em className="text-slate-300 italic">{children}</em>,
+          em: ({ children }) => <em className="text-slate-700 dark:text-slate-300 italic">{children}</em>,
         }}
       >
         {body}

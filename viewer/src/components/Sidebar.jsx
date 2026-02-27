@@ -30,9 +30,9 @@ export default function Sidebar({
   }, [files])
 
   return (
-    <aside className="w-72 flex flex-col bg-slate-800 border-r border-slate-700 shrink-0">
+    <aside className="w-72 flex flex-col bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 shrink-0">
       {/* ── Filtres ── */}
-      <div className="p-3 border-b border-slate-700 space-y-2.5">
+      <div className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2.5">
         {/* Boutons type */}
         <div className="flex gap-1">
           {[
@@ -46,7 +46,7 @@ export default function Sidebar({
               className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors ${
                 typeFilter === key
                   ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200'
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
               {label}
@@ -62,19 +62,19 @@ export default function Sidebar({
             value={nameSearch}
             onChange={e => onNameSearchChange(e.target.value)}
             placeholder="Filtrer par nom…"
-            className="w-full pl-8 pr-7 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full pl-8 pr-7 py-1.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
           {nameSearch && (
             <button
               onClick={() => onNameSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
             >
               <X size={12} />
             </button>
           )}
         </div>
 
-        <div className="text-xs text-slate-600">
+        <div className="text-xs text-slate-400 dark:text-slate-600">
           {files.length} fichier{files.length !== 1 ? 's' : ''}
         </div>
       </div>
@@ -84,12 +84,12 @@ export default function Sidebar({
         {grouped.map(([flux, fluxFiles]) => (
           <div key={flux}>
             {/* En-tête de groupe */}
-            <div className="sticky top-0 z-10 bg-slate-800/95 px-3 py-1.5 flex items-center gap-1.5 border-b border-slate-700/60 backdrop-blur-sm">
-              <Folder size={11} className="text-slate-500" />
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider truncate">
+            <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-800/95 px-3 py-1.5 flex items-center gap-1.5 border-b border-slate-200/60 dark:border-slate-700/60 backdrop-blur-sm">
+              <Folder size={11} className="text-slate-400 dark:text-slate-500" />
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
                 {flux}
               </span>
-              <span className="ml-auto text-xs text-slate-700 shrink-0">{fluxFiles.length}</span>
+              <span className="ml-auto text-xs text-slate-300 dark:text-slate-700 shrink-0">{fluxFiles.length}</span>
             </div>
 
             {/* Items */}
@@ -99,30 +99,30 @@ export default function Sidebar({
                 <button
                   key={file.path}
                   onClick={() => onSelect(file)}
-                  className={`w-full text-left px-3 py-2.5 flex items-start gap-2.5 border-b border-slate-700/30 transition-colors ${
+                  className={`w-full text-left px-3 py-2.5 flex items-start gap-2.5 border-b border-slate-200/30 dark:border-slate-700/30 transition-colors ${
                     isSelected
                       ? 'bg-blue-600/20 border-l-2 border-l-blue-500 pl-[10px]'
-                      : 'hover:bg-slate-700/50'
+                      : 'hover:bg-slate-100/50 dark:hover:bg-slate-700/50'
                   }`}
                 >
                   {file.type === 'json'
-                    ? <FileJson size={14} className="shrink-0 mt-0.5 text-amber-400" />
-                    : <FileText size={14} className="shrink-0 mt-0.5 text-blue-400" />
+                    ? <FileJson size={14} className="shrink-0 mt-0.5 text-amber-500 dark:text-amber-400" />
+                    : <FileText size={14} className="shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
                   }
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-slate-200 truncate leading-snug">
+                    <div className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate leading-snug">
                       {file.name}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[10px] px-1.5 rounded font-mono leading-4 ${
                         file.type === 'json'
-                          ? 'bg-amber-900/40 text-amber-400'
-                          : 'bg-blue-900/40 text-blue-400'
+                          ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                          : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
                       }`}>
                         {file.type === 'json' ? 'JSON' : 'MD'}
                       </span>
-                      <span className="text-[10px] text-slate-500">{formatSize(file.size)}</span>
-                      <span className="text-[10px] text-slate-600 ml-auto">{formatDate(file.modified)}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{formatSize(file.size)}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-600 ml-auto">{formatDate(file.modified)}</span>
                     </div>
                   </div>
                 </button>
@@ -132,7 +132,7 @@ export default function Sidebar({
         ))}
 
         {files.length === 0 && (
-          <div className="p-8 text-center text-slate-500 text-sm">
+          <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-sm">
             Aucun fichier trouvé
           </div>
         )}
