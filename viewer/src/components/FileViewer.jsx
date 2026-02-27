@@ -25,10 +25,10 @@ function extractImages(jsonContent) {
     articles.forEach(article => {
       if (!Array.isArray(article?.Images)) return
       article.Images.forEach(img => {
-        if (img?.URL) {
+        if (img?.url) {
           images.push({
-            url: img.URL,
-            width: img.Width ?? null,
+            url: img.url,
+            width: img.width ?? null,
             source: article['Sources'] ?? '',
             date: article['Date de publication'] ?? '',
             articleUrl: article['URL'] ?? '',
@@ -191,7 +191,7 @@ function Lightbox({ images, index, onClose, onNav }) {
   )
 }
 
-export default function FileViewer({ file, content, loading, onDownload }) {
+export default function FileViewer({ file, content, loading, onDownload, onContentSaved }) {
   if (!file) {
     return (
       <main className="flex-1 flex items-center justify-center bg-slate-900 select-none">
@@ -265,7 +265,10 @@ export default function FileViewer({ file, content, loading, onDownload }) {
         ) : file.type === 'json' ? (
           <>
             <div className="bg-slate-950 rounded-xl p-6 border border-slate-800/60">
-              <JsonViewer content={content} />
+              <JsonViewer
+                content={content}
+                onSave={onContentSaved ? (newContent) => onContentSaved(file.path, newContent) : undefined}
+              />
             </div>
             <ImageGallery content={content} />
           </>

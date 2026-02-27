@@ -59,7 +59,8 @@ class EurIAClient:
         prompt: str,
         max_attempts: int = 3,
         timeout: int = 60,
-        backoff_factor: float = 2.0
+        backoff_factor: float = 2.0,
+        max_tokens: Optional[int] = None
     ) -> str:
         """Envoie un prompt à l'API EurIA et retourne la réponse.
         
@@ -71,6 +72,7 @@ class EurIAClient:
             max_attempts: Nombre maximal de tentatives en cas d'échec (défaut: 3)
             timeout: Délai d'attente maximal en secondes pour chaque requête (défaut: 60)
             backoff_factor: Facteur multiplicateur pour le backoff entre tentatives (défaut: 2.0)
+            max_tokens: Nombre maximal de tokens en sortie (None = valeur par défaut de l'API)
         
         Returns:
             La réponse textuelle de l'API, nettoyée des espaces superflus.
@@ -90,6 +92,8 @@ class EurIAClient:
             "model": self.model,
             "enable_web_search": self.enable_web_search
         }
+        if max_tokens is not None:
+            data["max_tokens"] = max_tokens
         
         last_error = None
         

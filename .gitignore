@@ -185,9 +185,14 @@ archives/
 *.jpg
 *.jpeg
 *.gif
+# Exception : captures d'écran de documentation
+!docs/Screen-captures/*.png
 Unused-Code/
 .github/
 
 # Viewer — artefacts de build (générés via npm run build)
 viewer/node_modules/
 viewer/dist/
+# package-lock.json à la racine uniquement (viewer/package-lock.json doit
+# être versionné pour que `npm ci` fonctionne dans le build Docker)
+/package-lock.json

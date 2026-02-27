@@ -12,7 +12,10 @@ from flask import Flask, jsonify, send_file, request, abort, send_from_directory
 app = Flask(__name__)
 
 # La racine du projet est le dossier parent de viewer/
-PROJECT_ROOT = (Path(__file__).parent.parent).resolve()
+# resolve() AVANT parent.parent : __file__ peut être un chemin relatif
+# ('app.py') quand Flask est lancé via `python3 app.py` depuis viewer/,
+# auquel que (Path('app.py').parent.parent).resolve() → cwd au lieu de la racine.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
@@ -54,9 +57,13 @@ def collect_files() -> list:
                 except OSError:
                     continue
 
-    scan(PROJECT_ROOT / "data" / "articles", "json")
-    scan(PROJECT_ROOT / "data" / "articles-from-rss", "json", "RSS")
-    scan(PROJECT_ROOT / "rapports" / "markdown", "markdown")
+    # Scan large de data/ : couvre articles/, articles-from-rss/, et toute
+    # autre structure que l'utilisateur pourrait avoir sous data/
+    scan(PROJECT_ROOT / "data", "json")
+    scan(PROJECT_ROOT / "rapports", "markdown")
+    # Fichiers d'exemple (visibles tant que data/ et rapports/ sont vides)
+    scan(PROJECT_ROOT / "samples", "json",     "Samples")
+    scan(PROJECT_ROOT / "samples", "markdown", "Samples")
     return sorted(files, key=lambda x: x["modified"], reverse=True)
 
 
@@ -164,6 +171,34 @@ def api_content():
     return jsonify({"path": path, "content": f.read_text(encoding="utf-8", errors="replace")})
 
 
+@app.route("/api/content", methods=["POST"])
+def api_save_content():
+    data = request.get_json(force=True)
+    if not data or "path" not in data or "content" not in data:
+        abort(400, "Champs 'path' et 'content' requis")
+    rel = data["path"]
+    # Restriction : uniquement data/ et config/ sont modifiables
+    if not (rel.startswith("data/") or rel.startswith("config/")):
+        abort(403, "Modification non autorisée hors de data/ et config/")
+    target = (PROJECT_ROOT / rel).resolve()
+    if not str(target).startswith(str(PROJECT_ROOT) + "/"):
+        abort(403, "Accès refusé")
+    if not target.exists():
+        abort(404, "Fichier non trouvé")
+    # Validation JSON si extension .json
+    content = data["content"]
+    if target.suffix == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as e:
+            abort(400, f"JSON invalide : {e}")
+    try:
+        target.write_text(content, encoding="utf-8")
+    except OSError as e:
+        abort(500, f"Erreur d'écriture : {e}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/search")
 def api_search():
     q = request.args.get("q", "").strip()
@@ -220,10 +255,23 @@ def api_scheduler():
             "script": "check_cron_health.py",
             "cron": "*/10 * * * *",
             "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_health.log",
+        },
+        {
+            "name": "Radar thématique",
+            "script": "radar_wudd.py",
+            "cron": "0 5 28-31 * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_radar.log",
         },
     ]
     for t in fixed:
-        last_run = latest_mtime(t["data_dir"]) if t["data_dir"] else None
+        if t.get("data_dir"):
+            last_run = latest_mtime(t["data_dir"])
+        elif t.get("log_file") and t["log_file"].exists():
+            last_run = datetime.datetime.fromtimestamp(t["log_file"].stat().st_mtime)
+        else:
+            last_run = None
         next_run = next_cron_occurrence(t["cron"], now)
         tasks.append({
             "name": t["name"],
@@ -243,8 +291,10 @@ def api_scheduler():
                 flux_list = json.loads(flux_file.read_text(encoding="utf-8"))
                 for flux in flux_list:
                     title = flux.get("title", "Flux inconnu")
-                    cron = flux.get("cron", "0 6 * * 1")
-                    flux_dir = PROJECT_ROOT / "data" / "articles" / title
+                    # Support format plat (cron) et format imbriqué (scheduler.cron)
+                    cron = (flux.get("cron")
+                            or flux.get("scheduler", {}).get("cron", "0 6 * * 1"))
+                    flux_dir = PROJECT_ROOT / "data" / "articles" / title.strip().replace(" ", "-").replace("\u00a0", "-")
                     last_run = latest_mtime(flux_dir)
                     next_run = next_cron_occurrence(cron, now)
                     tasks.append({
@@ -261,6 +311,55 @@ def api_scheduler():
             break  # Utiliser uniquement le premier fichier de config existant
 
     return jsonify({"tasks": tasks, "now": now.isoformat()})
+
+
+@app.route("/api/keywords", methods=["GET"])
+def api_get_keywords():
+    path = PROJECT_ROOT / "config" / "keyword-to-search.json"
+    if not path.exists():
+        return jsonify([])
+    try:
+        return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return jsonify([])
+
+
+@app.route("/api/keywords", methods=["POST"])
+def api_save_keywords():
+    data = request.get_json(force=True)
+    if not isinstance(data, list):
+        abort(400, "Format invalide : tableau attendu")
+    path = PROJECT_ROOT / "config" / "keyword-to-search.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/flux-sources", methods=["GET"])
+def api_get_flux_sources():
+    path = PROJECT_ROOT / "config" / "flux_json_sources.json"
+    if not path.exists():
+        # Retourner le fichier exemple si disponible
+        example = PROJECT_ROOT / "config" / "flux_json_sources.example.json"
+        if example.exists():
+            try:
+                return jsonify(json.loads(example.read_text(encoding="utf-8")))
+            except json.JSONDecodeError:
+                pass
+        return jsonify([])
+    try:
+        return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return jsonify([])
+
+
+@app.route("/api/flux-sources", methods=["POST"])
+def api_save_flux_sources():
+    data = request.get_json(force=True)
+    if not isinstance(data, list):
+        abort(400, "Format invalide : tableau attendu")
+    path = PROJECT_ROOT / "config" / "flux_json_sources.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True})
 
 
 # ── Serveur frontend React (production) ──────────────────────────────────────

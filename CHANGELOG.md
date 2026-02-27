@@ -1,3 +1,13 @@
+# 26/02/2026 — Viewer web (Flask + React)
+
+- Ajout du Viewer WUDD.ai : interface locale de navigation/lecture/édition des fichiers JSON et Markdown
+- Backend Flask (`viewer/app.py`) : API REST, navigation fichiers, recherche plein texte, gestion flux et planification
+- Frontend React 18 + Vite + Tailwind : `JsonViewer`, `MarkdownViewer`, `SearchOverlay`, `SettingsPanel`, `SchedulerPanel`, `Sidebar`
+- Démarrage dev : `bash viewer/start.sh` — production : port 5050 via `entrypoint.sh` Docker
+- 7 captures d'écran ajoutées dans `docs/Screen-captures/`
+- Documentation mise à jour : README (section 5), CLAUDE.md, ARCHITECTURE.md (ADR-007), STRUCTURE.md, DOCS_INDEX.md
+- Fix Docker : `viewer/package-lock.json` versionné pour `npm ci`
+
 # 21/02/2026 - Vérification conformité orchestrations
 
 - Toutes les tâches planifiées (scheduler, extraction par mot-clé, monitoring, test cron) sont orchestrées exclusivement dans Docker (cron du conteneur analyse-actualites).

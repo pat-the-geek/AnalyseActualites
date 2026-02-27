@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import FileViewer from './components/FileViewer'
 import SearchOverlay from './components/SearchOverlay'
-import SchedulerPanel from './components/SchedulerPanel'
-import { Search, CalendarClock } from 'lucide-react'
+import SettingsPanel from './components/SettingsPanel'
+import { Search, Settings } from 'lucide-react'
 
 export default function App() {
   const [files, setFiles] = useState([])
@@ -11,7 +11,7 @@ export default function App() {
   const [fileContent, setFileContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [schedulerOpen, setSchedulerOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [typeFilter, setTypeFilter] = useState('all')
   const [nameSearch, setNameSearch] = useState('')
 
@@ -58,6 +58,20 @@ export default function App() {
     document.body.removeChild(a)
   }, [selectedFile])
 
+  const saveContent = useCallback(async (path, newContent) => {
+    const r = await fetch('/api/content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content: newContent }),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      throw new Error(err.description || 'Erreur lors de la sauvegarde')
+    }
+    // Mettre à jour le contenu affiché avec la version sauvegardée
+    setFileContent(newContent)
+  }, [])
+
   const filteredFiles = files.filter(f => {
     if (typeFilter !== 'all' && f.type !== typeFilter) return false
     if (nameSearch && !f.name.toLowerCase().includes(nameSearch.toLowerCase())) return false
@@ -78,14 +92,14 @@ export default function App() {
 
         <div className="flex-1" />
 
-        {/* Planification */}
+        {/* Réglages */}
         <button
-          onClick={() => setSchedulerOpen(true)}
+          onClick={() => setSettingsOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-sm text-slate-400 hover:text-slate-200 transition-colors"
-          title="Voir la planification des tâches"
+          title="Réglages — planification, mots-clés, flux"
         >
-          <CalendarClock size={13} />
-          <span className="hidden sm:inline">Planification</span>
+          <Settings size={13} />
+          <span className="hidden sm:inline">Réglages</span>
         </button>
 
         {/* Recherche plein texte */}
@@ -117,6 +131,7 @@ export default function App() {
           content={fileContent}
           loading={contentLoading}
           onDownload={downloadFile}
+          onContentSaved={saveContent}
         />
       </div>
 
@@ -127,8 +142,8 @@ export default function App() {
           onSelect={(file) => { selectFile(file); setSearchOpen(false) }}
         />
       )}
-      {schedulerOpen && (
-        <SchedulerPanel onClose={() => setSchedulerOpen(false)} />
+      {settingsOpen && (
+        <SettingsPanel onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )

@@ -27,6 +27,7 @@
 |---------|-------------|------------------|
 | **[README.md](README.md)** | Documentation principale du projet | Premier contact avec le projet |
 | **[scripts/USAGE.md](scripts/USAGE.md)** | Guide d'utilisation détaillé des scripts | Pour exécuter les scripts |
+| **[README.md — Section 5](README.md#5-viewer--interface-de-visualisation)** | Viewer : interface web locale (captures d'écran) | Utiliser ou configurer le Viewer |
 
 ### Documentation technique
 

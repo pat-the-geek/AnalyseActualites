@@ -517,6 +517,7 @@ quadrantChart
 | **ADR-004** | Retry sans backoff | Simple à implémenter | Risque surcharge API en erreur systémique |
 | **ADR-005** | GUI tkinter (scripts utilitaires) | User-friendly en usage manuel | Incompatible headless / CI |
 | **ADR-006** | Cloisonnement par flux (fév. 2026) | Isolation complète des données | Duplication de dossiers |
+| **ADR-007** | Viewer Flask + React (fév. 2026) | Interface locale sans dépendance cloud | Nécessite Node.js pour le build |
 
 ---
 
@@ -552,6 +553,7 @@ gantt
 | Structure détaillée | [docs/STRUCTURE.md](STRUCTURE.md) |
 | Guide déploiement | [docs/DEPLOY.md](DEPLOY.md) |
 | Guide scripts | [scripts/USAGE.md](../scripts/USAGE.md) |
+| Viewer (UI) | [README.md — Section 5](../README.md#5-viewer--interface-de-visualisation) |
 | Historique | [CHANGELOG.md](../CHANGELOG.md) |
 | BeautifulSoup4 | https://www.crummy.com/software/BeautifulSoup/bs4/doc/ |
 | API EurIA Infomaniak | https://euria.infomaniak.com |

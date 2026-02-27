@@ -28,14 +28,15 @@
 2. [Architecture](#2-architecture)
 3. [Installation](#3-installation)
 4. [Utilisation](#4-utilisation)
-5. [Configuration des flux](#5-configuration-des-flux)
-6. [Fonctionnement technique](#6-fonctionnement-technique)
-7. [Orchestration Docker](#7-orchestration-docker)
-8. [Développement et extension](#8-développement-et-extension)
-9. [Limitations](#9-limitations)
-10. [FAQ / Dépannage](#10-faq--dépannage)
-11. [Contribuer](#11-contribuer)
-12. [Contact et licence](#12-contact-et-licence)
+5. [Viewer — Interface de visualisation](#5-viewer--interface-de-visualisation)
+6. [Configuration des flux](#6-configuration-des-flux)
+7. [Fonctionnement technique](#7-fonctionnement-technique)
+8. [Orchestration Docker](#8-orchestration-docker)
+9. [Développement et extension](#9-développement-et-extension)
+10. [Limitations](#10-limitations)
+11. [FAQ / Dépannage](#11-faq--dépannage)
+12. [Contribuer](#12-contribuer)
+13. [Contact et licence](#13-contact-et-licence)
 
 ---
 
@@ -72,6 +73,12 @@ mindmap
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
       Zéro dépendance côté hôte
+    Viewer web
+      Navigation par flux
+      JSON · Markdown · images
+      Recherche plein texte ⌘K
+      Édition & sauvegarde inline
+      Gestion flux & planification
 ```
 
 ---
@@ -106,6 +113,9 @@ WUDD.ai/
 ├── rapports/          # Rapports générés
 │   ├── markdown/<flux>/
 │   └── pdf/
+├── viewer/            # Interface web de visualisation (Flask + React)
+│   ├── app.py         # Backend Flask (API + serving)
+│   └── src/           # Frontend React (Vite)
 ├── archives/          # Sauvegardes versionnées de scripts
 ├── samples/           # Exemples de rapports produits
 ├── tests/             # Tests unitaires
@@ -208,6 +218,31 @@ Chaque entrée du fichier accepte deux collections optionnelles pour affiner la 
 
 > Les mots des collections `or` et `and` utilisent une correspondance par **frontière de mot** (`\b` regex) pour éviter les faux positifs (ex. `AI` ne matche pas `semaine`).
 
+### Radar thématique
+
+```bash
+python3 scripts/radar_wudd.py
+```
+
+Analyse la distribution thématique de tous les articles collectés et génère un **radar visuel** sous deux formes :
+
+- **HTML interactif** (`rapports/radar_wudd.html`) — graphique SVG à bulles, filtrable par quadrant
+- **Markdown Mermaid** (`rapports/markdown/radar/radar_articles_generated_YYYY-MM-DD_YYYY-MM-DD.md`) — lisible directement dans le Viewer
+
+Chaque thème est positionné dans un quadrant selon deux axes :
+
+- **Horizontal (Rare → Fréquent)** : part des articles qui mentionnent ce thème
+- **Vertical (Déclin → Hausse)** : vélocité = évolution de la fréquence entre la période précédente (T1) et la période courante (T0)
+
+| Quadrant | Signification |
+|---|---|
+| **Dominants** | Thèmes fréquents et en hausse |
+| **Émergents** | Thèmes rares mais en forte progression |
+| **Habituels** | Thèmes fréquents mais stables ou en léger déclin |
+| **Déclinants** | Thèmes rares et en recul |
+
+Le script sélectionne les 10 thèmes les plus représentatifs et les répartit sur le graphique. Il est planifié automatiquement le dernier jour de chaque mois à 5h00 (voir [§8 Docker](#8-orchestration-docker)).
+
 ### Analyse manuelle avec Claude
 
 Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dans Claude (ou tout autre LLM) pour produire un rapport, indépendamment de l'automatisation. Les instructions détaillées pour cette utilisation (format du rapport, modèle Markdown, regroupement thématique) sont disponibles dans :
@@ -228,7 +263,76 @@ Les fichiers Markdown générés (rapports de synthèse, présentations) peuvent
 - [Présentation NotebookLM (PDF)](samples/NotebookLM%20-%20Presentation.pdf)
 - [Infographie NotebookLM](samples/NotebookLM%20-%20infographie.png)
 
-## 5. Configuration des flux
+## 5. Viewer — Interface de visualisation
+
+WUDD.ai inclut une interface web locale permettant de naviguer, lire et éditer les fichiers JSON et Markdown générés par le pipeline, sans quitter le navigateur.
+
+### Démarrage
+
+Un script raccourci est disponible à la racine du projet :
+
+```bash
+bash start-viewer.sh           # mode développement (Flask + Vite)
+bash start-viewer.sh docker    # production via Docker Compose
+bash start-viewer.sh stop      # arrêter le conteneur Docker
+```
+
+| Mode | URL |
+|---|---|
+| Développement (Vite) | http://localhost:5173 |
+| Production (Flask / Docker) | http://localhost:5050 |
+
+### Fonctionnalités
+
+| Fonctionnalité | Description |
+|---|---|
+| Navigation latérale | Liste tous les fichiers JSON et Markdown par flux |
+| Visionneuse JSON | Coloration syntaxique, mode édition/sauvegarde intégré |
+| Visionneuse Markdown | Rendu HTML avec images et graphiques Mermaid |
+| Recherche plein texte | Recherche dans tous les fichiers via **⌘K** / **Ctrl+K** |
+| Panneau réglages | Gestion des flux, des planifications et des thématiques |
+
+### Captures d'écran
+
+**Vue JSON des articles avec images**
+
+![Vue JSON avec images](docs/Screen-captures/WWUD.ai-Viewer-json-images.png)
+
+**Vue JSON avec coloration syntaxique**
+
+![Vue JSON](docs/Screen-captures/WWUD.ai-Viewer-json.png)
+
+**Vue Markdown des rapports**
+
+![Vue Markdown](docs/Screen-captures/WWUD.ai-Viewer-markdown.png)
+
+**Radar thématique — vue Markdown avec graphique Mermaid**
+![Radar thématique](docs/Screen-captures/WWUD.ai-Viewer-markdown-radar.png)
+
+**Recherche plein texte (⌘K)**
+
+![Recherche plein texte](docs/Screen-captures/WWUD.ai-Viewer-full-search.png)
+
+**Panneau de réglages — Planification**
+
+![Réglages - Planification](docs/Screen-captures/WWUD.ai-Viewer-reglages-1.png)
+
+**Panneau de réglages — Gestion des flux**
+
+![Réglages - Flux](docs/Screen-captures/WWUD.ai-Viewer-reglages-2.png)
+
+**Panneau de réglages — Thématiques**
+
+![Réglages - Thématiques](docs/Screen-captures/WWUD.ai-Viewer-reglages-3.png)
+
+### Prérequis
+
+- `python3` avec Flask (`pip install flask`)
+- `node` + `npm` ([nodejs.org](https://nodejs.org))
+
+---
+
+## 6. Configuration des flux
 
 ### Format `config/flux_json_sources.json`
 
@@ -257,7 +361,7 @@ Chaque objet définit un flux indépendant. Le scheduler et tous les scripts mul
 
 ---
 
-## 6. Fonctionnement technique
+## 7. Fonctionnement technique
 
 ### Appel API EurIA
 
@@ -343,7 +447,7 @@ DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
 
 ---
 
-## 7. Orchestration Docker
+## 8. Orchestration Docker
 
 ### Principe
 
@@ -370,13 +474,13 @@ docker rm -f wudd-ai-final   # ou wuddai, etc.
 | `0 1 * * *` | Extraction par mot-clé (`get-keyword-from-rss.py`) |
 | `0 6 * * 1` | Scheduler articles chaque lundi (`scheduler_articles.py`) |
 | `*/10 * * * *` | Vérification santé du cron (`check_cron_health.py`) |
-| `* * * * *` | Test cron (écriture dans `cron_test.log`) |
+| `0 5 28-31 * *` | Radar thématique le dernier jour du mois (`radar_wudd.py`) |
 
 Tous les logs sont disponibles dans `rapports/`.
 
 ---
 
-## 8. Développement et extension
+## 9. Développement et extension
 
 ### Ajouter une source RSS
 
@@ -405,7 +509,7 @@ pytest tests/
 
 ---
 
-## 9. Limitations
+## 10. Limitations
 
 - Certains scripts écrivent dans des fichiers prédéfinis — à adapter selon les besoins
 - Langue française requise pour les clés et messages (non configurable)
@@ -413,7 +517,7 @@ pytest tests/
 
 ---
 
-## 10. FAQ / Dépannage
+## 11. FAQ / Dépannage
 
 **Q : Le README n'est pas à jour sur GitHub ?**  
 Vérifiez que vous êtes sur la branche `main` et que le push a été effectué. Actualisez ou videz le cache du navigateur.
@@ -425,14 +529,14 @@ Les dates doivent être au format ISO 8601 strict : `YYYY-MM-DDTHH:MM:SSZ`.
 Depuis la v2.0, tous les chemins sont absolus. Les scripts fonctionnent depuis n'importe quel répertoire.
 
 **Q : Comment ajouter un flux ou une catégorie ?**  
-Modifiez les fichiers dans `config/` (voir [Section 5](#5-configuration-des-flux) et [Section 8](#8-développement-et-extension)).
+Modifiez les fichiers dans `config/` (voir [Section 6](#6-configuration-des-flux) et [Section 9](#9-développement-et-extension)).
 
 **Q : Comment sauvegarder avant une modification ?**  
-Copiez le script dans `archives/` avec timestamp (voir [Section 6](#6-fonctionnement-technique)).
+Copiez le script dans `archives/` avec timestamp (voir [Section 7](#7-fonctionnement-technique)).
 
 ---
 
-## 11. Contribuer
+## 12. Contribuer
 
 Les contributions sont les bienvenues !
 
@@ -446,7 +550,7 @@ Merci de respecter : la structure du projet, la langue française pour les clés
 
 ---
 
-## 12. Contact et licence
+## 13. Contact et licence
 
 - **Auteur** : Patrick Ostertag
 - **Email** : patrick.ostertag@gmail.com
