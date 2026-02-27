@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Download, FileJson, FileText, Calendar, HardDrive, ChevronRight, Images } from 'lucide-react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, Images } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 
@@ -57,11 +57,11 @@ function ImageGallery({ content }) {
     <div className="mt-6">
       {/* En-tête section */}
       <div className="flex items-center gap-2 mb-3">
-        <Images size={14} className="text-slate-400" />
-        <span className="text-sm font-semibold text-slate-300">
+        <Images size={14} className="text-slate-500 dark:text-slate-400" />
+        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
           Images
         </span>
-        <span className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-full">
+        <span className="text-xs text-slate-500 dark:text-slate-600 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">
           {visible.length}
         </span>
       </div>
@@ -72,10 +72,10 @@ function ImageGallery({ content }) {
           <button
             key={i}
             onClick={() => setLightbox(i)}
-            className="group text-left rounded-xl overflow-hidden bg-slate-800 border border-slate-700 hover:border-blue-500/60 transition-all hover:shadow-lg hover:shadow-blue-900/20 focus:outline-none focus:border-blue-500"
+            className="group text-left rounded-xl overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500/60 transition-all hover:shadow-lg hover:shadow-blue-500/10 dark:hover:shadow-blue-900/20 focus:outline-none focus:border-blue-500"
           >
             {/* Vignette */}
-            <div className="aspect-video overflow-hidden bg-slate-900 relative">
+            <div className="aspect-video overflow-hidden bg-slate-100 dark:bg-slate-900 relative">
               <img
                 src={img.url}
                 alt={img.source}
@@ -89,10 +89,10 @@ function ImageGallery({ content }) {
             {(img.source || img.date) && (
               <div className="px-2.5 py-2">
                 {img.source && (
-                  <div className="text-[11px] text-slate-300 truncate font-medium">{img.source}</div>
+                  <div className="text-[11px] text-slate-700 dark:text-slate-300 truncate font-medium">{img.source}</div>
                 )}
                 {img.date && (
-                  <div className="text-[10px] text-slate-500 mt-0.5">{img.date}</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{img.date}</div>
                 )}
               </div>
             )}
@@ -194,13 +194,13 @@ function Lightbox({ images, index, onClose, onNav }) {
 export default function FileViewer({ file, content, loading, onDownload, onContentSaved }) {
   if (!file) {
     return (
-      <main className="flex-1 flex items-center justify-center bg-slate-900 select-none">
+      <main className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-900 select-none">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4 border border-slate-700">
-            <FileText size={28} className="text-slate-600" />
+          <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-800 flex items-center justify-center mx-auto mb-4 border border-slate-200 dark:border-slate-700">
+            <FileText size={28} className="text-slate-400 dark:text-slate-600" />
           </div>
-          <p className="text-slate-400 font-medium mb-1">Aucun fichier sélectionné</p>
-          <p className="text-slate-600 text-sm">Choisissez un fichier dans la liste de gauche</p>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">Aucun fichier sélectionné</p>
+          <p className="text-slate-400 dark:text-slate-600 text-sm">Choisissez un fichier dans la liste de gauche</p>
         </div>
       </main>
     )
@@ -209,15 +209,15 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   const pathParts = file.path.split('/')
 
   return (
-    <main className="flex-1 flex flex-col overflow-hidden bg-slate-900">
+    <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900">
       {/* ── Barre de fichier ── */}
-      <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-800/70 border-b border-slate-700 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-2.5 bg-white/70 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 shrink-0">
         {/* Fil d'Ariane */}
-        <div className="flex items-center gap-0.5 min-w-0 flex-1 text-xs text-slate-500 overflow-hidden">
+        <div className="flex items-center gap-0.5 min-w-0 flex-1 text-xs text-slate-400 dark:text-slate-500 overflow-hidden">
           {pathParts.map((part, i) => (
             <span key={i} className="flex items-center gap-0.5 shrink-0">
-              {i > 0 && <ChevronRight size={10} className="text-slate-700" />}
-              <span className={i === pathParts.length - 1 ? 'text-slate-300 font-medium' : ''}>
+              {i > 0 && <ChevronRight size={10} className="text-slate-300 dark:text-slate-700" />}
+              <span className={i === pathParts.length - 1 ? 'text-slate-700 dark:text-slate-300 font-medium' : ''}>
                 {part}
               </span>
             </span>
@@ -225,7 +225,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
         </div>
 
         {/* Méta */}
-        <div className="hidden lg:flex items-center gap-4 text-xs text-slate-500 shrink-0">
+        <div className="hidden lg:flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500 shrink-0">
           <span className="flex items-center gap-1">
             <Calendar size={11} />
             {formatDate(file.modified)}
@@ -236,8 +236,8 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
           </span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
             file.type === 'json'
-              ? 'bg-amber-900/40 text-amber-400'
-              : 'bg-blue-900/40 text-blue-400'
+              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+              : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
           }`}>
             {file.type === 'json' ? 'JSON' : 'Markdown'}
           </span>
@@ -256,15 +256,15 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
       {/* ── Contenu ── */}
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-            <div className="w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 dark:text-slate-500">
+            <div className="w-5 h-5 border-2 border-slate-300 dark:border-slate-600 border-t-blue-500 rounded-full animate-spin" />
             <span className="text-sm">Chargement…</span>
           </div>
         ) : content === null ? (
-          <div className="text-slate-500 text-sm">Contenu indisponible</div>
+          <div className="text-slate-400 dark:text-slate-500 text-sm">Contenu indisponible</div>
         ) : file.type === 'json' ? (
           <>
-            <div className="bg-slate-950 rounded-xl p-6 border border-slate-800/60">
+            <div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-6 border border-slate-200 dark:border-slate-800/60">
               <JsonViewer
                 content={content}
                 onSave={onContentSaved ? (newContent) => onContentSaved(file.path, newContent) : undefined}

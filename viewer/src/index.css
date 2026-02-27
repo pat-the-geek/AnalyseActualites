@@ -8,4 +8,21 @@
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
+html:not(.dark) ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* Coloration syntaxique JSON — thème Nuit */
+.json-key    { color: #f6c96c; }
+.json-string { color: #86efac; }
+.json-bool   { color: #fb7185; }
+.json-null   { color: #94a3b8; }
+.json-number { color: #93c5fd; }
+
+/* Coloration syntaxique JSON — thème Jour */
+html:not(.dark) .json-key    { color: #92400e; }
+html:not(.dark) .json-string { color: #166534; }
+html:not(.dark) .json-bool   { color: #be123c; }
+html:not(.dark) .json-null   { color: #475569; }
+html:not(.dark) .json-number { color: #1d4ed8; }

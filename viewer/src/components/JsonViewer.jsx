@@ -10,7 +10,8 @@ function escapeHtml(str) {
 
 /**
  * Applique la coloration syntaxique JSON via du HTML inline.
- * On échappe d'abord le HTML pour éviter toute injection.
+ * Utilise des classes CSS (json-key, json-string, etc.) plutôt que des
+ * styles inline, afin que les couleurs s'adaptent au thème Jour/Nuit.
  */
 function highlightJson(code) {
   const safe = escapeHtml(code)
@@ -19,22 +20,22 @@ function highlightJson(code) {
     (match) => {
       // Clé d'objet : chaîne suivie de ":"
       if (/^".*"(\s*):$/.test(match) || /^".*":$/.test(match)) {
-        return `<span style="color:#f6c96c">${match}</span>`
+        return `<span class="json-key">${match}</span>`
       }
       // Valeur chaîne
       if (match.startsWith('"')) {
-        return `<span style="color:#86efac">${match}</span>`
+        return `<span class="json-string">${match}</span>`
       }
       // Booléen
       if (match === 'true' || match === 'false') {
-        return `<span style="color:#fb7185">${match}</span>`
+        return `<span class="json-bool">${match}</span>`
       }
       // Null
       if (match === 'null') {
-        return `<span style="color:#94a3b8">${match}</span>`
+        return `<span class="json-null">${match}</span>`
       }
       // Nombre
-      return `<span style="color:#93c5fd">${match}</span>`
+      return `<span class="json-number">${match}</span>`
     },
   )
 }
@@ -63,7 +64,6 @@ export default function JsonViewer({ content, onSave }) {
   }, [content])
 
   const handleEditStart = () => {
-    // Formater le JSON avant édition
     try {
       setEditContent(JSON.stringify(JSON.parse(content), null, 2))
     } catch {
@@ -104,11 +104,11 @@ export default function JsonViewer({ content, onSave }) {
         {/* Barre d'outils édition */}
         <div className="flex items-center gap-2 justify-end">
           {editError && (
-            <span className="text-xs text-red-400 flex-1">{editError}</span>
+            <span className="text-xs text-red-500 dark:text-red-400 flex-1">{editError}</span>
           )}
           <button
             onClick={handleCancel}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs text-slate-300 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-xs text-slate-700 dark:text-slate-300 transition-colors"
           >
             <X size={12} /> Annuler
           </button>
@@ -127,7 +127,7 @@ export default function JsonViewer({ content, onSave }) {
           value={editContent}
           onChange={e => { setEditContent(e.target.value); setEditError(null) }}
           spellCheck={false}
-          className="w-full min-h-[60vh] text-sm font-mono leading-relaxed text-slate-200 bg-slate-950 border border-blue-500/40 rounded-xl p-4 resize-y focus:outline-none focus:border-blue-400 transition-colors"
+          className="w-full min-h-[60vh] text-sm font-mono leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-950 border border-blue-500/40 rounded-xl p-4 resize-y focus:outline-none focus:border-blue-400 transition-colors"
         />
       </div>
     )
@@ -140,7 +140,7 @@ export default function JsonViewer({ content, onSave }) {
         <div className="flex justify-end mb-3">
           <button
             onClick={handleEditStart}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs text-slate-300 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-xs text-slate-700 dark:text-slate-300 transition-colors"
           >
             <Pencil size={12} /> Modifier
           </button>
@@ -148,12 +148,12 @@ export default function JsonViewer({ content, onSave }) {
       )}
 
       {parseError && (
-        <div className="mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-xs text-red-400 font-mono">
+        <div className="mb-3 px-3 py-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50 rounded-lg text-xs text-red-600 dark:text-red-400 font-mono">
           JSON invalide : {parseError}
         </div>
       )}
       <pre
-        className="text-sm font-mono leading-relaxed text-slate-300 whitespace-pre-wrap break-words"
+        className="text-sm font-mono leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words"
         dangerouslySetInnerHTML={{ __html: highlighted }}
       />
     </div>

@@ -26,8 +26,8 @@ function formatRelative(isoStr) {
 
 function Spinner() {
   return (
-    <div className="flex items-center justify-center h-40 gap-3 text-slate-500">
-      <div className="w-4 h-4 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin" />
+    <div className="flex items-center justify-center h-40 gap-3 text-slate-400 dark:text-slate-500">
+      <div className="w-4 h-4 border-2 border-slate-300 dark:border-slate-600 border-t-blue-500 rounded-full animate-spin" />
       <span className="text-sm">Chargement…</span>
     </div>
   )
@@ -57,7 +57,7 @@ function SaveButton({ saving, saved, onClick }) {
 function ErrorBanner({ message }) {
   if (!message) return null
   return (
-    <div className="px-5 py-2 bg-red-900/20 border-b border-red-700/30 text-xs text-red-400 flex items-center gap-2 shrink-0">
+    <div className="px-5 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-700/30 text-xs text-red-600 dark:text-red-400 flex items-center gap-2 shrink-0">
       <AlertTriangle size={12} /> {message}
     </div>
   )
@@ -70,17 +70,17 @@ function StatusBadge({ task }) {
   const isSoon = nextMs !== null && nextMs > 0 && nextMs < 3_600_000
 
   if (!task.last_run) return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+    <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
       <HelpCircle size={12} /> Jamais exécuté
     </span>
   )
   if (isSoon) return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-blue-400">
-      <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" /> Bientôt
+    <span className="inline-flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400">
+      <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400 animate-pulse" /> Bientôt
     </span>
   )
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+    <span className="inline-flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
       <CheckCircle2 size={12} /> Actif
     </span>
   )
@@ -90,12 +90,12 @@ function TaskTable({ title, tasks }) {
   if (!tasks.length) return null
   return (
     <div>
-      <div className="sticky top-0 bg-slate-900 px-5 py-2 border-b border-slate-700 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="sticky top-0 bg-slate-50 dark:bg-slate-900 px-5 py-2 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
         {title}
       </div>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[10px] font-medium text-slate-500 uppercase tracking-wider border-b border-slate-700/50">
+          <tr className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-700/50">
             <th className="text-left px-5 py-2.5">Tâche</th>
             <th className="text-left px-4 py-2.5">Fréquence</th>
             <th className="text-left px-4 py-2.5">Dernière exécution</th>
@@ -105,30 +105,30 @@ function TaskTable({ title, tasks }) {
         </thead>
         <tbody>
           {tasks.map((task, i) => (
-            <tr key={i} className="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20 transition-colors">
+            <tr key={i} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-100/20 dark:hover:bg-slate-700/20 transition-colors">
               <td className="px-5 py-3">
-                <div className="font-medium text-slate-200 text-sm">{task.name}</div>
-                <div className="text-[11px] text-slate-500 font-mono mt-0.5">{task.script}</div>
+                <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">{task.name}</div>
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{task.script}</div>
               </td>
               <td className="px-4 py-3">
-                <div className="text-slate-300 text-sm">{task.label}</div>
-                <div className="text-[10px] text-slate-600 font-mono mt-0.5">{task.cron}</div>
+                <div className="text-slate-700 dark:text-slate-300 text-sm">{task.label}</div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-600 font-mono mt-0.5">{task.cron}</div>
               </td>
               <td className="px-4 py-3">
                 {task.last_run ? (
                   <>
-                    <div className="text-slate-300 text-sm">{formatDateTime(task.last_run)}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">{formatRelative(task.last_run)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.last_run)}</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.last_run)}</div>
                   </>
-                ) : <span className="text-slate-600 italic text-sm">Jamais</span>}
+                ) : <span className="text-slate-400 dark:text-slate-600 italic text-sm">Jamais</span>}
               </td>
               <td className="px-4 py-3">
                 {task.next_run ? (
                   <>
-                    <div className="text-slate-300 text-sm">{formatDateTime(task.next_run)}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">{formatRelative(task.next_run)}</div>
+                    <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.next_run)}</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.next_run)}</div>
                   </>
-                ) : <span className="text-slate-600 text-sm">—</span>}
+                ) : <span className="text-slate-400 dark:text-slate-600 text-sm">—</span>}
               </td>
               <td className="px-4 py-3"><StatusBadge task={task} /></td>
             </tr>
@@ -164,15 +164,15 @@ function SchedulerTab() {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Prochaine tâche imminente */}
       {upcoming && (
-        <div className="px-5 py-2.5 bg-blue-600/10 border-b border-blue-500/20 shrink-0">
+        <div className="px-5 py-2.5 bg-blue-50 dark:bg-blue-600/10 border-b border-blue-200 dark:border-blue-500/20 shrink-0">
           <div className="flex items-center gap-2 text-sm">
-            <Calendar size={13} className="text-blue-400 shrink-0" />
-            <span className="text-blue-300">
+            <Calendar size={13} className="text-blue-500 dark:text-blue-400 shrink-0" />
+            <span className="text-blue-700 dark:text-blue-300">
               Prochaine tâche :{' '}
-              <span className="font-medium text-blue-200">{upcoming.name}</span>
+              <span className="font-medium text-blue-800 dark:text-blue-200">{upcoming.name}</span>
               {' — '}
-              <span className="text-blue-300">{formatRelative(upcoming.next_run)}</span>
-              <span className="text-blue-500 text-xs ml-2">({formatDateTime(upcoming.next_run)})</span>
+              <span className="text-blue-600 dark:text-blue-300">{formatRelative(upcoming.next_run)}</span>
+              <span className="text-blue-400 dark:text-blue-500 text-xs ml-2">({formatDateTime(upcoming.next_run)})</span>
             </span>
           </div>
         </div>
@@ -181,7 +181,7 @@ function SchedulerTab() {
       {/* Corps */}
       <div className="flex-1 overflow-auto">
         {loading ? <Spinner /> : !data?.tasks?.length ? (
-          <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
+          <div className="flex items-center justify-center h-40 text-slate-400 dark:text-slate-500 text-sm">
             Aucune tâche planifiée trouvée
           </div>
         ) : (
@@ -194,14 +194,14 @@ function SchedulerTab() {
 
       {/* Pied */}
       {data && (
-        <div className="px-5 py-2 bg-slate-900/50 border-t border-slate-700 text-xs text-slate-600 shrink-0 flex items-center gap-2">
+        <div className="px-5 py-2 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-600 shrink-0 flex items-center gap-2">
           <span>
             {data.tasks.length} tâche{data.tasks.length !== 1 ? 's' : ''} planifiée{data.tasks.length !== 1 ? 's' : ''}
             {' · '}Actualisé à {new Date(data.now).toLocaleTimeString('fr-FR')}
           </span>
           <button
             onClick={load}
-            className="text-slate-500 hover:text-slate-300 transition-colors"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
             title="Actualiser"
           >
             <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
@@ -218,8 +218,8 @@ function TagInput({ tags, onChange, placeholder, color }) {
   const [input, setInput] = useState('')
 
   const styles = {
-    blue:  { tag: 'bg-blue-900/40 text-blue-300 border-blue-700/50',  btn: 'hover:text-blue-200 text-blue-400'  },
-    green: { tag: 'bg-green-900/40 text-green-300 border-green-700/50', btn: 'hover:text-green-200 text-green-400' },
+    blue:  { tag: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700/50',  btn: 'hover:text-blue-600 dark:hover:text-blue-200 text-blue-500 dark:text-blue-400'  },
+    green: { tag: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700/50', btn: 'hover:text-green-600 dark:hover:text-green-200 text-green-500 dark:text-green-400' },
   }
   const s = styles[color] || styles.blue
 
@@ -238,7 +238,7 @@ function TagInput({ tags, onChange, placeholder, color }) {
           {tag}
           <button
             onClick={() => remove(tag)}
-            className={`${s.btn} hover:text-red-300 transition-colors`}
+            className={`${s.btn} hover:text-red-500 dark:hover:text-red-300 transition-colors`}
             aria-label={`Supprimer ${tag}`}
           >
             <X size={10} />
@@ -254,11 +254,11 @@ function TagInput({ tags, onChange, placeholder, color }) {
             if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit() }
           }}
           placeholder={placeholder}
-          className="text-xs bg-slate-900/50 border border-slate-600 rounded px-2 py-0.5 text-slate-300 placeholder-slate-600 focus:outline-none focus:border-blue-500 w-40 transition-colors"
+          className="text-xs bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded px-2 py-0.5 text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500 w-40 transition-colors"
         />
         <button
           onClick={commit}
-          className="text-slate-400 hover:text-slate-200 transition-colors"
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
           aria-label="Ajouter"
         >
           <Plus size={13} />
@@ -312,16 +312,16 @@ function KeywordsTab() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Barre d'outils */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-700 shrink-0">
-        <p className="text-xs text-slate-500 flex-1">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex-1">
           Mots-clés extraits des flux RSS.{' '}
-          <span className="text-blue-400 font-medium">OU</span> élargit la recherche,{' '}
-          <span className="text-green-400 font-medium">ET</span> la restreint.
-          Appuyez sur <kbd className="bg-slate-700 text-slate-400 px-1 rounded text-[10px]">Entrée</kbd> pour valider un terme.
+          <span className="text-blue-600 dark:text-blue-400 font-medium">OU</span> élargit la recherche,{' '}
+          <span className="text-green-600 dark:text-green-400 font-medium">ET</span> la restreint.
+          Appuyez sur <kbd className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-1 rounded text-[10px]">Entrée</kbd> pour valider un terme.
         </p>
         <button
           onClick={add}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs text-slate-300 transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-xs text-slate-700 dark:text-slate-300 transition-colors shrink-0"
         >
           <Plus size={12} /> Ajouter
         </button>
@@ -333,19 +333,19 @@ function KeywordsTab() {
       {/* Liste */}
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
         {!keywords?.length ? (
-          <div className="text-center py-16 text-slate-500 text-sm">
+          <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">
             Aucun mot-clé configuré.{' '}
-            <button onClick={add} className="text-blue-400 hover:text-blue-300 underline">
+            <button onClick={add} className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline">
               Ajouter le premier
             </button>
           </div>
         ) : keywords.map((kw, idx) => (
-          <div key={idx} className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 space-y-3">
+          <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
 
             {/* Mot-clé principal */}
             <div className="flex items-center gap-3">
               <div className="flex-1">
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-1 block">
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-1 block">
                   Mot-clé principal
                 </label>
                 <input
@@ -353,12 +353,12 @@ function KeywordsTab() {
                   value={kw.keyword}
                   onChange={e => update(idx, 'keyword', e.target.value)}
                   placeholder="ex. Intelligence Artificielle"
-                  className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
               <button
                 onClick={() => remove(idx)}
-                className="mt-5 p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                className="mt-5 p-1.5 text-slate-400 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 title="Supprimer ce mot-clé"
               >
                 <Trash2 size={14} />
@@ -368,8 +368,8 @@ function KeywordsTab() {
             {/* Termes OU */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] bg-blue-900/40 text-blue-400 border border-blue-700/50 rounded px-1.5 py-0.5 font-bold">OU</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-700/50 rounded px-1.5 py-0.5 font-bold">OU</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   correspond si l'un de ces termes est présent
                 </span>
               </div>
@@ -384,8 +384,8 @@ function KeywordsTab() {
             {/* Termes ET */}
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] bg-green-900/40 text-green-400 border border-green-700/50 rounded px-1.5 py-0.5 font-bold">ET</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-700/50 rounded px-1.5 py-0.5 font-bold">ET</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   doit aussi contenir au moins un de ces termes
                 </span>
               </div>
@@ -479,13 +479,13 @@ function FluxTab() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Barre d'outils */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-700 shrink-0">
-        <p className="text-xs text-slate-500 flex-1">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex-1">
           Sources de flux JSON Reeder. Chaque flux est traité indépendamment avec son propre planning cron.
         </p>
         <button
           onClick={add}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs text-slate-300 transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-xs text-slate-700 dark:text-slate-300 transition-colors shrink-0"
         >
           <Plus size={12} /> Ajouter
         </button>
@@ -497,9 +497,9 @@ function FluxTab() {
       {/* Liste */}
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
         {!sources?.length ? (
-          <div className="text-center py-16 text-slate-500 text-sm">
+          <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">
             Aucun flux configuré.{' '}
-            <button onClick={add} className="text-blue-400 hover:text-blue-300 underline">
+            <button onClick={add} className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 underline">
               Ajouter le premier flux
             </button>
           </div>
@@ -509,12 +509,12 @@ function FluxTab() {
           const label = cronLabel(cron)
 
           return (
-            <div key={idx} className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 space-y-3">
+            <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
               {/* Titre + URL + Supprimer */}
               <div className="flex items-start gap-3">
                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-1 block">
                       Titre du flux
                     </label>
                     <input
@@ -522,11 +522,11 @@ function FluxTab() {
                       value={src.title}
                       onChange={e => updateField(idx, 'title', e.target.value)}
                       placeholder="ex. Intelligence-artificielle"
-                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-1 block">
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-1 block">
                       URL du flux JSON
                     </label>
                     <input
@@ -534,13 +534,13 @@ function FluxTab() {
                       value={src.url}
                       onChange={e => updateField(idx, 'url', e.target.value)}
                       placeholder="https://…/feed.json"
-                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 font-mono focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 font-mono focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
                 </div>
                 <button
                   onClick={() => remove(idx)}
-                  className="mt-5 p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors shrink-0"
+                  className="mt-5 p-1.5 text-slate-400 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors shrink-0"
                   title="Supprimer ce flux"
                 >
                   <Trash2 size={14} />
@@ -550,8 +550,8 @@ function FluxTab() {
               {/* Planning + Timeout */}
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-1 block">
-                    Planning (cron){label && <span className="text-slate-400 normal-case ml-2 font-normal">→ {label}</span>}
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-1 block">
+                    Planning (cron){label && <span className="text-slate-500 dark:text-slate-400 normal-case ml-2 font-normal">→ {label}</span>}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -559,12 +559,12 @@ function FluxTab() {
                       value={cron}
                       onChange={e => updateScheduler(idx, 'cron', e.target.value)}
                       placeholder="0 6 * * 1"
-                      className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm font-mono text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                     <select
                       value=""
                       onChange={e => e.target.value && updateScheduler(idx, 'cron', e.target.value)}
-                      className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs text-slate-500 dark:text-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
                     >
                       <option value="">Préréglage…</option>
                       {CRON_PRESETS.map(p => (
@@ -574,7 +574,7 @@ function FluxTab() {
                   </div>
                 </div>
                 <div className="w-32 shrink-0">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-1 block">
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium mb-1 block">
                     Timeout (s)
                   </label>
                   <input
@@ -583,7 +583,7 @@ function FluxTab() {
                     onChange={e => updateScheduler(idx, 'timeout', parseInt(e.target.value) || 60)}
                     min={10}
                     max={600}
-                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
               </div>
@@ -617,12 +617,12 @@ export default function SettingsPanel({ onClose }) {
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-10 px-4 pb-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-5xl max-h-[88vh] bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 flex flex-col overflow-hidden">
+      <div className="w-full max-w-5xl max-h-[88vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
 
         {/* ── En-tête ── */}
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-700 shrink-0">
-          <Settings size={15} className="text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-200 mr-3">Réglages</h2>
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+          <Settings size={15} className="text-slate-400 dark:text-slate-400" />
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
 
           {/* Onglets */}
           <div className="flex items-center gap-1 flex-1">
@@ -632,8 +632,8 @@ export default function SettingsPanel({ onClose }) {
                 onClick={() => setActiveTab(id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   activeTab === id
-                    ? 'bg-blue-600/20 text-blue-300 border border-blue-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                    ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-400/40 dark:border-blue-500/40'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <Icon size={12} />
@@ -644,7 +644,7 @@ export default function SettingsPanel({ onClose }) {
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             aria-label="Fermer"
           >
             <X size={14} />
