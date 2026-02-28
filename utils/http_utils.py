@@ -103,7 +103,7 @@ def fetch_and_extract_text(
                 return f"Erreur: Timeout après {max_retries} tentatives pour {url}"
                 
         except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code if e.response else 'inconnu'
+            status_code = e.response.status_code if e.response is not None else 'inconnu'
             default_logger.error(f"Erreur HTTP {status_code} pour {url}")
             return f"Erreur HTTP {status_code}: {url}"
             

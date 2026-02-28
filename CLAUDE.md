@@ -324,6 +324,7 @@ Coverage targets: `utils/` ≥ 80%, `scripts/` ≥ 60%, critical functions 100%.
 - **JSON output first** — The pipeline output is always JSON first, then optionally converted to Markdown/PDF.
 - **No hardcoded paths** — Always resolve paths relative to `config.project_root` or `__file__`.
 - **`.env` is never committed** — Secrets live only in `.env` (gitignored). Reference `.env.example` for the list of required variables.
+- **Never modify `.env` or any environment parameter without explicit user approval** — The `.env` file contains credentials and API configuration specific to this project. Always ask before reading values from other projects' `.env` files, copying credentials, or changing any environment variable (URL, bearer, timeouts, etc.).
 
 ---
 
