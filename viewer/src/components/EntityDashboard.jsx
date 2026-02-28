@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, Tag, Loader2, BarChart2, FileText, Newspaper } from 'lucide-react'
+import EntityArticlePanel from './EntityArticlePanel'
 
 /**
  * Configuration des types NER (cohérente avec EntityPanel).
@@ -105,6 +106,7 @@ function TypeSection({ section, maxMentions, onEntitySearch }) {
 export default function EntityDashboard({ onClose, onEntitySearch }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [selectedEntity, setSelectedEntity] = useState(null)
 
   useEffect(() => {
     fetch('/api/entities/dashboard')
@@ -122,78 +124,88 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
   const maxMentions = data?.by_type?.[0]?.mention_count ?? 1
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 overflow-hidden my-4">
+    <>
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
+        onClick={e => e.target === e.currentTarget && onClose()}
+      >
+        <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 overflow-hidden my-4">
 
-        {/* ── En-tête ── */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
-          <BarChart2 size={18} className="text-violet-500" />
-          <span className="font-semibold text-slate-800 dark:text-slate-100 text-base">
-            Dashboard entités
-          </span>
-          {!loading && data && (
-            <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">
-              — {data.by_type.length} types
+          {/* ── En-tête ── */}
+          <div className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
+            <BarChart2 size={18} className="text-violet-500" />
+            <span className="font-semibold text-slate-800 dark:text-slate-100 text-base">
+              Dashboard entités
             </span>
-          )}
-          <button
-            onClick={onClose}
-            className="ml-auto shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        {/* ── Corps ── */}
-        <div className="p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-slate-400 dark:text-slate-500">
-              <Loader2 size={20} className="animate-spin" />
-              <span className="text-sm">Agrégation en cours…</span>
-            </div>
-          ) : !data || data.by_type.length === 0 ? (
-            <div className="text-center py-20 text-slate-400 dark:text-slate-500 text-sm">
-              <div className="text-4xl mb-3">📊</div>
-              Aucune entité trouvée.
-              <br />
-              <span className="text-xs">
-                Lancez <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">enrich_entities.py</code> pour enrichir vos données.
+            {!loading && data && (
+              <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">
+                — {data.by_type.length} types
               </span>
-            </div>
-          ) : (
-            <>
-              {/* Statistiques globales */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
-                <StatCard icon={FileText}  value={data.total_files}          label="Fichiers analysés" />
-                <StatCard icon={Newspaper} value={data.total_articles}        label="Articles au total" />
-                <StatCard
-                  icon={Tag}
-                  value={data.total_with_entities}
-                  label="Articles enrichis"
-                  sub={data.total_articles > 0
-                    ? `${Math.round(data.total_with_entities / data.total_articles * 100)} %`
-                    : ''}
-                />
-              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="ml-auto shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
 
-              {/* Sections par type */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {data.by_type.map(section => (
-                  <TypeSection
-                    key={section.type}
-                    section={section}
-                    maxMentions={maxMentions}
-                    onEntitySearch={onEntitySearch}
-                  />
-                ))}
+          {/* ── Corps ── */}
+          <div className="p-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-20 gap-2 text-slate-400 dark:text-slate-500">
+                <Loader2 size={20} className="animate-spin" />
+                <span className="text-sm">Agrégation en cours…</span>
               </div>
-            </>
-          )}
+            ) : !data || data.by_type.length === 0 ? (
+              <div className="text-center py-20 text-slate-400 dark:text-slate-500 text-sm">
+                <div className="text-4xl mb-3">📊</div>
+                Aucune entité trouvée.
+                <br />
+                <span className="text-xs">
+                  Lancez <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">enrich_entities.py</code> pour enrichir vos données.
+                </span>
+              </div>
+            ) : (
+              <>
+                {/* Statistiques globales */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+                  <StatCard icon={FileText}  value={data.total_files}          label="Fichiers analysés" />
+                  <StatCard icon={Newspaper} value={data.total_articles}        label="Articles au total" />
+                  <StatCard
+                    icon={Tag}
+                    value={data.total_with_entities}
+                    label="Articles enrichis"
+                    sub={data.total_articles > 0
+                      ? `${Math.round(data.total_with_entities / data.total_articles * 100)} %`
+                      : ''}
+                  />
+                </div>
+
+                {/* Sections par type */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {data.by_type.map(section => (
+                    <TypeSection
+                      key={section.type}
+                      section={section}
+                      maxMentions={maxMentions}
+                      onEntitySearch={(value, type) => setSelectedEntity({ type, value })}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {selectedEntity && (
+        <EntityArticlePanel
+          entityType={selectedEntity.type}
+          entityValue={selectedEntity.value}
+          onClose={() => setSelectedEntity(null)}
+        />
+      )}
+    </>
   )
 }

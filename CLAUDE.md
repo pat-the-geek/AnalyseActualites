@@ -153,6 +153,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `articles_json_to_markdown.py` | JSON articles → Markdown report | positional path to JSON file |
 | `analyse_thematiques.py` | Thematic classification statistics | (none; reads `data/articles/`) |
 | `enrich_entities.py` | Enrich existing articles with named entities (NER) | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
+| `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Keyword-based report generation | (none) |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
@@ -190,6 +191,8 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
 | `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config |
 | `Sidebar.jsx` | File navigation by flux and type |
+| `EntityDashboard.jsx` | Aggregate NER stats cross-files; clicking an entity opens EntityArticlePanel |
+| `EntityArticlePanel.jsx` | Articles filtered by entity with "Générer un rapport" and "Exporter JSON" download buttons |
 
 ### Using Config
 

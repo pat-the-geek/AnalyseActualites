@@ -256,6 +256,23 @@ Ajoute un champ `entities` à chaque article possédant un champ `Résumé`, en 
 
 Les articles déjà enrichis sont ignorés (sauf avec `--force`). La sauvegarde est atomique : écriture dans un `.tmp` puis remplacement. Voir [scripts/USAGE.md](scripts/USAGE.md) pour la liste complète des arguments.
 
+### Réparer les résumés en erreur
+
+Si des articles ont été traités avec un résumé d'erreur (ex. indisponibilité API temporaire), le script `repair_failed_summaries.py` les régénère automatiquement :
+
+```bash
+# Réparer tous les fichiers dans data/articles-from-rss/
+python3 scripts/repair_failed_summaries.py
+
+# Cibler un répertoire spécifique
+python3 scripts/repair_failed_summaries.py --dir data/articles/Intelligence-artificielle
+
+# Simulation sans appel API ni écriture
+python3 scripts/repair_failed_summaries.py --dry-run
+```
+
+Le script détecte les articles dont le champ `Résumé` contient un message d'erreur, re-récupère le texte HTML de l'article, et relance la génération via l'API EurIA. La sauvegarde est atomique.
+
 ### Radar thématique
 
 ```bash
@@ -329,6 +346,8 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 | Visionneuse Markdown | Rendu HTML avec images et graphiques Mermaid |
 | Recherche plein texte | Recherche dans tous les fichiers via **⌘K** / **Ctrl+K** |
 | Panneau réglages | Gestion des flux, des planifications et des thématiques |
+| Dashboard entités | Vue agrégée cross-fichiers des entités nommées (NER) : statistiques par type, top entités, barres de proportion |
+| Détail d'une entité | Cliquer sur une entité ouvre la liste des articles la mentionnant, avec boutons **Générer un rapport** (Markdown) et **Exporter JSON** téléchargeables |
 
 ### Captures d'écran
 
@@ -362,6 +381,14 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 **Panneau de réglages — Thématiques**
 
 ![Réglages - Thématiques](docs/Screen-captures/WWUD.ai-Viewer-reglages-3.png)
+
+**Dashboard entités nommées (NER)**
+
+![Dashboard entités](docs/Screen-captures/WWUD.ai-Viewer-entities.png)
+
+**Détail d'une entité — articles filtrés avec export**
+
+![Détail entité](docs/Screen-captures/WWUD.ai-Viewer-entity-detail.png)
 
 ### Prérequis
 
@@ -458,10 +485,21 @@ Inclus des images pertinentes (<img src='URL' />).
     "Date de publication": "23/01/2025",
     "Sources": "Nom de la source",
     "URL": "https://...",
-    "Résumé": "Résumé généré par l'IA..."
+    "Résumé": "Résumé généré par l'IA...",
+    "Images": [
+      { "URL": "https://...", "Width": 1200, "Height": 800 }
+    ],
+    "entities": {
+      "PERSON": ["Sam Altman"],
+      "ORG": ["OpenAI", "Infomaniak"],
+      "GPE": ["États-Unis"],
+      "PRODUCT": ["Qwen3"]
+    }
   }
 ]
 ```
+
+> Le champ `Images` est présent dès la collecte (jusqu'à 3 images, largeur > 500 px). Le champ `entities` est ajouté a posteriori par `enrich_entities.py`.
 
 ### Chemins absolus (v2.0+)
 

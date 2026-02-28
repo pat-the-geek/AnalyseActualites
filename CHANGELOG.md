@@ -1,3 +1,21 @@
+# 28/02/2026 — Dashboard entités, export article, correction API
+
+## Viewer — Détail entités avec export
+
+- Nouveau composant `EntityArticlePanel` : cliquer sur une entité dans le Dashboard Entités ouvre la liste des articles la mentionnant
+- Bouton **Générer un rapport** : télécharge un rapport Markdown (`rapport_<TYPE>_<valeur>_YYYY-MM-DD.md`) dans le dossier Téléchargements
+- Bouton **Exporter JSON** : télécharge les articles filtrés (`entites_<TYPE>_<valeur>_YYYY-MM-DD.json`) dans le dossier Téléchargements
+- Nouveau endpoint Flask `GET /api/entities/articles?type=PRODUCT&value=ChatGPT`
+- 2 nouvelles captures d'écran dans `docs/Screen-captures/` : `WWUD.ai-Viewer-entities.png`, `WWUD.ai-Viewer-entity-detail.png`
+
+## Correction bug API (résumés en erreur)
+
+- Fix critique : `if e.response` → `if e.response is not None` dans `utils/api_client.py` et `utils/http_utils.py` — `bool(requests.Response)` retourne `False` pour tout code HTTP ≥ 400, masquant le code d'erreur réel
+- `ask()` lève désormais `RuntimeError` au lieu de retourner une chaîne d'erreur silencieusement sauvegardée en JSON
+- Ajout de la troncature à 15 000 caractères dans `generate_summary()` pour respecter la limite documentée de l'API
+- Nouveau script `scripts/repair_failed_summaries.py` : détecte et régénère les résumés en erreur (220 articles réparés le 28/02/2026)
+- README mis à jour : section §5 Viewer (captures entités), §4 (script réparation, format JSON complet avec `entities` et `Images`)
+
 # 26/02/2026 — Viewer web (Flask + React)
 
 - Ajout du Viewer WUDD.ai : interface locale de navigation/lecture/édition des fichiers JSON et Markdown
