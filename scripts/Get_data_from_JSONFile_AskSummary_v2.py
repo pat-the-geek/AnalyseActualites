@@ -283,12 +283,16 @@ def main():
         
         if not resume:
             # Générer le résumé via l'API
-            resume = api_client.generate_summary(
-                text,
-                max_lines=20,
-                timeout=config.timeout_resume
-            )
-            cache.set(resume_cache_key, resume)
+            try:
+                resume = api_client.generate_summary(
+                    text,
+                    max_lines=20,
+                    timeout=config.timeout_resume
+                )
+                cache.set(resume_cache_key, resume)
+            except RuntimeError as e:
+                logger.warning(f"Résumé impossible pour '{url}' : {e}")
+                resume = ""
 
         # Extraire les entités nommées (avec cache)
         entities_cache_key = f"entities:{url}:{date_published}"

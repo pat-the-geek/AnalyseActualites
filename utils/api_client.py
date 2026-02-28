@@ -222,7 +222,7 @@ class EurIAClient:
                 )
                 
             except requests.exceptions.HTTPError as e:
-                status_code = e.response.status_code if e.response else 'inconnu'
+                status_code = e.response.status_code if e.response is not None else 'inconnu'
                 last_error = f"Erreur HTTP {status_code}"
                 default_logger.error(
                     f"Erreur HTTP {status_code} lors de la tentative {attempt + 1}/{max_attempts}"
@@ -264,8 +264,8 @@ class EurIAClient:
             f"Dernière erreur: {last_error}"
         )
         default_logger.error(error_message)
-        
-        return f"Désolé, je n'ai pas pu obtenir de réponse. {last_error}. Veuillez réessayer plus tard."
+
+        raise RuntimeError(f"Échec API après {max_attempts} tentatives. {last_error}")
     
     def generate_summary(
         self,
@@ -285,9 +285,11 @@ class EurIAClient:
         Returns:
             Le résumé généré par l'IA
         """
+        # Tronquer le texte à 15 000 chars pour rester dans les limites de l'API
+        text_truncated = text[:15000]
         prompt = (
             f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
-            f"ne donne que le résumé, sans commentaire ni remarque : {text}"
+            f"ne donne que le résumé, sans commentaire ni remarque : {text_truncated}"
         )
         return self.ask(prompt, timeout=timeout)
     

@@ -57,8 +57,8 @@ class Config:
         self.url = os.getenv("URL")
         self.bearer = os.getenv("bearer")
         
-        # Paramètres avec valeurs par défaut
-        self.max_attempts = int(os.getenv("max_attempts", "5"))
+        # Paramètres avec valeurs par défaut (clés identiques à celles du .env)
+        self.max_attempts = int(os.getenv("max_attempts", "3"))
         self.timeout_resume = int(os.getenv("timeout_resume", "60"))
         self.timeout_rapport = int(os.getenv("timeout_rapport", "300"))
         self.default_error_message = os.getenv(

@@ -130,7 +130,11 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 print_console(f"      Extraction du texte de l'article...")
                 text = fetch_and_extract_text(link)
                 print_console(f"      Génération du résumé IA...")
-                resume = api_client.generate_summary(text, max_lines=20)
+                try:
+                    resume = api_client.generate_summary(text, max_lines=20)
+                except RuntimeError as e:
+                    print_console(f"      Résumé impossible pour '{link}', article ignoré : {e}", level="warning")
+                    continue
                 print_console(f"      Extraction des entités nommées...")
                 entities = api_client.generate_entities(resume)
                 print_console(f"      Extraction de l'image principale...")
