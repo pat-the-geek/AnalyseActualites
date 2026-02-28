@@ -1,19 +1,23 @@
-# Prompts EurIA - AnalyseActualités
+# Prompts EurIA — WUDD.ai
 
-> Documentation complète des prompts utilisés avec l'API EurIA (Qwen3)  
-> Dernière mise à jour : 23 janvier 2026
-
----
-
-## 📋 Vue d'ensemble
-
-Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour deux opérations principales :
-1. Génération de résumés d'articles individuels
-2. Création de rapports synthétiques de plusieurs articles
+> Documentation complète des prompts utilisés avec l'API EurIA (Qwen3)
+> Dernière mise à jour : 28 février 2026
 
 ---
 
-## � Cycle de vie des prompts
+## Vue d'ensemble
+
+Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour trois opérations :
+
+1. **Résumé d'article** — synthèse d'un texte HTML extrait, max 20 lignes
+2. **Rapport synthétique** — rapport Markdown structuré à partir d'un JSON d'articles
+3. **Extraction d'entités NER** — identification des entités nommées dans un résumé (18 types)
+
+Toutes les opérations passent par `utils/api_client.py` via la méthode centrale `ask()`.
+
+---
+
+## Cycle de vie des prompts
 
 ```mermaid
 flowchart TD
@@ -25,9 +29,8 @@ flowchart TD
         E1 -->|✅ Succès| F1[Résumé JSON\n≤ 20 lignes]
         E1 -->|❌ Erreur| G1{Tentative ≤ 3 ?}
         G1 -->|Oui| E1
-        G1 -->|Non| H1[Fallback : message d'erreur]
+        G1 -->|Non| H1[RuntimeError → article ignoré]
         F1 --> I1[(articles_generated_...json)]
-        H1 --> I1
     end
 
     subgraph P2["📊 Prompt 2 — Rapport synthétique"]
@@ -37,30 +40,45 @@ flowchart TD
         D2 -->|✅ Succès| E2[Rapport Markdown\npar catégories + images]
         D2 -->|❌ Erreur| F2{Tentative ≤ 3 ?}
         F2 -->|Oui| D2
-        F2 -->|Non| G2[Fallback : message d'erreur]
+        F2 -->|Non| G2[RuntimeError → rapport ignoré]
         E2 --> H2[(rapports/markdown/...md)]
-        G2 --> H2
+    end
+
+    subgraph P3["🏷️ Prompt 3 — Entités NER"]
+        A3([Résumé article]) --> B3[Assemblage prompt NER]
+        B3 --> C3{Appel API EurIA\ntimeout 60s}
+        C3 -->|✅ Succès| D3[JSON entities\n18 types]
+        C3 -->|❌ Erreur| E3{Tentative ≤ 3 ?}
+        E3 -->|Oui| C3
+        E3 -->|Non| F3[RuntimeError → article ignoré]
+        D3 --> G3[(entities dans article JSON)]
     end
 
     P1 --> P2
+    P1 --> P3
 ```
 
 ---
 
-## �🔧 Configuration API
+## Configuration API
 
 ### Endpoint
+
 ```
 https://api.infomaniak.com/euria/v1/chat/completions
 ```
 
 ### Authentification
+
 ```http
-Authorization: Bearer {BEARER_TOKEN}
+Authorization: Bearer {bearer}
 Content-Type: application/json
 ```
 
+> La variable d'environnement est `bearer` (minuscules) — voir `.env.example`.
+
 ### Paramètres de base
+
 ```json
 {
   "messages": [
@@ -76,99 +94,90 @@ Content-Type: application/json
 
 ---
 
-## 📝 Prompt 1 : Résumé d'article
+## Prompt 1 : Résumé d'article
 
 ### Contexte d'utilisation
-- **Fonction** : `askForResume(TextToResume: str)`
-- **Fichier** : `scripts/Get_data_from_JSONFile_AskSummary.py`
-- **Objectif** : Résumer le contenu HTML extrait d'un article
+
+- **Méthode** : `APIClient.generate_summary(text, max_lines, language, timeout)`
+- **Fichier** : `utils/api_client.py`
+- **Appelé par** : `scripts/Get_data_from_JSONFile_AskSummary_v2.py`, `scripts/get-keyword-from-rss.py`, `scripts/repair_failed_summaries.py`
+- **Objectif** : Résumer le contenu HTML extrait d'un article (max 20 lignes, en français)
 
 ### Template du prompt
 
 ```python
-prompt_for_ai = (
-    "faire un résumé de ce texte sur maximum 20 lignes en français, "
-    "ne donne que le résumé, sans commentaire ni remarque : " + TextToResume
+text_truncated = text[:15000]
+prompt = (
+    f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
+    f"ne donne que le résumé, sans commentaire ni remarque : {text_truncated}"
 )
 ```
 
 ### Paramètres techniques
 
 | Paramètre | Valeur | Justification |
-|-----------|--------|---------------|
+| --- | --- | --- |
 | **Timeout** | 60s | Suffisant pour résumé d'un article |
-| **Max attempts** | 3 | Retry en cas d'erreur réseau/API |
-| **enable_web_search** | True | Enrichissement possible |
-| **Langue** | Français | Sources majoritairement francophones |
+| **Max attempts** | 3 | Retry avec backoff exponentiel (2s, 4s) |
+| **enable_web_search** | True | Enrichissement contextuel possible |
+| **Langue** | Français (`fr`) | Sources majoritairement francophones |
+| **Troncature** | 15 000 chars | Limite de tokens de l'API |
 
 ### Variables d'entrée
 
-- **`TextToResume`** : Texte HTML extrait via BeautifulSoup
-  - Type : `str`
-  - Longueur moyenne : 5000-10000 caractères
-  - Format : Texte brut (HTML stripped)
+- **`text`** : Texte brut extrait via BeautifulSoup (HTML stripped)
+  - Longueur : variable, tronquée à 15 000 chars avant envoi
+- **`max_lines`** : Nombre maximum de lignes (défaut : 20)
+- **`language`** : Langue du résumé (défaut : `"français"`)
 
 ### Sortie attendue
 
 ```
-Résumé concis de l'article en français, maximum 20 lignes, sans commentaire
-meta ni remarque de l'IA.
+Résumé concis de l'article en français, maximum 20 lignes,
+sans commentaire ni remarque de l'IA.
 ```
 
-### Exemple d'utilisation
+### Comportement en cas d'erreur
 
-**Entrée** :
+`ask()` lève `RuntimeError` après épuisement des tentatives. Les callers catchent cette exception et ignorent l'article (pas de résumé vide sauvegardé en JSON).
+
+```python
+try:
+    resume = api_client.generate_summary(text, max_lines=20)
+except RuntimeError as e:
+    logger.warning(f"Résumé impossible pour '{url}' : {e}")
+    continue  # Article ignoré
 ```
-"Apple annonce aujourd'hui le lancement de son nouveau iPhone 16 avec 
-des fonctionnalités révolutionnaires... [5000 caractères]"
-```
-
-**Sortie** :
-```
-Apple a dévoilé l'iPhone 16 avec un nouvel écran OLED amélioré, une puce 
-A18 plus puissante, et une autonomie prolongée de 30%. Le smartphone 
-intègre également un système de caméra à intelligence artificielle...
-```
-
-### Stratégies d'optimisation
-
-1. **Pré-nettoyage du texte** :
-   ```python
-   # Supprimer les éléments inutiles avant envoi
-   text = re.sub(r'\s+', ' ', text)  # Normaliser espaces
-   text = text[:15000]  # Limiter longueur (éviter tokens excessifs)
-   ```
-
-2. **Post-traitement** :
-   ```python
-   summary = summary.strip()
-   # Vérifier longueur (si > 20 lignes, tronquer ou re-prompt)
-   ```
 
 ---
 
-## 📊 Prompt 2 : Génération de rapport
+## Prompt 2 : Rapport synthétique
 
 ### Contexte d'utilisation
-- **Fonction** : `create_report(file_output: str)`
-- **Fichier** : `scripts/Get_data_from_JSONFile_AskSummary.py`
+
+- **Méthode** : `APIClient.generate_report(json_content, filename, timeout)`
+- **Fichier** : `utils/api_client.py`
+- **Appelé par** : `scripts/Get_data_from_JSONFile_AskSummary_v2.py`, `scripts/generate_keyword_reports.py`
 - **Objectif** : Créer un rapport Markdown structuré à partir d'un fichier JSON d'articles
 
 ### Template du prompt
 
 ```python
-prompt_for_report = f"""
-Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
-Affiche la date de publication et les sources lorsque tu cites un article. 
-Groupe les acticles par catégories que tu auras identifiées. 
-En fin de synthèse fait un tableau avec les références (date de publication, sources et URL)
-pour chaque article dans la rubrique "Images" il y a des liens d'images.
-Lorsque cela est possible, publie le lien de l'image sous la forme <img src='{URL}' /> sur une nouvelle ligne en fin de paragraphe de catégorie. N'utilise qu'une image par paragraphe et assure-toi qu'une même URL d'image n'apparaisse qu'une seule fois dans tout le rapport.
+prompt = f"""
+Analyse le fichier ce fichier JSON et fait une synthèse des actualités.
+Affiche la date de publication et les sources lorsque tu cites un article.
+Groupe les articles par catégories que tu auras identifiées.
+En fin de synthèse fait un tableau avec les références (date de publication, sources et URL).
+Pour chaque article dans la rubrique "Images" il y a des liens d'images.
+Lorsque cela est possible, publie le lien de l'image sous la forme <img src='URL' />
+sur une nouvelle ligne en fin de paragraphe de catégorie.
+N'utilise qu'une image par paragraphe et assure-toi qu'une même URL d'image
+n'apparaisse qu'une seule fois dans tout le rapport.
 
-Filename: {file_output}
+Filename: {filename}
 File contents:
 ----- BEGIN FILE CONTENTS -----
-{json_str}
+{json_content}
 ----- END FILE CONTENTS -----
 """
 ```
@@ -176,38 +185,34 @@ File contents:
 ### Paramètres techniques
 
 | Paramètre | Valeur | Justification |
-|-----------|--------|---------------|
+| --- | --- | --- |
 | **Timeout** | 300s (5 min) | Traitement de nombreux articles |
-| **Max attempts** | 3 | Retry en cas d'erreur |
+| **Max attempts** | 3 | Retry avec backoff exponentiel |
 | **enable_web_search** | True | Enrichissement contextuel |
 | **Langue** | Français | Rapport destiné à utilisateurs francophones |
 
 ### Variables d'entrée
 
-- **`file_output`** : Chemin du fichier JSON source
-  - Exemple : `data/articles/articles_generated_2026-01-01_2026-01-31.json`
+- **`json_content`** : Contenu JSON sérialisé (tableau d'articles)
+- **`filename`** : Nom du fichier source (pour contextualiser le rapport)
 
-- **`json_str`** : Contenu JSON complet
-  ```json
-  [
-    {
-      "Date de publication": "2026-01-23T10:00:00Z",
-      "Sources": "TechCrunch",
-      "URL": "https://...",
-      "Résumé": "...",
-      "Images": [{"url": "...", "width": 1200, ...}]
+Structure attendue du JSON d'entrée :
+
+```json
+[
+  {
+    "Date de publication": "23/01/2026",
+    "Sources": "TechCrunch",
+    "URL": "https://...",
+    "Résumé": "...",
+    "Images": [{ "URL": "https://...", "Width": 1200, "Height": 800 }],
+    "entities": {
+      "PERSON": ["Sam Altman"],
+      "ORG": ["OpenAI"]
     }
-  ]
-  ```
-
-### Instructions détaillées du prompt
-
-1. **Analyse du contenu** : Lire et comprendre tous les articles JSON
-2. **Catégorisation** : Identifier automatiquement des thématiques (IA, technologie, politique, etc.)
-3. **Structuration** : Créer des sections par catégorie
-4. **Citation** : Mentionner date et source pour chaque article cité
-5. **Images** : Intégrer 1 image par catégorie (via balise `<img>`)
-6. **Tableau récapitulatif** : Créer table avec date, source, URL de tous les articles
+  }
+]
+```
 
 ### Sortie attendue
 
@@ -216,141 +221,205 @@ File contents:
 
 ## Intelligence Artificielle
 
-Le 15 janvier 2026, **TechCrunch** rapporte le lancement de GPT-5 par OpenAI...
-Le 20 janvier 2026, **Les Échos** annonce...
+Le 15 janvier 2026, **TechCrunch** rapporte...
 
 <img src='https://exemple.com/image.jpg' />
-
-## Technologie
-
-...
 
 ## Tableau des références
 
 | Date | Source | URL |
-|------|--------|-----|
+| --- | --- | --- |
 | 2026-01-15 | TechCrunch | https://... |
-| 2026-01-20 | Les Échos | https://... |
-```
-
-### Optimisations possibles
-
-1. **Réduire la taille du JSON** :
-   ```python
-   # Ne garder que les champs essentiels
-   minimal_data = [{
-       "Date": art["Date de publication"],
-       "Source": art["Sources"],
-       "URL": art["URL"],
-       "Résumé": art["Résumé"][:500]  # Tronquer résumés longs
-   } for art in data]
-   ```
-
-2. **Prompt en deux étapes** :
-   - Étape 1 : Identifier catégories
-   - Étape 2 : Générer rapport par catégorie
-
-3. **Ajouter des exemples** :
-   ```
-   Exemple de structure attendue:
-   ## [Catégorie]
-   Le [date], [source] rapporte...
-   ```
-
----
-
-## 🔄 Gestion des erreurs
-
-### Retry Logic
-
-```python
-for attempt in range(max_attempts):
-    try:
-        response = requests.post(URL, json=data, headers=headers, timeout=timeout)
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
-    except requests.exceptions.Timeout:
-        continue  # Réessayer
-    except requests.exceptions.RequestException:
-        continue  # Réessayer
-    except (ValueError, KeyError, TypeError):
-        continue  # Réessayer
-```
-
-### Fallback
-
-Si toutes les tentatives échouent :
-```python
-return "Désolé, je n'ai pas pu obtenir de réponse. Veuillez réessayer plus tard."
 ```
 
 ---
 
-## 📈 Métriques et performance
+## Prompt 3 : Extraction d'entités NER
+
+- **Méthode** : `APIClient.generate_entities(resume, timeout)`
+- **Fichier** : `utils/api_client.py`
+- **Appelé par** : `scripts/enrich_entities.py`, `scripts/get-keyword-from-rss.py`
+- **Objectif** : Extraire les entités nommées (personnes, organisations, lieux, produits…) d'un résumé
+
+### Prompt NER
+
+```python
+prompt = (
+    "Extrait les entités nommées du texte suivant et retourne un objet JSON "
+    "avec les clés : PERSON, ORG, GPE, LOC, PRODUCT, EVENT, LAW, DATE, TIME, "
+    "MONEY, PERCENT, QUANTITY, CARDINAL, ORDINAL, NORP, FAC, WORK_OF_ART, LANGUAGE. "
+    "Chaque clé doit contenir une liste de chaînes (peut être vide []). "
+    "Retourne UNIQUEMENT le JSON, sans explication ni balise markdown.\n\n"
+    f"Texte : {resume}"
+)
+```
+
+### Configuration NER
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 60s | Résumé court, réponse rapide |
+| **Max attempts** | 3 | Retry avec backoff exponentiel |
+| **enable_web_search** | True | Paramètre global de la session |
+| **Format sortie** | JSON strict | Parsé avec `json.loads()` |
+
+### Les 18 types d'entités
+
+| Type | Description | Exemples |
+| --- | --- | --- |
+| `PERSON` | Personnes physiques | Sam Altman, Emmanuel Macron |
+| `ORG` | Organisations, entreprises | OpenAI, Infomaniak, ONU |
+| `GPE` | Entités géopolitiques (pays, villes) | France, Paris, États-Unis |
+| `LOC` | Lieux géographiques non-GPE | Alpes, Atlantique |
+| `PRODUCT` | Produits, technologies | ChatGPT, iPhone 16, Qwen3 |
+| `EVENT` | Événements | CES 2026, Davos |
+| `LAW` | Lois, réglements | RGPD, AI Act |
+| `DATE` | Expressions de date | 15 janvier 2026, Q1 2026 |
+| `TIME` | Expressions d'heure | 14h00, ce matin |
+| `MONEY` | Montants financiers | 110 milliards $, 50 M€ |
+| `PERCENT` | Pourcentages | 13 %, hausse de 40% |
+| `QUANTITY` | Quantités avec unité | 500 MW, 3 To |
+| `CARDINAL` | Nombres cardinaux | cinq, 1000 |
+| `ORDINAL` | Nombres ordinaux | premier, 3e |
+| `NORP` | Nationalités, groupes politiques/religieux | Européens, Républicains |
+| `FAC` | Sites, bâtiments, infrastructures | Tour Eiffel, Pentagone |
+| `WORK_OF_ART` | Œuvres artistiques | Mona Lisa, Starship |
+| `LANGUAGE` | Langues | français, mandarin |
+
+### Format de sortie NER
+
+```json
+{
+  "PERSON": ["Sam Altman", "Dario Amodei"],
+  "ORG": ["OpenAI", "Anthropic"],
+  "GPE": ["États-Unis"],
+  "LOC": [],
+  "PRODUCT": ["ChatGPT", "Claude"],
+  "EVENT": [],
+  "LAW": [],
+  "DATE": ["février 2026"],
+  "TIME": [],
+  "MONEY": ["110 milliards $"],
+  "PERCENT": [],
+  "QUANTITY": [],
+  "CARDINAL": [],
+  "ORDINAL": [],
+  "NORP": [],
+  "FAC": [],
+  "WORK_OF_ART": [],
+  "LANGUAGE": []
+}
+```
+
+### Intégration dans le JSON article
+
+```json
+{
+  "Date de publication": "28/02/2026",
+  "Sources": "Le Monde",
+  "URL": "https://...",
+  "Résumé": "...",
+  "entities": {
+    "PERSON": ["Sam Altman"],
+    "ORG": ["OpenAI"],
+    "GPE": ["États-Unis"],
+    "PRODUCT": ["ChatGPT"]
+  }
+}
+```
+
+---
+
+## Gestion des erreurs
+
+### Implémentation actuelle (`utils/api_client.py`)
+
+```python
+def ask(self, prompt: str, timeout: int = 60) -> str:
+    last_error = ""
+    for attempt in range(self.max_attempts):
+        try:
+            response = requests.post(self.url, json=data, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            return response.json()['choices'][0]['message']['content'].strip()
+        except requests.exceptions.Timeout:
+            last_error = f"Timeout après {timeout}s"
+            if attempt < self.max_attempts - 1:
+                time.sleep(2 ** attempt)  # Backoff exponentiel
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else 'inconnu'
+            last_error = f"Erreur HTTP {status}"
+            return  # Pas de retry sur erreur HTTP
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+            if attempt < self.max_attempts - 1:
+                time.sleep(2 ** attempt)
+    raise RuntimeError(f"Échec API après {self.max_attempts} tentatives. {last_error}")
+```
+
+> **Important** : `if e.response is not None` (et non `if e.response`) — `bool(requests.Response)` retourne `False` pour tout code HTTP ≥ 400, ce qui masquerait le code d'erreur réel.
+
+### Comportement des callers
+
+Les scripts catchent `RuntimeError` et ignorent l'article concerné :
+
+```python
+try:
+    resume = api_client.generate_summary(text)
+except RuntimeError as e:
+    logger.warning(f"Résumé impossible : {e}")
+    continue  # Article ignoré, pas de résumé vide en JSON
+```
+
+---
+
+## Métriques et performance
 
 ### Temps de réponse observés
 
-| Opération | Temps moyen | Temps max |
-|-----------|-------------|-----------|
-| Résumé d'article | 5-10s | 30s |
-| Génération de rapport | 30-60s | 180s |
+| Opération | Temps moyen | Temps max (timeout) |
+| --- | --- | --- |
+| Résumé d'article | 8–12s | 60s |
+| Génération de rapport | 30–90s | 300s |
+| Extraction NER | 5–10s | 60s |
 
 ### Tokens estimés
 
 | Opération | Tokens entrée | Tokens sortie |
-|-----------|---------------|---------------|
-| Résumé (article 5000 chars) | ~1500 | ~300 |
-| Rapport (50 articles) | ~15000 | ~2000 |
+| --- | --- | --- |
+| Résumé (article 5 000 chars) | ~1 500 | ~300 |
+| Résumé (article 15 000 chars) | ~4 500 | ~300 |
+| Rapport (50 articles) | ~15 000 | ~2 000 |
+| NER (résumé 500 chars) | ~200 | ~150 |
 
 ---
 
-## 🎯 Bonnes pratiques
+## Bonnes pratiques
 
-### ✅ À faire
+### À faire
 
-1. **Pré-nettoyer le texte** avant envoi (supprimer HTML, normaliser espaces)
-2. **Limiter la longueur** des textes d'entrée (15000 caractères max)
-3. **Vérifier la sortie** : longueur, format, langue
-4. **Logger les prompts** pour debug et amélioration
-5. **Monitorer les timeouts** pour ajuster les valeurs
+1. Pré-nettoyer le texte avant envoi (supprimer HTML, normaliser espaces)
+2. Respecter la troncature à 15 000 chars avant `generate_summary()`
+3. Vérifier la sortie NER avec `json.loads()` — la réponse doit être du JSON pur
+4. Logger les erreurs API avec le code HTTP pour diagnostic
+5. Utiliser `get_config()` pour les timeouts — ne pas hardcoder
 
-### ❌ À éviter
+### À éviter
 
-1. ❌ Envoyer du HTML brut (extraire texte d'abord)
-2. ❌ Prompts ambigus ou trop longs
-3. ❌ Ne pas gérer les timeouts
-4. ❌ Ignorer les erreurs API
-5. ❌ Hardcoder les prompts sans variables
-
----
-
-## 🔮 Améliorations futures
-
-### Court terme
-- [ ] Ajouter validation de sortie (vérifier structure Markdown)
-- [ ] Logger les temps de réponse pour monitoring
-- [ ] Implémenter backoff exponentiel
-
-### Moyen terme
-- [ ] Système de cache pour résumés déjà générés
-- [ ] Prompts A/B testing
-- [ ] Few-shot learning (exemples dans le prompt)
-
-### Long terme
-- [ ] Fine-tuning du modèle sur corpus d'articles
-- [ ] Génération multilingue
-- [ ] Intégration de contraintes de style
+1. Envoyer du HTML brut (extraire le texte d'abord avec BeautifulSoup)
+2. Sauvegarder en JSON un résumé contenant un message d'erreur
+3. Utiliser `if e.response` (falsy pour HTTP ≥ 400) — toujours `if e.response is not None`
+4. Ignorer les `RuntimeError` sans logger le contexte
 
 ---
 
-## 📚 Références
+## Références
 
 - [API EurIA Infomaniak](https://euria.infomaniak.com)
 - [Qwen3 Model Documentation](https://huggingface.co/Qwen)
-- [Prompt Engineering Guide](https://www.promptingguide.ai/)
 
 ---
 
-**Auteur** : Patrick Ostertag  
-**Email** : patrick.ostertag@gmail.com  
-**Dernière mise à jour** : 23 janvier 2026
+**Auteur** : Patrick Ostertag
+**Email** : patrick.ostertag@gmail.com
+**Dernière mise à jour** : 28 février 2026
