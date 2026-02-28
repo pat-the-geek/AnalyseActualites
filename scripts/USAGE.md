@@ -34,6 +34,35 @@ python3 get-keyword-from-rss.py
 **Sortie** :
 - `../data/articles-from-rss/<mot-clé>.json`
 
+### 7. repair_failed_summaries.py
+
+**Description** : Détecte et régénère les résumés d'articles contenant un message d'erreur (ex. `"Désolé, je n'ai pas pu obtenir de réponse…"`). Utile après une indisponibilité temporaire de l'API.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+| --- | --- | --- |
+| `--dir PATH` | Répertoire à scanner | `data/articles-from-rss/` |
+| `--dry-run` | Simulation sans appel API ni écriture | désactivé |
+| `--delay SECS` | Délai entre chaque appel API (secondes) | 1 |
+
+**Utilisation** :
+
+```bash
+# Réparer tous les fichiers dans data/articles-from-rss/
+python3 scripts/repair_failed_summaries.py
+
+# Cibler un répertoire spécifique
+python3 scripts/repair_failed_summaries.py --dir data/articles/Intelligence-artificielle
+
+# Simulation sans appel API
+python3 scripts/repair_failed_summaries.py --dry-run
+```
+
+**Sortie** : Sauvegarde atomique des fichiers JSON modifiés (écriture via `.tmp` puis remplacement).
+
+---
+
 # Usage multi-flux (février 2026)
 
 ## Générer les résumés d'un flux

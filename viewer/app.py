@@ -503,6 +503,39 @@ def api_entities_dashboard():
     })
 
 
+@app.route("/api/entities/articles")
+def api_entities_articles():
+    """Retourne tous les articles contenant une entité donnée (type + valeur)."""
+    entity_type = request.args.get("type", "").strip()
+    entity_value = request.args.get("value", "").strip()
+    if not entity_type or not entity_value:
+        return jsonify({"error": "Paramètres type et value requis"}), 400
+
+    results = []
+    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(data_dir).parts:
+                continue
+            try:
+                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(articles, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+            for article in articles:
+                entities = article.get("entities", {})
+                if not isinstance(entities, dict):
+                    continue
+                values = entities.get(entity_type, [])
+                if isinstance(values, list) and entity_value in values:
+                    results.append(article)
+
+    results.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+    return jsonify(results)
+
+
 # ── Serveur frontend React (production) ──────────────────────────────────────
 
 @app.route("/", defaults={"path": ""})
