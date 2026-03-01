@@ -31,7 +31,7 @@ const H = 450
 // ── Force layout ────────────────────────────────────────────────────────────
 // nœud 0 = central (ancré fort au centre)
 // nœuds L2 (level === 2) ont une répulsion plus faible → se regroupent près de leur L1
-function computeLayout(nodes, edgeTriples) {
+function computeLayout(nodes, edgeTriples, kFactor = 1.0) {
   const n = nodes.length
   if (n <= 1) return [{ x: W / 2, y: H / 2 }]
 
@@ -51,7 +51,7 @@ function computeLayout(nodes, edgeTriples) {
     }
   })
 
-  const k = Math.sqrt((W * H) / n) * 0.90
+  const k = Math.sqrt((W * H) / n) * 0.90 * kFactor
   const ITERS = 240
 
   for (let it = 0; it < ITERS; it++) {
@@ -122,6 +122,7 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
   const [error, setError]       = useState(null)
   const [showNoise, setShowNoise] = useState(false)
   const [depth, setDepth]       = useState(1)     // 1 ou 2
+  const [spacing, setSpacing]   = useState(1.0)   // facteur d'espacement
   const [tooltip, setTooltip]   = useState(null)
 
   // ── Zoom / pan ─────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
     setLoading(true)
     setError(null)
     setData(null)
+    setSpacing(1.0)    // reset espacement à chaque nouvelle entité
     applyView(VIEW0)   // reset zoom à chaque nouvelle entité
     const params = new URLSearchParams({
       type: entityType, value: entityValue, depth, limit: 40, limit_l2: 4,
@@ -230,10 +232,10 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
       e => idx[e.source] !== undefined && idx[e.target] !== undefined
     )
     const edgeTriples = filteredEdges.map(e => [idx[e.source], idx[e.target], e.weight])
-    const positions = computeLayout(filtered, edgeTriples)
+    const positions = computeLayout(filtered, edgeTriples, spacing)
 
     return { nodes: filtered, edges: filteredEdges, positions, nodeIndex: idx }
-  }, [data, showNoise])
+  }, [data, showNoise, spacing])
 
   // ── Métriques visuelles ────────────────────────────────────────────────────
   const maxWeight  = edges.length  > 0 ? Math.max(...edges.map(e => e.weight)) : 1
@@ -313,6 +315,23 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
           />
           Dates / nombres
         </label>
+
+        {/* Espacement entre nœuds */}
+        <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+          <span>Espacement</span>
+          <div className="flex rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setSpacing(s => Math.max(0.4, +(s - 0.15).toFixed(2)))}
+              title="Rapprocher les nœuds"
+              className="px-2 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-medium leading-none"
+            >−</button>
+            <button
+              onClick={() => setSpacing(s => Math.min(3.0, +(s + 0.15).toFixed(2)))}
+              title="Éloigner les nœuds"
+              className="px-2 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border-l border-slate-200 dark:border-slate-700 font-medium leading-none"
+            >+</button>
+          </div>
+        </div>
 
         {/* Contrôles zoom */}
         <div className="ml-auto flex items-center gap-1">

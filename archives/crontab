@@ -9,5 +9,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py 2>&1 | tee -a /app/rapports/cron_scheduler.log
 # Génère le radar thématique le dernier jour du mois à 5h00
 0 5 28-31 * * root [ "$(date -d tomorrow +\%d)" = "01" ] && cd /app && python3 scripts/radar_wudd.py 2>&1 | tee -a /app/rapports/cron_radar.log
+# Convertit les articles-from-rss en Markdown (nouveau format) le dernier jour du mois à 5h30
+30 5 28-31 * * root [ "$(date -d tomorrow +\%d)" = "01" ] && cd /app && python3 scripts/articles_rss_to_markdown.py 2>&1 | tee -a /app/rapports/cron_rss_markdown.log
 
 

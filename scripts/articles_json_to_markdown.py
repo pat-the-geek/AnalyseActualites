@@ -199,14 +199,10 @@ def json_to_markdown(input_file, output_file=None):
                     if 'url' in images:
                         alt = images.get('alt') or images.get('title') or ''
                         markdown_content.append(f"![{alt}]({images['url']})\n")
-                    elif 'error' in images:
-                        markdown_content.append(f"_Image non disponible : {images['error']}_\n")
-                # Si c'est une chaîne (erreur ou url brute)
-                elif isinstance(images, str):
-                    if images.startswith('http'):
-                        markdown_content.append(f"![]({images})\n")
-                    else:
-                        markdown_content.append(f"_Image non disponible : {images}_\n")
+                    # 'error' ignoré silencieusement (ex: 403 Forbidden)
+                # Si c'est une chaîne URL brute (les erreurs textuelles sont ignorées)
+                elif isinstance(images, str) and images.startswith('http'):
+                    markdown_content.append(f"![]({images})\n")
             markdown_content.append("---\n\n")
 
         with open(output_file, 'w', encoding='utf-8') as f:
