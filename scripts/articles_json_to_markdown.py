@@ -1,9 +1,141 @@
 
 import json
+import re
 from datetime import datetime
 import traceback
 import os
 import sys
+from collections import defaultdict
+
+# Mapping type NER → (étiquette française, catégorie officielle)
+# Source : docs/ENTITIES.md § 3 — Les 18 types d'entités reconnus
+_ENTITY_META = {
+    "PERSON":      ("Personne",                          "Acteurs"),
+    "ORG":         ("Organisation",                      "Acteurs"),
+    "NORP":        ("Groupe nat./pol./religieux",        "Acteurs"),
+    "GPE":         ("Lieu géopolitique",                 "Géographie"),
+    "LOC":         ("Lieu géographique",                 "Géographie"),
+    "FAC":         ("Infrastructure / lieu",             "Géographie"),
+    "PRODUCT":     ("Produit / technologie",             "Objets"),
+    "WORK_OF_ART": ("Œuvre",                            "Objets"),
+    "LAW":         ("Loi / réglementation",              "Objets"),
+    "EVENT":       ("Événement",                         "Événements"),
+    "DATE":        ("Date",                              "Temporel"),
+    "TIME":        ("Heure",                             "Temporel"),
+    "MONEY":       ("Montant",                           "Quantitatif"),
+    "QUANTITY":    ("Quantité",                          "Quantitatif"),
+    "PERCENT":     ("Pourcentage",                       "Quantitatif"),
+    "CARDINAL":    ("Cardinal",                          "Quantitatif"),
+    "ORDINAL":     ("Ordinal",                           "Quantitatif"),
+    "LANGUAGE":    ("Langue",                            "Linguistique"),
+}
+
+_CATEGORY_ORDER = [
+    "Acteurs", "Géographie", "Objets",
+    "Événements", "Temporel", "Quantitatif", "Linguistique",
+]
+
+# Abréviations inline pour l'annotation dans le corps du résumé
+_ENTITY_ABBR = {
+    "PERSON":      "pers.",
+    "ORG":         "org.",
+    "NORP":        "grp.",
+    "GPE":         "géo.",
+    "LOC":         "loc.",
+    "FAC":         "infra.",
+    "PRODUCT":     "prod.",
+    "WORK_OF_ART": "œuvre",
+    "LAW":         "loi",
+    "EVENT":       "évén.",
+    "DATE":        "date",
+    "TIME":        "heure",
+    "MONEY":       "mont.",
+    "QUANTITY":    "qté",
+    "PERCENT":     "%",
+    "CARDINAL":    "card.",
+    "ORDINAL":     "ord.",
+    "LANGUAGE":    "lang.",
+}
+
+# Longueur minimale pour annoter une entité (évite les acronymes trop courts)
+_MIN_ENTITY_LEN = 3
+
+
+def _annotate_resume(resume: str, entities: dict) -> str:
+    """
+    Annote les mentions d'entités directement dans le texte du résumé.
+    Notation : ==entité==^[abbr.]^  (highlight iA Writer + type en exposant)
+    Stratégie : remplacement par marqueurs temporaires (plus long d'abord)
+    pour éviter les sous-correspondances et les doubles annotations.
+    """
+    to_annotate = []
+    for etype, values in entities.items():
+        if not isinstance(values, list):
+            continue
+        abbr = _ENTITY_ABBR.get(etype, etype.lower())
+        for val in values:
+            val = val.strip()
+            if len(val) >= _MIN_ENTITY_LEN:
+                to_annotate.append((val, abbr))
+
+    if not to_annotate:
+        return resume
+
+    # Trier du plus long au plus court — évite les sous-correspondances
+    to_annotate.sort(key=lambda x: len(x[0]), reverse=True)
+
+    # Passe 1 : remplacer les mentions par des marqueurs temporaires (octets nuls)
+    placeholders = {}
+    result = resume
+    for i, (val, abbr) in enumerate(to_annotate):
+        ph = f"\x00{i:04d}\x00"
+        placeholders[ph] = f"**{val}** [{abbr}]"
+        result = re.sub(r'\b' + re.escape(val) + r'\b', ph, result, flags=re.IGNORECASE)
+
+    # Passe 2 : substituer les marqueurs par la forme annotée finale
+    for ph, annotated in placeholders.items():
+        result = result.replace(ph, annotated)
+
+    return result
+
+
+def _format_entities_md(entities: dict) -> str:
+    """
+    Formate le bloc entités nommées selon la notation officielle de ENTITIES.md §3 :
+    regroupement par catégorie, libellés français, format Markdown lisible.
+    """
+    # Regrouper par catégorie officielle
+    by_cat = defaultdict(list)          # catégorie → [(label_fr, valeurs)]
+    unknown = []                        # types inconnus, affichés sans catégorie
+
+    for etype, values in entities.items():
+        if not isinstance(values, list) or not values:
+            continue
+        if etype in _ENTITY_META:
+            label_fr, cat = _ENTITY_META[etype]
+            by_cat[cat].append((label_fr, values))
+        else:
+            unknown.append((etype, values))
+
+    if not by_cat and not unknown:
+        return ""
+
+    lines = ["**Entités nommées** :\n"]
+
+    for cat in _CATEGORY_ORDER:
+        if cat not in by_cat:
+            continue
+        # Trier les types dans l'ordre du mapping pour chaque catégorie
+        type_strs = []
+        for label_fr, values in by_cat[cat]:
+            type_strs.append(f"*{label_fr}* : {', '.join(values)}")
+        lines.append(f"- **{cat}** — {' · '.join(type_strs)}\n")
+
+    for etype, values in unknown:
+        lines.append(f"- **{etype}** : {', '.join(values)}\n")
+
+    lines.append("\n")
+    return "".join(lines)
 
 # Import du logger centralisé
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,20 +172,19 @@ def json_to_markdown(input_file, output_file=None):
             if titre:
                 markdown_content.append(f"*{source_line}*\n\n")
             markdown_content.append(f"**URL**: {article.get('URL', '')}\n\n")
-            markdown_content.append(f"**Résumé**:\n{article.get('Résumé', '')}\n\n")
 
-            # Entités nommées
+            # Résumé — avec annotation inline des entités nommées
             entities = article.get('entities')
+            resume_text = article.get('Résumé', '')
             if entities and isinstance(entities, dict):
-                entity_lines = []
-                for etype, values in entities.items():
-                    if isinstance(values, list) and values:
-                        entity_lines.append(f"**{etype}** : {', '.join(values)}")
-                if entity_lines:
-                    markdown_content.append("**Entités nommées** :\n")
-                    for line in entity_lines:
-                        markdown_content.append(f"- {line}\n")
-                    markdown_content.append("\n")
+                resume_text = _annotate_resume(resume_text, entities)
+            markdown_content.append(f"**Résumé**:\n{resume_text}\n\n")
+
+            # Entités nommées — notation officielle ENTITIES.md §3
+            if entities and isinstance(entities, dict):
+                block = _format_entities_md(entities)
+                if block:
+                    markdown_content.append(block)
 
             images = article.get('Images')
             if images:

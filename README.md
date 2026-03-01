@@ -65,6 +65,8 @@ Ce qui rend le système vraiment sémantique, c'est quand il commence à percevo
 
 > Documentation complète : [docs/ENTITIES.md](docs/ENTITIES.md) — pipeline NER, Dashboard Liste / Carte / Galerie / Graphe, panneau de détail, caches.
 
+Cette analyse sémantique ne reste pas confinée au Dashboard : elle est **injectée directement dans les rapports Markdown générés**. Chaque mention d'entité est annotée inline dans le corps des résumés (`**OpenAI** [org.]`, `**Sam Altman** [pers.]`, `**2030** [date]`…) et un bloc structuré récapitule les entités de l'article par catégorie. Les rapports deviennent ainsi des documents sémantiquement enrichis, lisibles à la fois par un humain et exploitables par un traitement automatique ultérieur.
+
 ```mermaid
 mindmap
   root((WUDD.ai))
@@ -93,6 +95,7 @@ mindmap
         NER · 18 types d entités
         Enrichissement a posteriori
         Dashboard Liste · Carte · Galerie
+        Annotation inline dans les rapports
       Sémantique relationnelle
         Graphe de co-occurrences
         Navigation L1 · L2
@@ -118,7 +121,7 @@ mindmap
 ### Pipeline de traitement
 
 ```
-Reeder (RSS/JSON) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Markdown/PDF
+Reeder (RSS/JSON) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Enrichissement NER → Markdown annoté / PDF
 ```
 
 ### Arborescence du projet
