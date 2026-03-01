@@ -84,10 +84,19 @@ mindmap
       Surveillance quotidienne
       Rapport JSON + résumé IA
       Configurable dans config/
-    Entités nommées (NER)
-      18 types (PERSON, ORG, GPE…)
-      Enrichissement a posteriori
-      Intégré aux flux & mots-clés
+    Analyse sémantique
+      Sémantique lexicale
+        Mots-clés & thématiques
+        12 thématiques sociétales
+        Surveillance quotidienne RSS
+      Sémantique référentielle
+        NER · 18 types d entités
+        Enrichissement a posteriori
+        Dashboard Liste · Carte · Galerie
+      Sémantique relationnelle
+        Graphe de co-occurrences
+        Navigation L1 · L2
+        Panneau de détail interactif
     Automatisation Docker
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
