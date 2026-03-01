@@ -20,7 +20,7 @@
 
 ## 1. Principe : la sémantique référentielle
 
-WUDD.ai analyse l'information selon deux couches sémantiques complémentaires :
+WUDD.ai analyse l'information selon trois couches sémantiques complémentaires :
 
 **La sémantique lexicale** (mots-clés) identifie le *sujet* d'un texte — son domaine, son champ thématique. C'est la couche la plus basique du sens : dire qu'un article parle d'intelligence artificielle ou de géopolitique.
 
