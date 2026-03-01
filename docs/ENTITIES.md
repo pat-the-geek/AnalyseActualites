@@ -7,13 +7,14 @@
 ## Table des matières
 
 1. [Principe : la sémantique référentielle](#1-principe--la-sémantique-référentielle)
-2. [Les 18 types d'entités reconnus](#2-les-18-types-dentités-reconnus)
-3. [Pipeline d'extraction NER](#3-pipeline-dextraction-ner)
-4. [Dashboard Entités — Vue Liste](#4-dashboard-entités--vue-liste)
-5. [Dashboard Entités — Vue Carte](#5-dashboard-entités--vue-carte)
-6. [Dashboard Entités — Vue Galerie](#6-dashboard-entités--vue-galerie)
-7. [Panneau de détail d'une entité](#7-panneau-de-détail-dune-entité)
-8. [Données techniques](#8-données-techniques)
+2. [La sémantique relationnelle — le liant](#2-la-sémantique-relationnelle--le-liant)
+3. [Les 18 types d'entités reconnus](#3-les-18-types-dentités-reconnus)
+4. [Pipeline d'extraction NER](#4-pipeline-dextraction-ner)
+5. [Dashboard Entités — Vue Liste](#5-dashboard-entités--vue-liste)
+6. [Dashboard Entités — Vue Carte](#6-dashboard-entités--vue-carte)
+7. [Dashboard Entités — Vue Galerie](#7-dashboard-entités--vue-galerie)
+8. [Panneau de détail d'une entité](#8-panneau-de-détail-dune-entité)
+9. [Données techniques](#9-données-techniques)
 
 ---
 
@@ -31,7 +32,51 @@ Cette distinction fonde l'architecture du Dashboard Entités de WUDD.ai : au-del
 
 ---
 
-## 2. Les 18 types d'entités reconnus
+## 2. La sémantique relationnelle — le liant
+
+Ce qui rend WUDD.ai vraiment sémantique, c'est quand il commence à percevoir les **relations entre entités** : qui fait quoi, qui est lié à qui, quelle entité est associée à quel événement. C'est là que le sens devient structuré comme une connaissance.
+
+La sémantique référentielle identifie des acteurs. La sémantique relationnelle révèle leurs **interdépendances** à travers le corpus d'articles : deux entités qui apparaissent fréquemment dans les mêmes textes entretiennent une relation — collaboration, opposition, co-implication dans un événement — que le graphe rend visible.
+
+### Le graphe de co-occurrences
+
+WUDD.ai matérialise cette couche relationnelle via un **graphe de co-occurrences interactif**, accessible depuis le panneau de détail de chaque entité (onglet *Graphe*).
+
+![Graphe de co-occurrences — Vue relationnelle](Screen-captures/WWUD.ai-Viewer-entities-relations.png)
+
+**Principe de construction :**
+
+- Chaque article portant un champ `entities` est parcouru ; toutes les entités qui y apparaissent ensemble forment des paires co-occurrentes.
+- Le poids d'un lien entre deux entités est égal au nombre d'articles dans lesquels elles apparaissent simultanément.
+- Le nœud central (entité consultée) est mis en évidence ; les nœuds voisins sont les entités les plus fréquemment co-occurrentes.
+
+**Deux niveaux de profondeur :**
+
+| Niveau | Description | Représentation |
+| --- | --- | --- |
+| **L1** | Entités directement co-occurrentes avec l'entité centrale | Nœuds pleins, couleur par type |
+| **L2** | Entités co-occurrentes avec les nœuds L1 (relations de 2e degré) | Nœuds plus petits, contour pointillé, opacité réduite |
+
+Le niveau L2 s'active via le bouton *"2 niveaux"* dans la barre de contrôle du graphe. Il permet de percevoir des acteurs périphériques ou des ponts thématiques entre entités a priori sans lien direct.
+
+**Navigation relationnelle :**
+
+Cliquer sur n'importe quel nœud du graphe ouvre le panneau de détail de cette entité avec son propre graphe de co-occurrences, permettant une **navigation relationnelle continue** à travers le réseau sémantique du corpus. Un historique de navigation permet de revenir en arrière.
+
+**Contrôles du graphe :**
+
+| Contrôle | Action |
+| --- | --- |
+| Molette / pinch | Zoom centré sur le curseur |
+| Clic-glisser sur le fond | Déplacement (pan) |
+| Clic sur un nœud | Navigation vers cette entité |
+| Bouton *"2 niveaux"* | Affiche / masque les entités L2 |
+
+Le graphe est calculé côté serveur (`/api/entities/cooccurrences`) et rendu en SVG pur côté client, sans dépendance à D3 ou autre bibliothèque de visualisation. Le layout utilise un algorithme de force simplifié (Fruchterman-Reingold, 240 itérations) avec répulsion différenciée entre nœuds L1 et L2.
+
+---
+
+## 3. Les 18 types d'entités reconnus
 
 L'extraction NER identifie 18 types d'entités couvrant les dimensions essentielles de l'information d'actualité :
 
@@ -47,9 +92,9 @@ L'extraction NER identifie 18 types d'entités couvrant les dimensions essentiel
 
 ---
 
-## 3. Pipeline d'extraction NER
+## 4. Pipeline d'extraction NER
 
-### 3.1 Enrichissement a posteriori
+### 4.1 Enrichissement a posteriori
 
 L'extraction NER est assurée par `scripts/enrich_entities.py`, qui soumet le champ `Résumé` de chaque article à l'API EurIA (Qwen3) avec un prompt spécialisé.
 
@@ -66,11 +111,11 @@ python3 scripts/enrich_entities.py --dry-run
 
 Le script ne ré-enrichit pas les articles déjà traités (sauf avec `--force`). La sauvegarde est atomique (`.tmp` → remplacement).
 
-### 3.2 Enrichissement en temps réel
+### 4.2 Enrichissement en temps réel
 
 Le script `scripts/get-keyword-from-rss.py` (collecte quotidienne par mot-clé) intègre l'extraction NER directement lors de la génération du résumé : chaque article est enrichi sans étape séparée.
 
-### 3.3 Format de stockage
+### 4.3 Format de stockage
 
 Les entités sont ajoutées dans le JSON de l'article sous la clé `entities` :
 
@@ -91,7 +136,7 @@ Seuls les types effectivement détectés sont présents. Les types avec zéro en
 
 ---
 
-## 4. Dashboard Entités — Vue Liste
+## 5. Dashboard Entités — Vue Liste
 
 **Accès** : bouton `Liste` dans le Dashboard Entités (barre de navigation du Viewer).
 
@@ -118,11 +163,11 @@ Chaque type d'entité est présenté dans une section dédiée avec :
 - **Barre de proportion** : largeur relative au type le plus fréquent
 - **Nuage de tags cliquables** : top entités du type, avec compteur de mentions
 
-Cliquer sur n'importe quelle entité ouvre le [panneau de détail](#7-panneau-de-détail-dune-entité).
+Cliquer sur n'importe quelle entité ouvre le [panneau de détail](#8-panneau-de-détail-dune-entité).
 
 ---
 
-## 5. Dashboard Entités — Vue Carte
+## 6. Dashboard Entités — Vue Carte
 
 **Accès** : bouton `Carte` dans le Dashboard Entités.
 
@@ -143,7 +188,7 @@ La vue Carte géolocalise les entités de type `GPE` (lieux géopolitiques : pay
 ### Interactivité
 
 - **Survol** : tooltip affichant le nom, le type et le nombre de mentions
-- **Clic** : ouvre le [panneau de détail](#7-panneau-de-détail-dune-entité) de l'entité
+- **Clic** : ouvre le [panneau de détail](#8-panneau-de-détail-dune-entité) de l'entité
 - **Zoom** : molette ou boutons +/−, navigation libre sur la carte
 - **Fond cartographique** : tuiles OpenStreetMap chargées à la volée
 
@@ -155,7 +200,7 @@ Les coordonnées géographiques sont récupérées via l'API Wikipedia (`action=
 
 ---
 
-## 6. Dashboard Entités — Vue Galerie
+## 7. Dashboard Entités — Vue Galerie
 
 **Accès** : bouton `Galerie` dans le Dashboard Entités.
 
@@ -210,7 +255,7 @@ Les images acceptées sont mises en cache dans `data/images_cache.json` (TTL ill
 
 ---
 
-## 7. Panneau de détail d'une entité
+## 8. Panneau de détail d'une entité
 
 **Accès** : cliquer sur n'importe quelle entité dans les trois vues (Liste, Carte, Galerie).
 
@@ -233,7 +278,7 @@ Ces deux exports permettent d'approfondir l'analyse sur un acteur précis — pa
 
 ---
 
-## 8. Données techniques
+## 9. Données techniques
 
 ### Fichiers impliqués
 
@@ -249,7 +294,9 @@ Ces deux exports permettent d'approfondir l'analyse sur un acteur précis — pa
 | `viewer/src/components/EntityDashboard.jsx` | Composant React principal (statistiques + toggles) |
 | `viewer/src/components/EntityWorldMap.jsx` | Carte interactive (react-leaflet + OpenStreetMap) |
 | `viewer/src/components/EntityGallery.jsx` | Galerie d'images avec placeholders |
-| `viewer/src/components/EntityArticlePanel.jsx` | Panneau de détail avec export |
+| `viewer/src/components/EntityArticlePanel.jsx` | Panneau de détail flottant (articles + graphe) avec export |
+| `viewer/src/components/EntityGraph.jsx` | Graphe de co-occurrences SVG avec layout de force |
+| `viewer/app.py` — `/api/entities/cooccurrences` | Calcul des co-occurrences entre entités, profondeur 1 ou 2 |
 | `data/geocode_cache.json` | Cache coordonnées Wikipedia (TTL illimité) |
 | `data/images_cache.json` | Cache images Wikimedia (TTL illimité) |
 

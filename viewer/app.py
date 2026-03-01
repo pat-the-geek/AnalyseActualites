@@ -536,6 +536,138 @@ def api_entities_articles():
     return jsonify(results)
 
 
+@app.route("/api/entities/cooccurrences")
+def api_entities_cooccurrences():
+    """Retourne les entités co-occurrentes d'une entité donnée (via articles partagés).
+
+    Paramètres :
+      type, value  — entité centrale
+      limit        — max d'entités niveau 1 (défaut 40)
+      depth        — profondeur du graphe : 1 ou 2 (défaut 1)
+      limit_l2     — max d'entités niveau 2 par nœud L1 (défaut 4)
+    """
+    entity_type = request.args.get("type", "").strip()
+    entity_value = request.args.get("value", "").strip()
+    depth = min(int(request.args.get("depth", 1)), 2)
+    # Quand depth=2 on réduit L1 pour garder le graphe lisible
+    limit_l1 = min(int(request.args.get("limit", 40)), 100)
+    if depth >= 2:
+        limit_l1 = min(limit_l1, 12)
+    limit_l2 = min(int(request.args.get("limit_l2", 4)), 15)
+
+    if not entity_type or not entity_value:
+        return jsonify({"error": "Paramètres type et value requis"}), 400
+
+    def node_id(t, v):
+        return f"{t}:{v}"
+
+    # ── Chargement unique de tous les articles ────────────────────────────────
+    all_articles: list[dict] = []
+    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(data_dir).parts:
+                continue
+            try:
+                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if isinstance(arts, list):
+                    all_articles.extend(arts)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    # ── Passe 1 : co-occurrences L1 ──────────────────────────────────────────
+    cooc_l1: dict[tuple[str, str], int] = {}
+    for article in all_articles:
+        entities = article.get("entities", {})
+        if not isinstance(entities, dict):
+            continue
+        values = entities.get(entity_type, [])
+        if not isinstance(values, list) or entity_value not in values:
+            continue
+        for etype, evals in entities.items():
+            if not isinstance(evals, list):
+                continue
+            for ev in evals:
+                if etype == entity_type and ev == entity_value:
+                    continue
+                key = (etype, ev)
+                cooc_l1[key] = cooc_l1.get(key, 0) + 1
+
+    sorted_l1 = sorted(cooc_l1.items(), key=lambda x: x[1], reverse=True)[:limit_l1]
+    top_l1_set: set[tuple[str, str]] = {k for k, _ in sorted_l1}
+
+    # ── Construction des nœuds / arêtes L1 ───────────────────────────────────
+    nodes = [{"type": entity_type, "value": entity_value, "count": 0,
+               "central": True, "level": 0}]
+    edges = []
+
+    for (etype, ev), count in sorted_l1:
+        nodes.append({"type": etype, "value": ev, "count": count,
+                       "central": False, "level": 1})
+        edges.append({"source": node_id(entity_type, entity_value),
+                       "target": node_id(etype, ev), "weight": count})
+
+    # ── Passe 2 : co-occurrences L2 (optionnel) ──────────────────────────────
+    if depth >= 2 and top_l1_set:
+        # Pour chaque article, identifie les entités L1 présentes, puis
+        # accumule leurs co-occurrences (→ candidats L2).
+        cooc_l2: dict[tuple[tuple, tuple], int] = {}
+        for article in all_articles:
+            entities = article.get("entities", {})
+            if not isinstance(entities, dict):
+                continue
+            # Entités L1 présentes dans cet article
+            l1_here = set()
+            for etype, evals in entities.items():
+                if not isinstance(evals, list):
+                    continue
+                for ev in evals:
+                    if (etype, ev) in top_l1_set:
+                        l1_here.add((etype, ev))
+            if not l1_here:
+                continue
+            # Co-occurrences entre chaque nœud L1 et les autres entités
+            for l1_key in l1_here:
+                for etype, evals in entities.items():
+                    if not isinstance(evals, list):
+                        continue
+                    for ev in evals:
+                        co_key = (etype, ev)
+                        if co_key == l1_key:
+                            continue
+                        if co_key == (entity_type, entity_value):
+                            continue  # évite l'arête de retour vers le centre
+                        cooc_l2[(l1_key, co_key)] = cooc_l2.get((l1_key, co_key), 0) + 1
+
+        # Regroupe par nœud L1
+        l1_coocs: dict[tuple, list] = {}
+        for (l1_key, co_key), count in cooc_l2.items():
+            l1_coocs.setdefault(l1_key, []).append((co_key, count))
+
+        existing: set[tuple[str, str]] = {(entity_type, entity_value)} | top_l1_set
+        added_l2: set[tuple[str, str]] = set()
+
+        for l1_key, coocs in l1_coocs.items():
+            top_for_l1 = sorted(
+                [x for x in coocs if x[0] not in existing],
+                key=lambda x: x[1],
+                reverse=True,
+            )[:limit_l2]
+            for (etype, ev), count in top_for_l1:
+                l2_key = (etype, ev)
+                if l2_key not in added_l2:
+                    nodes.append({"type": etype, "value": ev, "count": count,
+                                   "central": False, "level": 2})
+                    added_l2.add(l2_key)
+                    existing.add(l2_key)
+                edges.append({"source": node_id(*l1_key),
+                               "target": node_id(etype, ev),
+                               "weight": count})
+
+    return jsonify({"nodes": nodes, "edges": edges, "total_cooc": len(cooc_l1)})
+
+
 @app.route("/api/entities/geocode", methods=["POST"])
 def api_entities_geocode():
     """Géocode une liste d'entités via Wikipedia API avec cache JSON local."""
