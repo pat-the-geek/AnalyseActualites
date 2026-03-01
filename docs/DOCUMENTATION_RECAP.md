@@ -160,7 +160,8 @@ AnalyseActualités/
 3. Lancer les scripts avec **[scripts/USAGE.md](scripts/USAGE.md)**
 
 ### Pour les développeurs
-1. Lire **[README.md](README.md)** - Vue d'ensemble
+
+1. Lire **[README.md](../README.md)** - Vue d'ensemble
 2. Lire **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture technique
 3. Lire **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Règles de contribution
 

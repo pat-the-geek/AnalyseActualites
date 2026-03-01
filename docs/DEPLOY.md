@@ -273,7 +273,7 @@ git filter-branch --force --index-filter \
 
 - **Email** : patrick.ostertag@gmail.com
 - **Issues GitHub** : https://github.com/VOTRE_USERNAME/AnalyseActualites/issues
-- **Documentation** : Voir [README.md](README.md)
+- **Documentation** : Voir [README.md](../README.md)
 
 ---
 

@@ -176,7 +176,7 @@ git push
 
 ### 3. Ajouter des badges au README
 
-Éditer [README.md](README.md) pour ajouter en haut :
+Éditer [README.md](../README.md) pour ajouter en haut :
 
 ```markdown
 # AnalyseActualités

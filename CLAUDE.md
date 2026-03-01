@@ -338,7 +338,7 @@ When analyzing article JSON files with Claude directly (outside the pipeline), u
 - Group articles by thematic using `config/thematiques_societales.json`
 - Use the `"Résumé"` field instead of fetching original URLs for fast reports
 - Insert images as HTTP image links when present
-- Output using the template in `modele-rapport.md` (frontmatter + TOC + body + reference table)
+- Output using the template in `docs/instructions-for-claude-report.md` (frontmatter + TOC + body + reference table)
 - Final output format: Markdown compatible with **iA Writer**
 
 ---

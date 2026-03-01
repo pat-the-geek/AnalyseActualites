@@ -331,6 +331,7 @@ Il est possible d'utiliser un fichier JSON généré par WUDD.ai directement dan
 
 → [`docs/instructions-for-claude-report.md`](docs/instructions-for-claude-report.md)
 
+→ [Exemple de rapport généré par Claude — Anthropic (20–28 fév 2026)](samples/claude-generated-rapport-anthropic-20-28-fev-2026.pdf)
 
 ### Exemples de présentations générées par Claude
 
@@ -339,7 +340,6 @@ Le prompt utilisé pour générer ces présentations est disponible dans : [docs
 Exemples de présentations générées par Claude à partir des données collectées :
 - [Présentation Markdown](samples/claude-generated-presentation.md)
 - [Présentation PDF](samples/claude-generated-presentation.pdf)
-- [Rapport Anthropic — veille 20–28 fév 2026 (PDF)](samples/claude-generated-rapport-anthropic-20-28-fev-2026.pdf)
 
 ### Utilisation avec NotebookLM
 
