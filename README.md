@@ -50,9 +50,9 @@ L'automatisation complète est assurée par un orchestrateur Docker utilisant de
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
-### Deux niveaux d'analyse sémantique
+### Trois niveaux d'analyse sémantique
 
-WUDD.ai analyse l'information selon deux couches sémantiques complémentaires :
+WUDD.ai analyse l'information selon trois couches sémantiques complémentaires :
 
 **1. La sémantique lexicale — les mots-clés**
 Associer un texte à des mots-clés, c'est identifier de quoi il parle — son sujet, son domaine, son champ thématique. C'est la couche la plus basique du sens. WUDD.ai l'implémente via la surveillance quotidienne de 133+ sources RSS par mots-clés configurables, et la classification thématique des articles en 12 thématiques sociétales.
@@ -60,7 +60,10 @@ Associer un texte à des mots-clés, c'est identifier de quoi il parle — son s
 **2. La sémantique référentielle — les entités**
 Reconnaître qu'un mot désigne une personne, un lieu, une organisation, un produit… c'est aller plus loin : on ne cherche plus seulement le thème mais les acteurs du réel que le texte convoque. C'est ce qu'on appelle la reconnaissance d'entités nommées (NER — Named Entity Recognition). WUDD.ai l'implémente via l'extraction automatique de 18 types d'entités (PERSON, ORG, GPE, PRODUCT, EVENT, DATE…) par l'API EurIA, visualisées dans le Dashboard Entités avec carte géographique et galerie d'images.
 
-> Documentation complète : [docs/ENTITIES.md](docs/ENTITIES.md) — pipeline NER, Dashboard Liste / Carte / Galerie, panneau de détail, caches.
+**3. La sémantique relationnelle — le liant**
+Ce qui rend le système vraiment sémantique, c'est quand il commence à percevoir les relations entre entités : qui fait quoi, qui est lié à qui, quelle entité est associée à quel événement. C'est là que le sens devient structuré comme une connaissance. WUDD.ai l'implémente via un graphe de co-occurrences interactif (L1 et L2), accessible depuis le panneau de détail de chaque entité, permettant une navigation relationnelle continue à travers le réseau sémantique du corpus.
+
+> Documentation complète : [docs/ENTITIES.md](docs/ENTITIES.md) — pipeline NER, Dashboard Liste / Carte / Galerie / Graphe, panneau de détail, caches.
 
 ```mermaid
 mindmap
