@@ -78,6 +78,16 @@ Le graphe est calculé côté serveur (`/api/entities/cooccurrences`) et rendu e
 
 ## 3. Les 18 types d'entités reconnus
 
+### Norme de référence : OntoNotes 5.0 / spaCy
+
+Le schéma de typage adopté est celui du corpus **OntoNotes 5.0**, développé conjointement par l'Université de Pennsylvanie, BBN Technologies et USC ISI. Il s'agit de la norme de facto pour la NER en production, popularisée par la bibliothèque **spaCy** et adoptée par la majorité des grands modèles de langue actuels.
+
+Ce choix assure une compatibilité maximale avec l'écosystème NLP : les types sont stables, documentés, et interopérables avec les outils tiers (spaCy, Hugging Face, etc.).
+
+> **Note d'implémentation :** l'extraction n'est pas réalisée par un pipeline NLP classique (spaCy, stanza…) mais par **prompt soumis au LLM** (Qwen3 via l'API EurIA). Le modèle retourne directement les entités au format JSON structuré, en appliquant la taxonomie OntoNotes. Cette approche est plus flexible sur les textes français et les entités récentes, mais peut produire des résultats variables selon la qualité du résumé source.
+
+---
+
 L'extraction NER identifie 18 types d'entités couvrant les dimensions essentielles de l'information d'actualité :
 
 | Catégorie | Types | Exemples |

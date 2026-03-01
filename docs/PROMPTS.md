@@ -265,6 +265,8 @@ prompt = (
 
 ### Les 18 types d'entités
 
+Les types suivent la norme **OntoNotes 5.0** (UPenn / BBN / USC ISI), popularisée par spaCy — voir [ENTITIES.md §3](ENTITIES.md#3-les-18-types-dentités-reconnus) et [EXTERNAL_SERVICES.md §2](EXTERNAL_SERVICES.md#2-infomaniak-euria-llm) pour le détail de la norme et son statut légal.
+
 | Type | Description | Exemples |
 | --- | --- | --- |
 | `PERSON` | Personnes physiques | Sam Altman, Emmanuel Macron |

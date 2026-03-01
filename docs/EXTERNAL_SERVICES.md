@@ -53,6 +53,12 @@ Aucune base de données externe n'est utilisée : tout est stocké localement en
 | Analyse radar thématique | `radar_wudd.py` | `TIMEOUT_RAPPORT` (300 s) |
 | Réparation de résumés échoués | `repair_failed_summaries.py` | `TIMEOUT_RESUME` (60 s) |
 
+### Taxonomie NER — OntoNotes 5.0
+
+L'extraction d'entités nommées suit la norme **OntoNotes 5.0**, développée par l'Université de Pennsylvanie, BBN Technologies et USC ISI, popularisée par **spaCy**. Les 18 types reconnus (`PERSON`, `ORG`, `GPE`, `LOC`, `PRODUCT`, `EVENT`, `DATE`, `MONEY`…) sont stables, documentés et interopérables avec l'écosystème NLP courant.
+
+> L'extraction est réalisée par prompt soumis à Qwen3, pas par un pipeline NLP classique — le LLM applique la taxonomie OntoNotes et retourne directement le JSON structuré. Voir [docs/ENTITIES.md §3](ENTITIES.md#3-les-18-types-dentités-reconnus) pour la table complète des types.
+
 ### Client — `utils/api_client.py`
 
 ```python
@@ -397,6 +403,14 @@ Les APIs Wikipedia, Wikidata et Commons bloquent les requêtes sans `User-Agent`
 ```python
 "WUDD.ai/2.1.0 (news monitoring tool; https://github.com/patrickostertag) python-requests"
 ```
+
+---
+
+### OntoNotes 5.0 — Standard de taxonomie NER
+
+Le schéma de typage des entités nommées est emprunté au corpus **OntoNotes 5.0**, distribué par le [Linguistic Data Consortium (LDC)](https://catalog.ldc.upenn.edu/LDC2013T19) sous licence LDC. WUDD.ai utilise uniquement les noms de catégories (PERSON, ORG, GPE…) comme convention de typage, sans redistribuer les données du corpus. Aucune attribution contractuelle n'est requise pour cet usage nomenclatural.
+
+La bibliothèque **spaCy** (MIT License), qui a popularisé cette taxonomie, n'est pas une dépendance de WUDD.ai : le typage est appliqué directement par Qwen3 via prompt.
 
 ---
 
