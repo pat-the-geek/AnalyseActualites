@@ -50,6 +50,18 @@ L'automatisation complète est assurée par un orchestrateur Docker utilisant de
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
+### Deux niveaux d'analyse sémantique
+
+WUDD.ai analyse l'information selon deux couches sémantiques complémentaires :
+
+**1. La sémantique lexicale — les mots-clés**
+Associer un texte à des mots-clés, c'est identifier de quoi il parle — son sujet, son domaine, son champ thématique. C'est la couche la plus basique du sens. WUDD.ai l'implémente via la surveillance quotidienne de 133+ sources RSS par mots-clés configurables, et la classification thématique des articles en 12 thématiques sociétales.
+
+**2. La sémantique référentielle — les entités**
+Reconnaître qu'un mot désigne une personne, un lieu, une organisation, un produit… c'est aller plus loin : on ne cherche plus seulement le thème mais les acteurs du réel que le texte convoque. C'est ce qu'on appelle la reconnaissance d'entités nommées (NER — Named Entity Recognition). WUDD.ai l'implémente via l'extraction automatique de 18 types d'entités (PERSON, ORG, GPE, PRODUCT, EVENT, DATE…) par l'API EurIA, visualisées dans le Dashboard Entités avec carte géographique et galerie d'images.
+
+> Documentation complète : [docs/ENTITIES.md](docs/ENTITIES.md) — pipeline NER, Dashboard Liste / Carte / Galerie, panneau de détail, caches.
+
 ```mermaid
 mindmap
   root((WUDD.ai))
@@ -636,4 +648,4 @@ Merci de respecter : la structure du projet, la langue française pour les clés
 
 ---
 
-*Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md)*
+_Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md) · Entités NER : [docs/ENTITIES.md](docs/ENTITIES.md) · Services externes : [docs/EXTERNAL_SERVICES.md](docs/EXTERNAL_SERVICES.md)_

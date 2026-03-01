@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { X, Tag, Loader2, BarChart2, FileText, Newspaper } from 'lucide-react'
+import { X, Tag, Loader2, BarChart2, FileText, Newspaper, List, Map, Images } from 'lucide-react'
 import EntityArticlePanel from './EntityArticlePanel'
+import EntityWorldMap from './EntityWorldMap'
+import EntityGallery from './EntityGallery'
 
 /**
  * Configuration des types NER (cohérente avec EntityPanel).
@@ -107,6 +109,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedEntity, setSelectedEntity] = useState(null)
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'map'
 
   useEffect(() => {
     fetch('/api/entities/dashboard')
@@ -122,6 +125,22 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
   }, [onClose])
 
   const maxMentions = data?.by_type?.[0]?.mention_count ?? 1
+
+  // Entités GPE + LOC pour la carte (top 150 par occurrence)
+  const geoEntities = data
+    ? data.by_type
+        .filter(s => s.type === 'GPE' || s.type === 'LOC')
+        .flatMap(s => s.top.map(({ value, count }) => ({ name: value, type: s.type, count })))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 150)
+    : []
+
+  // Entités PERSON + ORG + PRODUCT pour la galerie (top 50 de chaque type)
+  const galleryEntities = data
+    ? data.by_type
+        .filter(s => s.type === 'PERSON' || s.type === 'ORG' || s.type === 'PRODUCT')
+        .flatMap(s => s.top.map(({ value, count }) => ({ name: value, type: s.type, count })))
+    : []
 
   return (
     <>
@@ -142,9 +161,52 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                 — {data.by_type.length} types
               </span>
             )}
+
+            {/* Toggle Liste / Carte */}
+            {!loading && data && data.by_type.length > 0 && (
+              <div className="ml-auto mr-2 flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+                <button
+                  onClick={() => setViewMode('list')}
+                  title="Vue liste"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-violet-500 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <List size={13} />
+                  Liste
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  title="Vue carte du monde"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                    viewMode === 'map'
+                      ? 'bg-violet-500 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Map size={13} />
+                  Carte
+                </button>
+                <button
+                  onClick={() => setViewMode('gallery')}
+                  title="Galerie d'images Wikipedia"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                    viewMode === 'gallery'
+                      ? 'bg-violet-500 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Images size={13} />
+                  Galerie
+                </button>
+              </div>
+            )}
+
             <button
               onClick={onClose}
-              className="ml-auto shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+              className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
               <X size={14} />
             </button>
@@ -182,17 +244,31 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                   />
                 </div>
 
-                {/* Sections par type */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {data.by_type.map(section => (
-                    <TypeSection
-                      key={section.type}
-                      section={section}
-                      maxMentions={maxMentions}
-                      onEntitySearch={(value, type) => setSelectedEntity({ type, value })}
-                    />
-                  ))}
-                </div>
+                {viewMode === 'map' ? (
+                  /* ── Vue Carte ── */
+                  <EntityWorldMap
+                    entities={geoEntities}
+                    onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                  />
+                ) : viewMode === 'gallery' ? (
+                  /* ── Vue Galerie ── */
+                  <EntityGallery
+                    entities={galleryEntities}
+                    onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                  />
+                ) : (
+                  /* ── Vue Liste ── */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {data.by_type.map(section => (
+                      <TypeSection
+                        key={section.type}
+                        section={section}
+                        maxMentions={maxMentions}
+                        onEntitySearch={(value, type) => setSelectedEntity({ type, value })}
+                      />
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>

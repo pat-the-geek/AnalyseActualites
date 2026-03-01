@@ -349,6 +349,8 @@ When analyzing article JSON files with Claude directly (outside the pipeline), u
 |---|---|
 | `docs/ARCHITECTURE.md` | Full technical architecture (v3.0, Feb 2026) with Mermaid diagrams |
 | `docs/DEPLOY.md` | Deployment procedures |
+| `docs/EXTERNAL_SERVICES.md` | External service dependencies (EurIA, Reeder, RSS, Wikipedia, Wikidata, OSM) |
+| `docs/ENTITIES.md` | NER semantic analysis — Dashboard Liste / Carte / Galerie, pipeline, caches |
 | `docs/security/SECURITY.md` | Security considerations |
 | `docs/security/SECURITY_AUDIT.md` | Security audit report |
 | `docs/PROMPTS.md` | EurIA prompt templates |
