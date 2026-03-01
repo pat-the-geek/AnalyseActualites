@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WUDD.ai — Dark Side</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=Space+Mono:wght@400;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    color: #ccc;
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 24px;
+    gap: 60px;
+  }
+
+  /* HERO */
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+  }
+
+  .icon-main {
+    position: relative;
+    width: 260px;
+    height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-main svg {
+    width: 220px;
+    height: 220px;
+    filter:
+      drop-shadow(0 0 6px rgba(255,255,255,0.08))
+      drop-shadow(0 0 30px rgba(180,80,255,0.08));
+  }
+
+  /* Animation spectres */
+  .spectrum-line {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: drawLine 0.5s ease-out forwards;
+  }
+  .sl1 { animation-delay: 0.4s; }
+  .sl2 { animation-delay: 0.5s; }
+  .sl3 { animation-delay: 0.6s; }
+  .sl4 { animation-delay: 0.7s; }
+  .sl5 { animation-delay: 0.8s; }
+  .sl6 { animation-delay: 0.9s; }
+
+  .ray-in {
+    stroke-dasharray: 40;
+    stroke-dashoffset: 40;
+    animation: drawLine 0.4s ease-out forwards;
+    animation-delay: 0.1s;
+  }
+
+  @keyframes drawLine {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* Brand */
+  .brand { text-align: center; }
+
+  .brand-name {
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: white;
+    line-height: 1;
+  }
+
+  .brand-name .dot { color: #ff8800; }
+  .brand-name .ai  { color: #aaaaaa; font-weight: 400; }
+
+  .brand-tagline {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: #555;
+    margin-top: 12px;
+    text-transform: uppercase;
+  }
+
+  /* Separator */
+  .sep {
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, #333, transparent);
+  }
+
+  /* SECTION LABEL */
+  .label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #444;
+    text-align: center;
+  }
+
+  /* Inline */
+  .inline-demo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 16px 32px;
+    background: #080808;
+  }
+
+  .inline-demo svg { width: 40px; height: 40px; }
+
+  .inline-demo .wordmark {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+
+  .inline-demo .wordmark .dot { color: #ff8800; }
+  .inline-demo .wordmark .ai  { color: #777; font-weight: 400; }
+
+  /* Tailles */
+  .sizes {
+    display: flex;
+    align-items: flex-end;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .size-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .size-item label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: #444;
+    text-transform: uppercase;
+  }
+
+  .size-item.s128 svg { width: 128px; height: 128px; }
+  .size-item.s64  svg { width: 64px;  height: 64px; }
+  .size-item.s32  svg { width: 32px;  height: 32px; }
+
+  /* Concept */
+  .concept {
+    max-width: 420px;
+    text-align: center;
+    border-top: 1px solid #1a1a1a;
+    padding-top: 40px;
+  }
+
+  .concept p {
+    font-size: 13px;
+    line-height: 1.9;
+    color: #555;
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
+
+  .concept strong { color: #999; font-style: normal; }
+
+  /* Spectre texte décoratif */
+  .spectrum-text {
+    display: flex;
+    gap: 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .spectrum-text span:nth-child(1) { color: #ff2200; }
+  .spectrum-text span:nth-child(2) { color: #ff8800; }
+  .spectrum-text span:nth-child(3) { color: #ffee00; }
+  .spectrum-text span:nth-child(4) { color: #00dd44; }
+  .spectrum-text span:nth-child(5) { color: #0099ff; }
+  .spectrum-text span:nth-child(6) { color: #aa44ff; }
+</style>
+</head>
+<body>
+
+<!-- SVG template -->
+<template id="prismTpl">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="rayInG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="white" stop-opacity="0"/>
+      <stop offset="100%" stop-color="white" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="srG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff2200" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ff2200" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="soG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff8800" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ff8800" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="syG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffee00" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffee00" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sgG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00dd44" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#00dd44" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sbG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0099ff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#0099ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="svG_ID" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#aa44ff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#aa44ff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glowG_ID">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <rect width="100" height="100" fill="#000"/>
+  <line class="ray-in" x1="5" y1="50" x2="33" y2="50"
+        stroke="url(#rayInG_ID)" stroke-width="1.5" stroke-linecap="round"/>
+  <polygon points="50,18 30,76 70,76"
+    fill="#000" stroke="white" stroke-width="1.8" stroke-linejoin="miter"/>
+  <g filter="url(#glowG_ID)">
+    <line class="spectrum-line sl1" x1="60" y1="41" x2="97" y2="24" stroke="url(#srG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+    <line class="spectrum-line sl2" x1="60" y1="44" x2="97" y2="34" stroke="url(#soG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+    <line class="spectrum-line sl3" x1="60" y1="47" x2="97" y2="44" stroke="url(#syG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+    <line class="spectrum-line sl4" x1="60" y1="50" x2="97" y2="54" stroke="url(#sgG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+    <line class="spectrum-line sl5" x1="60" y1="53" x2="97" y2="64" stroke="url(#sbG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+    <line class="spectrum-line sl6" x1="60" y1="56" x2="97" y2="74" stroke="url(#svG_ID)" stroke-width="2.0" stroke-linecap="round"/>
+  </g>
+</svg>
+</template>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="icon-main" id="heroWrap"></div>
+  <div class="brand">
+    <div class="brand-name">WUDD<span class="dot">.</span><span class="ai">ai</span></div>
+    <div class="brand-tagline">Watch · Understand · Deliver · Data</div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- INLINE -->
+<div>
+  <div class="label" style="margin-bottom:20px">Usage inline</div>
+  <div class="inline-demo" id="inlineWrap">
+    <div class="wordmark">WUDD<span class="dot">.</span><span class="ai">ai</span></div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- TAILLES -->
+<div class="label">Tailles</div>
+<div class="sizes">
+  <div class="size-item s128" id="s128"><label>128px</label></div>
+  <div class="size-item s64"  id="s64"><label>64px</label></div>
+  <div class="size-item s32"  id="s32"><label>32px favicon</label></div>
+</div>
+
+<!-- SPECTRE TEXTE -->
+<div class="spectrum-text">
+  <span>Politique&nbsp;&nbsp;</span>
+  <span>Société&nbsp;&nbsp;</span>
+  <span>Science&nbsp;&nbsp;</span>
+  <span>Environnement&nbsp;&nbsp;</span>
+  <span>Technologie&nbsp;&nbsp;</span>
+  <span>Culture</span>
+</div>
+
+<!-- CONCEPT -->
+<div class="concept">
+  <p>
+    Une seule lumière entre.<br>
+    <strong>Six thèmes</strong> en sortent.<br>
+    L'information brute devient connaissance.
+  </p>
+</div>
+
+<script>
+  let counter = 0;
+  function clonePrism() {
+    const id = 'p' + (++counter);
+    const tpl = document.getElementById('prismTpl');
+    const div = document.createElement('div');
+    div.innerHTML = tpl.innerHTML.replace(/G_ID/g, id);
+    return div.querySelector('svg');
+  }
+
+  // Hero
+  const hero = document.getElementById('heroWrap');
+  const hSvg = clonePrism();
+  hSvg.style.cssText = 'width:220px;height:220px;filter:drop-shadow(0 0 6px rgba(255,255,255,0.08)) drop-shadow(0 0 40px rgba(100,50,255,0.1))';
+  hero.appendChild(hSvg);
+
+  // Inline
+  const inline = document.getElementById('inlineWrap');
+  const iSvg = clonePrism();
+  iSvg.style.cssText = 'width:40px;height:40px';
+  inline.insertBefore(iSvg, inline.firstChild);
+
+  // Tailles
+  [['s128','128px'],['s64','64px'],['s32','32px']].forEach(([id]) => {
+    const wrap = document.getElementById(id);
+    const svg = clonePrism();
+    wrap.insertBefore(svg, wrap.firstChild);
+  });
+</script>
+
+</body>
+</html>

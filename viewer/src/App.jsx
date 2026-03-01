@@ -6,6 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import { Search, Settings, Sun, Moon, Monitor, BarChart2 } from 'lucide-react'
+import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 const THEME_OPTIONS = [
   { key: 'jour', Icon: Sun,     title: 'Jour' },
@@ -120,9 +121,7 @@ export default function App() {
       {/* ── Barre de navigation ── */}
       <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-500 rounded-md flex items-center justify-center text-xs font-bold text-white select-none">
-            W
-          </div>
+          <img src={wuddLogo} alt="WUDD.ai" className="w-12 h-12 rounded-md select-none" />
           <span className="font-semibold text-slate-900 dark:text-slate-100">WUDD.ai</span>
           <span className="text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
         </div>
