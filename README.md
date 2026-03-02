@@ -117,6 +117,8 @@ mindmap
 ## 2. Architecture
 
 > 📐 Documentation technique complète : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — diagrammes Mermaid, flux de données, modèle de données, ADRs, roadmap.
+>
+> 🎯 Scénarios d'utilisation : [docs/USE_CASES.md](docs/USE_CASES.md) — 6 use cases illustrés avec diagrammes Mermaid (veille, rapports, entités, carte, graphe sémantique, rapport Claude).
 
 ### Pipeline de traitement
 
@@ -665,4 +667,4 @@ Merci de respecter : la structure du projet, la langue française pour les clés
 
 ---
 
-_Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md) · Entités NER : [docs/ENTITIES.md](docs/ENTITIES.md) · Services externes : [docs/EXTERNAL_SERVICES.md](docs/EXTERNAL_SERVICES.md)_
+_Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md) · Entités NER : [docs/ENTITIES.md](docs/ENTITIES.md) · Services externes : [docs/EXTERNAL_SERVICES.md](docs/EXTERNAL_SERVICES.md) · Use Cases : [docs/USE_CASES.md](docs/USE_CASES.md)_
