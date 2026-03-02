@@ -524,6 +524,7 @@ def api_entities_articles():
     if not entity_type or not entity_value:
         return jsonify({"error": "Paramètres type et value requis"}), 400
 
+    seen_urls = set()
     results = []
     for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
         if not data_dir.exists():
@@ -542,8 +543,18 @@ def api_entities_articles():
                 if not isinstance(entities, dict):
                     continue
                 values = entities.get(entity_type, [])
-                if isinstance(values, list) and entity_value in values:
-                    results.append(article)
+                if not (isinstance(values, list) and entity_value in values):
+                    continue
+                # Déduplication : URL d'abord, puis résumé (articles syndiqués sans URL unique)
+                url = (article.get("URL") or "").strip()
+                resume_key = article.get("Résumé", "")[:150].strip()
+                if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
+                    continue
+                if url:
+                    seen_urls.add(url)
+                if resume_key:
+                    seen_urls.add(resume_key)
+                results.append(article)
 
     results.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
     return jsonify(results)
@@ -846,20 +857,22 @@ def api_entities_images():
         return result
 
     def _wikidata_logos(names_batch: list[str]) -> tuple[dict[str, str], set[str]]:
-        """Retourne ({name: logo_filename}, rejected) via Wikidata P154.
+        """Retourne ({name: image_filename}, rejected) via Wikidata P154 puis P18.
 
         rejected : entités dont l'article Wikipedia correspond à une personne,
         un prénom, un concept sans lien avec une ORG/PRODUCT → pas de fallback.
 
         Règle :
           - P31 ∈ WRONG_TYPES (humain, prénom, homonymie…) → rejet définitif
-          - P31 existe mais ∉ OK_TYPES (entreprise, logiciel…) → rejet implicite
-            (ex. "Codex" → manuscrit, "Claude" → prénom français)
-          - P31 absent (entité introuvable) → laisse le fallback pageimages agir
+          - P154 (logo officiel) → prioritaire
+          - P18 (image générale) → fallback si pas de P154 et pas rejeté
+          - P31 ∈ OK_TYPES mais pas P18 → fallback pageimages
+          - P31 absent ou inconnu sans P18 → rejet implicite
         """
         logos: dict[str, str] = {}
         rejected: set[str] = set()
         P154 = "P154"
+        P18  = "P18"
 
         # Types P31 qui disqualifient explicitement une entité ORG/PRODUCT
         WRONG_TYPES = {
@@ -870,12 +883,18 @@ def api_entities_images():
             "Q11266439", # Wikimedia template
         }
         # Types P31 compatibles avec une entité ORG/PRODUCT
-        # (autorise le fallback pageimages si pas de P154)
+        # (autorise le fallback pageimages si pas de P154 ni P18)
         OK_TYPES = {
             "Q4830453", "Q783794", "Q891723", "Q43229", "Q167037",  # entreprises/orgs
             "Q7397", "Q166142", "Q9143", "Q9135", "Q7889",           # logiciels/tech
             "Q18127206", "Q18662854", "Q1331793", "Q17155032",       # tech/média
         }
+
+        def _filename(claim_value) -> str:
+            """Extrait le nom de fichier d'un claim Wikidata (string ou dict)."""
+            if isinstance(claim_value, str):
+                return claim_value
+            return claim_value.get("value", "") if isinstance(claim_value, dict) else ""
 
         for i in range(0, len(names_batch), BATCH):
             batch = names_batch[i : i + BATCH]
@@ -905,18 +924,59 @@ def api_entities_images():
                                     # Personne, prénom, homonymie → rejet définitif
                                     rejected.add(orig)
                                 elif P154 in claims:
-                                    logos[orig] = claims[P154][0]["mainsnak"]["datavalue"]["value"]
+                                    # Logo officiel (prioritaire)
+                                    logos[orig] = _filename(claims[P154][0]["mainsnak"]["datavalue"]["value"])
+                                elif P18 in claims:
+                                    # Image générale Wikidata (fallback P154)
+                                    logos[orig] = _filename(claims[P18][0]["mainsnak"]["datavalue"]["value"])
                                 elif p31_ids & OK_TYPES:
-                                    # Type ORG/PRODUCT confirmé mais sans P154 → fallback pageimages
+                                    # Type ORG/PRODUCT confirmé mais sans image → fallback pageimages
                                     pass
                                 else:
-                                    # P31 absent ou type inconnu (manuscrit, mot, concept…)
-                                    # → rejet : pas de fallback pageimages pour éviter fausses images
+                                    # P31 absent ou type inconnu → rejet implicite
                                     rejected.add(orig)
                                 break
                 except Exception:
                     continue
         return logos, rejected
+
+    def _wikidata_p18_persons(names_batch: list[str]) -> dict[str, str]:
+        """Retourne {name: image_filename} via Wikidata P18 pour les PERSON.
+
+        Utilisé en fallback quand Wikipedia pageimages ne trouve pas de portrait.
+        Contrairement à _wikidata_logos, aucun filtre de type (P31 ignoré).
+        """
+        logos: dict[str, str] = {}
+        P18 = "P18"
+        for i in range(0, len(names_batch), BATCH):
+            batch = names_batch[i : i + BATCH]
+            titles_str = "|".join(batch)
+            for site in ("enwiki", "frwiki"):
+                try:
+                    r = req.get(
+                        "https://www.wikidata.org/w/api.php",
+                        params={"action": "wbgetentities", "sites": site,
+                                "titles": titles_str, "props": "claims|sitelinks",
+                                "format": "json", "origin": "*"},
+                        headers={"User-Agent": UA}, timeout=10,
+                    )
+                    for eid, entity in r.json().get("entities", {}).items():
+                        if eid.startswith("-"):
+                            continue
+                        wiki_title = entity.get("sitelinks", {}).get(site, {}).get("title", "")
+                        claims = entity.get("claims", {})
+                        if P18 not in claims:
+                            continue
+                        for orig in batch:
+                            if orig.lower() == wiki_title.lower() and orig not in logos:
+                                val = claims[P18][0]["mainsnak"]["datavalue"]["value"]
+                                fname = val if isinstance(val, str) else val.get("value", "")
+                                if fname:
+                                    logos[orig] = fname
+                                break
+                except Exception:
+                    continue
+        return logos
 
     def _resolve_logo_urls(filenames: list[str]) -> dict[str, str]:
         """Retourne {filename: url_miniature} depuis Wikimedia Commons."""
@@ -943,11 +1003,107 @@ def api_entities_images():
                 pass
         return urls
 
-    # ── PERSON & autres : pageimages ──────────────────────────────────────────
+    # Types Wikidata à rejeter pour les entités ORG/PRODUCT dans le fallback search
+    SEARCH_WRONG = {
+        "Q5",        # human / personne physique
+        "Q202444",   # given name / prénom
+        "Q101352",   # family name / nom de famille
+        "Q4167410",  # disambiguation page
+        "Q11266439", # Wikimedia template
+        "Q50339617", # Wikimedia list article
+        "Q4086834",  # polygon (géométrie)
+        "Q35234",    # regular polygon
+        "Q12503",    # pentagon (forme géométrique)
+        "Q8091",     # geometry (discipline)
+        "Q1298765",  # mathematical object
+    }
+
+    def _wikidata_type_ok(qid: str) -> bool:
+        """Retourne True si le QID Wikidata n'est pas un SEARCH_WRONG (ORG/PRODUCT check)."""
+        if not qid:
+            return True  # pas de QID → on ne rejette pas
+        try:
+            r2 = req.get(
+                "https://www.wikidata.org/w/api.php",
+                params={"action": "wbgetentities", "ids": qid,
+                        "props": "claims", "format": "json", "origin": "*"},
+                headers={"User-Agent": UA}, timeout=5,
+            )
+            claims = r2.json().get("entities", {}).get(qid, {}).get("claims", {})
+            p31_ids = {
+                c["mainsnak"]["datavalue"]["value"]["id"]
+                for c in claims.get("P31", [])
+                if c["mainsnak"].get("datavalue")
+            }
+            return not bool(p31_ids & SEARCH_WRONG)
+        except Exception:
+            return True  # erreur réseau → on ne bloque pas
+
+    def _search_pageimage_single(name: str, entity_type: str = "") -> tuple[str, dict | None]:
+        """Fallback final : recherche Wikipedia generator=search avec validation de type.
+
+        - ORG/PRODUCT : cherche en anglais d'abord (meilleur rappel pour institutions
+          dont le nom français est ambigu, ex. 'Pentagone' → forme géométrique en fr).
+          Valide le type Wikidata du résultat pour exclure formes géom., prénoms, etc.
+        - PERSON / autres : cherche en français d'abord, pas de validation de type.
+        """
+        langs = ("en", "fr") if entity_type in ("ORG", "PRODUCT") else ("fr", "en")
+        validate = entity_type in ("ORG", "PRODUCT")
+
+        for lang in langs:
+            try:
+                r = req.get(
+                    f"https://{lang}.wikipedia.org/w/api.php",
+                    params={
+                        "action": "query",
+                        "generator": "search",
+                        "gsrsearch": name,
+                        "gsrlimit": 1,
+                        "prop": "pageimages|pageprops",
+                        "pithumbsize": THUMB,
+                        "pilicense": "any",
+                        "ppprop": "wikibase_item",
+                        "format": "json",
+                        "origin": "*",
+                    },
+                    headers={"User-Agent": UA},
+                    timeout=8,
+                )
+                pages = r.json().get("query", {}).get("pages", {})
+                for page in pages.values():
+                    # Validation du type Wikidata pour ORG/PRODUCT
+                    if validate:
+                        qid = page.get("pageprops", {}).get("wikibase_item", "")
+                        if not _wikidata_type_ok(qid):
+                            break  # mauvais type → essai langue suivante
+
+                    thumb = page.get("thumbnail")
+                    if thumb and thumb.get("source"):
+                        return name, {
+                            "url": thumb["source"],
+                            "width": thumb.get("width", THUMB),
+                            "height": thumb.get("height", THUMB),
+                        }
+            except Exception:
+                continue
+        return name, None
+
+    # ── PERSON & autres : pageimages puis Wikidata P18 si rien trouvé ───────────
     pageimg = _pageimages(person_names + other_names)
     for name in person_names + other_names:
         if name not in cache:
             cache[name] = pageimg.get(name)
+
+    # Fallback Wikidata P18 pour les PERSON sans image Wikipedia
+    persons_no_img = [n for n in person_names if not cache.get(n)]
+    if persons_no_img:
+        p18_files = _wikidata_p18_persons(persons_no_img)
+        if p18_files:
+            p18_urls = _resolve_logo_urls(list(set(p18_files.values())))
+            for name, fname in p18_files.items():
+                if name not in cache or not cache[name]:
+                    url = p18_urls.get(fname)
+                    cache[name] = {"url": url, "width": THUMB, "height": THUMB} if url else None
 
     # ── ORG / PRODUCT : Wikidata P154 + fallback pageimages (si type compatible) ──
     if logo_names:
@@ -968,6 +1124,29 @@ def api_entities_images():
                     cache[name] = None  # type hors-scope confirmé → pas d'image
                 else:
                     cache[name] = fallback.get(name)
+
+    # ── Fallback final : Wikipedia generator=search pour toutes les entités sans image ──
+    SEARCH_LIMIT = 25  # max entités par passe pour limiter la latence
+    _rejected = rejected if logo_names else set()
+    _type_map = {e["name"]: e["type"] for e in to_fetch}
+    null_entities = [
+        name for name in (person_names + logo_names + other_names)
+        if not cache.get(name) and name not in _rejected
+    ][:SEARCH_LIMIT]
+    if null_entities:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = {
+                pool.submit(_search_pageimage_single, name, _type_map.get(name, "")): name
+                for name in null_entities
+            }
+            for future in as_completed(futures):
+                try:
+                    name, result = future.result()
+                    if result and not cache.get(name):
+                        cache[name] = result
+                except Exception:
+                    pass
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")

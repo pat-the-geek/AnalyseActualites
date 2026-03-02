@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info } from 'lucide-react'
+import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info, Calendar } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import EntityGraph from './EntityGraph'
+import EntityCalendar from './EntityCalendar'
 
 // ── Composants Markdown ────────────────────────────────────────────────────────
 const MD = {
@@ -429,6 +430,18 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 <Info size={12} />
                 Infos
               </button>
+              <button
+                onClick={() => setViewMode('calendar')}
+                title="Calendrier des articles"
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  viewMode === 'calendar'
+                    ? 'bg-violet-500 text-white'
+                    : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Calendar size={12} />
+                Calendrier
+              </button>
             </div>
 
             <button
@@ -469,6 +482,11 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
         {viewMode === 'info' ? (
           /* Mode informations : synthèse streaming Markdown */
           <EntityInfoView text={infoText} loading={infoLoading} error={infoError} />
+        ) : viewMode === 'calendar' ? (
+          /* Mode calendrier */
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <EntityCalendar articles={articles} />
+          </div>
         ) : viewMode === 'graph' ? (
           /* Mode graphe : flex-col sans scroll pour que le SVG remplisse la hauteur */
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden px-4 pt-3 pb-2">
