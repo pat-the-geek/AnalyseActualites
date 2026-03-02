@@ -251,6 +251,40 @@ sequenceDiagram
 
 ---
 
+## 6. Rapport ad hoc avec Claude
+
+**Contexte :** L'utilisateur dispose d'un fichier JSON d'articles (généré par le pipeline ou l'extraction RSS) et veut obtenir rapidement un rapport de synthèse structuré, rédigé par Claude, sans passer par le pipeline automatique. Il utilise le [prompt dédié](instructions-for-claude-report.md) qui groupe les articles par thématiques, insère les images et produit un Markdown compatible iA Writer.
+
+**Acteurs :** Utilisateur · Viewer · Claude (IA) · [instructions-for-claude-report.md](instructions-for-claude-report.md)
+
+**Exemple de résultat :** [claude-generated-rapport-anthropic-20-28-fev-2026.pdf](../samples/claude-generated-rapport-anthropic-20-28-fev-2026.pdf)
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant V as Viewer (navigateur)
+    participant F as Flask
+    participant C as Claude (IA)
+
+    U->>V: Selectionne un fichier JSON d articles
+    V->>F: GET /api/content?path=...
+    F-->>V: Contenu JSON (articles + resumes + entites)
+    U->>V: Telecharge le fichier JSON
+
+    Note over U,C: Hors pipeline — interaction directe avec Claude
+    U->>C: Soumet le JSON + prompt instructions-for-claude-report.md
+    Note over C: Groupe par thematiques societales\nRedige intro + sections + tableau references\nInsere images (URL HTTP > 500px)
+
+    C-->>U: Rapport Markdown structure\n(frontmatter iA Writer · TOC · corps · references)
+
+    U->>U: Copie le Markdown dans iA Writer
+    U->>U: Exporte en PDF / partage
+```
+
+**Valeur produite :** Un rapport de synthèse thématique complet en quelques minutes, sans configuration ni attente de pipeline — idéal pour un corpus ponctuel (mot-clé, entité, période) ou une demande urgente. Le [prompt dédié](instructions-for-claude-report.md) garantit une structure et un style cohérents à chaque génération.
+
+---
+
 ## Synthèse des use cases
 
 ```mermaid
@@ -267,6 +301,7 @@ quadrantChart
     UC3 Recherche entite: [0.40, 0.75]
     UC4 Carte geopolitique: [0.30, 0.55]
     UC5 Reseau semantique: [0.20, 0.25]
+    UC6 Rapport Claude ad hoc: [0.35, 0.85]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
@@ -276,6 +311,7 @@ quadrantChart
 | 3 | Recherche entité | Ad hoc (viewer) | 2–5 min | Rapport MD / export JSON |
 | 4 | Carte géopolitique | Ad hoc (viewer) | 1–3 min | Lecture + export |
 | 5 | Réseau sémantique | Ad hoc (viewer) | 5–20 min | Découverte / navigation |
+| 6 | Rapport Claude ad hoc | Ad hoc (Claude) | 2–5 min | Rapport Markdown / PDF |
 
 ---
 
