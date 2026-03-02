@@ -863,31 +863,37 @@ def api_entities_images():
         un prénom, un concept sans lien avec une ORG/PRODUCT → pas de fallback.
 
         Règle :
-          - P31 ∈ WRONG_TYPES (humain, prénom, homonymie…) → rejet définitif
+          - P31 ∈ HARD_WRONG (humain, prénom, template) → rejet définitif
+          - P31 ∈ SOFT_WRONG (homonymie, liste) → pas de logo Wikidata, fallback search autorisé
           - P154 (logo officiel) → prioritaire
-          - P18 (image générale) → fallback si pas de P154 et pas rejeté
-          - P31 ∈ OK_TYPES mais pas P18 → fallback pageimages
-          - P31 absent ou inconnu sans P18 → rejet implicite
+          - P18 (image générale) → fallback si pas de P154 ET P31 ∈ OK_TYPES
+          - P31 ∈ OK_TYPES mais pas P18 → fallback _search_pageimage_single
+          - P31 absent ou inconnu sans P18 → fallback _search_pageimage_single
         """
         logos: dict[str, str] = {}
         rejected: set[str] = set()
         P154 = "P154"
         P18  = "P18"
 
-        # Types P31 qui disqualifient explicitement une entité ORG/PRODUCT
-        WRONG_TYPES = {
+        # Hard-rejects : entité DÉFINITIVEMENT hors-scope ORG/PRODUCT → cache=None, pas de fallback
+        HARD_WRONG = {
             "Q5",        # human / personne
             "Q202444",   # given name / prénom
             "Q101352",   # family name / nom de famille
-            "Q4167410",  # Wikimedia disambiguation page
             "Q11266439", # Wikimedia template
         }
-        # Types P31 compatibles avec une entité ORG/PRODUCT
-        # (autorise le fallback pageimages si pas de P154 ni P18)
+        # Soft-rejects : titre ambigu ou liste → pas de logo Wikidata, mais fallback search autorisé
+        SOFT_WRONG = {
+            "Q4167410",  # Wikimedia disambiguation page
+            "Q50339617", # Wikimedia list article
+        }
+        WRONG_TYPES = HARD_WRONG | SOFT_WRONG  # union pour le check P31
+        # Types P31 compatibles avec une entité ORG/PRODUCT (autorise P18 comme image)
         OK_TYPES = {
             "Q4830453", "Q783794", "Q891723", "Q43229", "Q167037",  # entreprises/orgs
             "Q7397", "Q166142", "Q9143", "Q9135", "Q7889",           # logiciels/tech
             "Q18127206", "Q18662854", "Q1331793", "Q17155032",       # tech/média
+            "Q3220391", "Q122759350", "Q6576792", "Q118140435",      # réseaux sociaux / plateformes
         }
 
         def _filename(claim_value) -> str:
@@ -920,21 +926,27 @@ def api_entities_images():
                         }
                         for orig in batch:
                             if orig.lower() == wiki_title.lower() and orig not in logos and orig not in rejected:
-                                if p31_ids & WRONG_TYPES:
-                                    # Personne, prénom, homonymie → rejet définitif
+                                if p31_ids & HARD_WRONG:
+                                    # Personne, prénom, template → rejet définitif (cache=None, pas de fallback)
                                     rejected.add(orig)
+                                elif p31_ids & SOFT_WRONG:
+                                    # Page de désambiguïsation ou liste → pas de logo Wikidata,
+                                    # mais le fallback search peut quand même essayer
+                                    break
                                 elif P154 in claims:
                                     # Logo officiel (prioritaire)
                                     logos[orig] = _filename(claims[P154][0]["mainsnak"]["datavalue"]["value"])
-                                elif P18 in claims:
-                                    # Image générale Wikidata (fallback P154)
+                                elif P18 in claims and p31_ids & OK_TYPES:
+                                    # Image générale Wikidata uniquement si type ORG/PRODUCT confirmé
+                                    # (évite de retourner une image de forme géométrique, ex. Pentagone)
                                     logos[orig] = _filename(claims[P18][0]["mainsnak"]["datavalue"]["value"])
                                 elif p31_ids & OK_TYPES:
-                                    # Type ORG/PRODUCT confirmé mais sans image → fallback pageimages
+                                    # Type ORG/PRODUCT confirmé mais sans image → fallback _search_pageimage_single
                                     pass
                                 else:
-                                    # P31 absent ou type inconnu → rejet implicite
-                                    rejected.add(orig)
+                                    # P31 absent ou type inconnu → pas de logo Wikidata,
+                                    # laisse _search_pageimage_single décider (cherche en anglais + valide type)
+                                    break
                                 break
                 except Exception:
                     continue
@@ -1016,12 +1028,18 @@ def api_entities_images():
         "Q12503",    # pentagon (forme géométrique)
         "Q8091",     # geometry (discipline)
         "Q1298765",  # mathematical object
+        "Q17451",    # typeface (ex. Blackboard bold → article sur la lettre X)
+        "Q58481926", # typeface family (ex. Fraktur)
     }
 
-    def _wikidata_type_ok(qid: str) -> bool:
-        """Retourne True si le QID Wikidata n'est pas un SEARCH_WRONG (ORG/PRODUCT check)."""
+    def _wikidata_type_ok(qid: str, strict: bool = False) -> bool:
+        """Retourne True si le QID Wikidata n'est pas un SEARCH_WRONG (ORG/PRODUCT check).
+
+        strict=True : exige P31 non-vide (rejette les entités sans type défini,
+        ex. lettre 'X' Q9968 qui n'a pas de P31 mais n'est pas une ORG).
+        """
         if not qid:
-            return True  # pas de QID → on ne rejette pas
+            return not strict  # strict=True rejette les entités sans QID
         try:
             r2 = req.get(
                 "https://www.wikidata.org/w/api.php",
@@ -1035,6 +1053,8 @@ def api_entities_images():
                 for c in claims.get("P31", [])
                 if c["mainsnak"].get("datavalue")
             }
+            if strict and not p31_ids:
+                return False  # pas de P31 → type inconnu, rejeté en mode strict
             return not bool(p31_ids & SEARCH_WRONG)
         except Exception:
             return True  # erreur réseau → on ne bloque pas
@@ -1042,12 +1062,13 @@ def api_entities_images():
     def _search_pageimage_single(name: str, entity_type: str = "") -> tuple[str, dict | None]:
         """Fallback final : recherche Wikipedia generator=search avec validation de type.
 
-        - ORG/PRODUCT : cherche en anglais d'abord (meilleur rappel pour institutions
-          dont le nom français est ambigu, ex. 'Pentagone' → forme géométrique en fr).
-          Valide le type Wikidata du résultat pour exclure formes géom., prénoms, etc.
+        - ORG/PRODUCT : cherche en français d'abord (gsrlimit=3 pour parcourir les
+          résultats ambigus, ex. 'Pentagone' → 1er résultat géométrique ignoré,
+          2e résultat = Pentagone (États-Unis) retenu).
+          Valide le type Wikidata de chaque résultat pour exclure formes géom., etc.
         - PERSON / autres : cherche en français d'abord, pas de validation de type.
         """
-        langs = ("en", "fr") if entity_type in ("ORG", "PRODUCT") else ("fr", "en")
+        langs = ("fr", "en")
         validate = entity_type in ("ORG", "PRODUCT")
 
         for lang in langs:
@@ -1058,7 +1079,7 @@ def api_entities_images():
                         "action": "query",
                         "generator": "search",
                         "gsrsearch": name,
-                        "gsrlimit": 1,
+                        "gsrlimit": 3,
                         "prop": "pageimages|pageprops",
                         "pithumbsize": THUMB,
                         "pilicense": "any",
@@ -1070,12 +1091,12 @@ def api_entities_images():
                     timeout=8,
                 )
                 pages = r.json().get("query", {}).get("pages", {})
-                for page in pages.values():
+                for page in sorted(pages.values(), key=lambda p: p.get("index", 0)):
                     # Validation du type Wikidata pour ORG/PRODUCT
                     if validate:
                         qid = page.get("pageprops", {}).get("wikibase_item", "")
-                        if not _wikidata_type_ok(qid):
-                            break  # mauvais type → essai langue suivante
+                        if not _wikidata_type_ok(qid, strict=True):
+                            continue  # mauvais type ou P31 absent → essai page suivante
 
                     thumb = page.get("thumbnail")
                     if thumb and thumb.get("source"):
@@ -1105,25 +1126,19 @@ def api_entities_images():
                     url = p18_urls.get(fname)
                     cache[name] = {"url": url, "width": THUMB, "height": THUMB} if url else None
 
-    # ── ORG / PRODUCT : Wikidata P154 + fallback pageimages (si type compatible) ──
+    # ── ORG / PRODUCT : Wikidata P154/P18 → sinon _search_pageimage_single ──
     if logo_names:
         wikidata, rejected = _wikidata_logos(logo_names)
         # Résout les URLs des logos trouvés via P154
         resolved = _resolve_logo_urls(list(set(wikidata.values()))) if wikidata else {}
-        # Fallback pageimages uniquement pour les entités ni trouvées ni rejetées
-        # (rejetées = prénom, humain, manuscrit, concept hors-scope → None)
-        fallback_names = [n for n in logo_names if n not in wikidata and n not in rejected]
-        fallback = _pageimages(fallback_names) if fallback_names else {}
-
         for name in logo_names:
             if name not in cache:
                 logo_file = wikidata.get(name)
                 if logo_file and logo_file in resolved:
                     cache[name] = {"url": resolved[logo_file], "width": THUMB, "height": THUMB}
                 elif name in rejected:
-                    cache[name] = None  # type hors-scope confirmé → pas d'image
-                else:
-                    cache[name] = fallback.get(name)
+                    cache[name] = None  # type hors-scope confirmé (personne, prénom, homonymie) → pas d'image
+                # else: pas de logo Wikidata → sera traité par _search_pageimage_single
 
     # ── Fallback final : Wikipedia generator=search pour toutes les entités sans image ──
     SEARCH_LIMIT = 25  # max entités par passe pour limiter la latence
