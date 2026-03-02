@@ -1,6 +1,51 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal } from 'lucide-react'
+import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import EntityGraph from './EntityGraph'
+
+// ── Composants Markdown ────────────────────────────────────────────────────────
+const MD = {
+  h1: ({ children }) => <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-4 mb-2">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100 mt-5 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-3 mb-1">{children}</h3>,
+  p:  ({ children }) => <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc ml-5 mb-3 space-y-1 text-sm text-slate-700 dark:text-slate-300">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal ml-5 mb-3 space-y-1 text-sm text-slate-700 dark:text-slate-300">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold text-slate-800 dark:text-slate-200">{children}</strong>,
+  a:  ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-violet-600 dark:text-violet-400 hover:underline">{children}</a>,
+  code: ({ className, children }) => className
+    ? <code className="block bg-slate-100 dark:bg-slate-800/70 rounded p-0.5 font-mono text-xs">{children}</code>
+    : <code className="bg-slate-100 dark:bg-slate-800/70 px-1.5 py-0.5 rounded font-mono text-xs text-slate-700 dark:text-slate-300">{children}</code>,
+  blockquote: ({ children }) => <blockquote className="border-l-2 border-violet-400 pl-3 italic text-slate-600 dark:text-slate-400 mb-3">{children}</blockquote>,
+  hr: () => <hr className="border-slate-200 dark:border-slate-700 my-4" />,
+}
+
+// ── Vue Informations — présentation pure (état géré par le parent) ─────────────
+function EntityInfoView({ text, loading, error }) {
+  if (error) return (
+    <div className="flex items-center justify-center h-full text-sm text-red-500 dark:text-red-400 p-6">{error}</div>
+  )
+  return (
+    <div className="flex-1 overflow-y-auto p-5 min-h-0">
+      {loading && text.length === 0 && (
+        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm">
+          <Loader2 size={16} className="animate-spin" />
+          <span>Synthèse en cours…</span>
+        </div>
+      )}
+      {text.length > 0 && (
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
+          {text}
+        </ReactMarkdown>
+      )}
+      {loading && text.length > 0 && (
+        <span className="inline-block w-1.5 h-4 bg-violet-400 dark:bg-violet-500 animate-pulse rounded-sm ml-0.5 align-middle" />
+      )}
+    </div>
+  )
+}
 
 const IMAGE_TYPES = new Set(['PERSON', 'ORG', 'PRODUCT'])
 
@@ -76,8 +121,16 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
   const [error, setError]       = useState(null)
   const [entityImage, setEntityImage] = useState(null)
 
+  // ── Info / Synthèse IA ──────────────────────────────────────────────────────
+  const [infoText, setInfoText]       = useState('')
+  const [infoLoading, setInfoLoading] = useState(false)
+  const [infoError, setInfoError]     = useState(null)
+  const infoCtrlRef  = useRef(null)   // AbortController du fetch en cours
+  const infoStarted  = useRef(false)  // true dès que le fetch a été lancé pour l'entité courante
+
   // ── Position / taille de la fenêtre ────────────────────────────────────────
   const [win, setWin] = useState(initialWin)
+  const [isMaximized, setIsMaximized] = useState(false)
   const dragData = useRef(null)   // { type: 'move'|'resize', startX, startY, ...init }
 
   // Drag document-level (move + resize)
@@ -111,6 +164,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
   }, [])
 
   const handleHeaderMouseDown = (e) => {
+    if (isMaximized) return                  // pas de drag en plein écran
     if (e.target.closest('button')) return   // ne pas déclencher sur les boutons
     e.preventDefault()
     dragData.current = { type: 'move', startX: e.clientX, startY: e.clientY, initX: win.x, initY: win.y }
@@ -154,6 +208,92 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
+
+  // ── Info : reset quand l'entité change ─────────────────────────────────────
+  useEffect(() => {
+    setInfoText('')
+    setInfoLoading(false)
+    setInfoError(null)
+    infoStarted.current = false
+    if (infoCtrlRef.current) { infoCtrlRef.current.abort(); infoCtrlRef.current = null }
+  }, [current.type, current.value])
+
+  // ── Info : lance le fetch uniquement au 1er affichage de l'onglet ──────────
+  useEffect(() => {
+    if (viewMode !== 'info' || infoStarted.current) return
+    infoStarted.current = true
+
+    const ctrl = new AbortController()
+    infoCtrlRef.current = ctrl
+    setInfoText('')
+    setInfoLoading(true)
+    setInfoError(null)
+
+    const entityType = current.type
+    const entityValue = current.value
+    let inThink = false
+
+    ;(async () => {
+      try {
+        const params = new URLSearchParams({ type: entityType, value: entityValue })
+        const res = await fetch(`/api/entities/info?${params}`, { signal: ctrl.signal })
+        if (!res.ok) throw new Error(`Erreur serveur ${res.status}`)
+
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop()
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const raw = line.slice(6).trim()
+            if (raw === '[DONE]') continue
+            let chunk
+            try {
+              const parsed = JSON.parse(raw)
+              if (parsed.error) throw new Error(parsed.error)
+              chunk = parsed.choices?.[0]?.delta?.content ?? ''
+            } catch (e) { if (e.message?.startsWith('Erreur')) throw e; continue }
+            if (!chunk) continue
+
+            // Filtre les blocs <think>…</think> de Qwen3
+            let rem = chunk
+            while (rem.length > 0) {
+              if (!inThink) {
+                const s = rem.indexOf('<think>')
+                if (s === -1) { setInfoText(p => p + rem); break }
+                setInfoText(p => p + rem.slice(0, s))
+                rem = rem.slice(s + 7)
+                inThink = true
+              } else {
+                const e = rem.indexOf('</think>')
+                if (e === -1) break
+                rem = rem.slice(e + 8)
+                inThink = false
+              }
+            }
+          }
+        }
+        setInfoLoading(false)
+      } catch (e) {
+        setInfoLoading(false)
+        if (e.name !== 'AbortError') setInfoError(e.message)
+      }
+    })()
+    // Pas de cleanup ici : le stream continue en arrière-plan si on change d'onglet.
+    // L'abort se fait via l'effet de reset (changement d'entité) ou démontage.
+  }, [viewMode, current.type, current.value])
+
+  // ── Nettoyage au démontage ─────────────────────────────────────────────────
+  useEffect(() => {
+    return () => { infoCtrlRef.current?.abort() }
+  }, [])
 
   // ── Navigation interne ─────────────────────────────────────────────────────
   const navigateTo = useCallback((type, value) => {
@@ -203,16 +343,20 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
 
       {/* Fenêtre flottante */}
       <div
-        className="fixed z-[61] flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden"
-        style={{ left: win.x, top: win.y, width: win.w, height: win.h, minWidth: 480, minHeight: 340 }}
+        className={`fixed z-[61] flex flex-col bg-slate-50 dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden ${isMaximized ? '' : 'rounded-2xl'}`}
+        style={isMaximized
+          ? { inset: 0 }
+          : { left: win.x, top: win.y, width: win.w, height: win.h, minWidth: 480, minHeight: 340 }}
       >
         {/* ── En-tête (drag zone) ── */}
         <div
-          className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap gap-y-2 cursor-move select-none"
+          className={`flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap gap-y-2 select-none ${isMaximized ? 'cursor-default' : 'cursor-move'}`}
           onMouseDown={handleHeaderMouseDown}
         >
           {/* Icône de déplacement */}
-          <GripHorizontal size={14} className="text-slate-300 dark:text-slate-600 shrink-0 pointer-events-none" />
+          {!isMaximized && (
+            <GripHorizontal size={14} className="text-slate-300 dark:text-slate-600 shrink-0 pointer-events-none" />
+          )}
 
           {/* Bouton retour */}
           {history.length > 1 && (
@@ -249,7 +393,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap cursor-default">
-            {/* Toggle Articles / Graphe */}
+            {/* Toggle Articles / Graphe / Informations */}
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
               <button
                 onClick={() => setViewMode('articles')}
@@ -273,6 +417,18 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 <Network size={12} />
                 Graphe
               </button>
+              <button
+                onClick={() => setViewMode('info')}
+                title="Synthèse générée par l'IA"
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  viewMode === 'info'
+                    ? 'bg-violet-500 text-white'
+                    : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Info size={12} />
+                Infos
+              </button>
             </div>
 
             <button
@@ -294,6 +450,13 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               JSON
             </button>
             <button
+              onClick={() => setIsMaximized(m => !m)}
+              title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+            >
+              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </button>
+            <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
@@ -303,7 +466,10 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
         </div>
 
         {/* ── Corps (prend tout l'espace restant) ── */}
-        {viewMode === 'graph' ? (
+        {viewMode === 'info' ? (
+          /* Mode informations : synthèse streaming Markdown */
+          <EntityInfoView text={infoText} loading={infoLoading} error={infoError} />
+        ) : viewMode === 'graph' ? (
           /* Mode graphe : flex-col sans scroll pour que le SVG remplisse la hauteur */
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden px-4 pt-3 pb-2">
             <EntityGraph
@@ -358,8 +524,8 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
         </div>
         )}
 
-        {/* ── Poignée de redimensionnement ── */}
-        <ResizeHandle onMouseDown={handleResizeMouseDown} />
+        {/* ── Poignée de redimensionnement (masquée en plein écran) ── */}
+        {!isMaximized && <ResizeHandle onMouseDown={handleResizeMouseDown} />}
       </div>
     </>
   )

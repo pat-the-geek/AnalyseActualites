@@ -178,7 +178,7 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 
 Local web interface for browsing, reading and editing generated JSON/Markdown files.
 
-- **Backend:** Flask (`viewer/app.py`) — REST API for file listing, content, search, scheduler status, flux/keyword config
+- **Backend:** Flask (`viewer/app.py`) — REST API for file listing, content read/write, file deletion, search, scheduler status, flux/keyword config, NER stats, entity geocoding/images, AI synthesis streaming, script execution streaming
 - **Frontend:** React 18 + Vite + Tailwind CSS — compiled to `viewer/dist/` for production
 - **Port:** 5050 (Flask / Docker) / 5173 (Vite dev server)
 - **Start (dev):** `bash viewer/start.sh` (from project root)
@@ -191,8 +191,10 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
 | `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config |
 | `Sidebar.jsx` | File navigation by flux and type |
+| `FileViewer.jsx` | File content viewer; "Supprimer" button with confirmation dialog (restricted to data/ and rapports/) |
+| `ScriptConsolePanel.jsx` | Modal console to launch `get-keyword-from-rss.py` in the background; real-time SSE log streaming; auto-refreshes the file list on success |
 | `EntityDashboard.jsx` | Aggregate NER stats cross-files; clicking an entity opens EntityArticlePanel |
-| `EntityArticlePanel.jsx` | Articles filtered by entity with "Générer un rapport" and "Exporter JSON" download buttons |
+| `EntityArticlePanel.jsx` | Draggable/resizable floating window: articles filtered by entity, co-occurrence graph, AI synthesis tab (streaming SSE, cached per entity), "Générer un rapport" and "Exporter JSON" |
 
 ### Using Config
 

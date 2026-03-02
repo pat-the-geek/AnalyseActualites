@@ -5,7 +5,8 @@ import SearchOverlay from './components/SearchOverlay'
 import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2 } from 'lucide-react'
+import ScriptConsolePanel from './components/ScriptConsolePanel'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal } from 'lucide-react'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 const THEME_OPTIONS = [
@@ -36,6 +37,7 @@ export default function App() {
   const [nameSearch, setNameSearch] = useState('')
   const [entitySearch, setEntitySearch] = useState(null) // { value, type } | null
   const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [consoleOpen, setConsoleOpen]     = useState(false)
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -55,12 +57,14 @@ export default function App() {
   }, [theme])
 
   // ── Données ────────────────────────────────────────────────────────────────
-  useEffect(() => {
+  const refreshFiles = useCallback(() => {
     fetch('/api/files')
       .then(r => r.json())
       .then(setFiles)
       .catch(console.error)
   }, [])
+
+  useEffect(() => { refreshFiles() }, [refreshFiles])
 
   // Raccourci clavier Ctrl/Cmd+K pour la recherche plein texte
   useEffect(() => {
@@ -110,6 +114,17 @@ export default function App() {
     setFileContent(newContent)
   }, [])
 
+  const deleteFile = useCallback(async (file) => {
+    const r = await fetch(`/api/files?path=${encodeURIComponent(file.path)}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      throw new Error(err.description || 'Erreur lors de la suppression')
+    }
+    setFiles(prev => prev.filter(f => f.path !== file.path))
+    setSelectedFile(null)
+    setFileContent(null)
+  }, [])
+
   const filteredFiles = files.filter(f => {
     if (typeFilter !== 'all' && f.type !== typeFilter) return false
     if (nameSearch && !f.name.toLowerCase().includes(nameSearch.toLowerCase())) return false
@@ -148,6 +163,16 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        {/* Console RSS keywords */}
+        <button
+          onClick={() => setConsoleOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Lancer l'extraction des mots-clés RSS"
+        >
+          <Terminal size={13} />
+          <span className="hidden sm:inline">Mots-clés RSS</span>
+        </button>
 
         {/* Dashboard entités */}
         <button
@@ -200,10 +225,14 @@ export default function App() {
           onDownload={downloadFile}
           onContentSaved={saveContent}
           onEntitySearch={(value, type) => setEntitySearch({ value, type })}
+          onDelete={deleteFile}
         />
       </div>
 
       {/* ── Overlays ── */}
+      {consoleOpen && (
+        <ScriptConsolePanel onClose={() => setConsoleOpen(false)} onDone={refreshFiles} />
+      )}
       {searchOpen && (
         <SearchOverlay
           onClose={() => setSearchOpen(false)}

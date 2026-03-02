@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   X, Settings, Clock, Tag, Rss, Plus, Trash2, RefreshCw,
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
+  Maximize2, Minimize2,
 } from 'lucide-react'
 
 // ─── Helpers partagés ────────────────────────────────────────────────────────
@@ -605,6 +606,7 @@ const TABS = [
 
 export default function SettingsPanel({ onClose }) {
   const [activeTab, setActiveTab] = useState('scheduler')
+  const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
@@ -614,10 +616,10 @@ export default function SettingsPanel({ onClose }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-10 px-4 pb-4"
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-start pt-10 px-4 pb-4'}`}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-5xl max-h-[88vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
+      <div className={`bg-white dark:bg-slate-800 shadow-2xl w-full border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden ${isMaximized ? '' : 'max-w-5xl max-h-[88vh] rounded-2xl'}`}>
 
         {/* ── En-tête ── */}
         <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
@@ -642,6 +644,14 @@ export default function SettingsPanel({ onClose }) {
             ))}
           </div>
 
+          <button
+            onClick={() => setIsMaximized(m => !m)}
+            title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            aria-label={isMaximized ? 'Réduire' : 'Agrandir'}
+          >
+            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"

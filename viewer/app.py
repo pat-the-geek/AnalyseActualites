@@ -4,12 +4,25 @@ Sert l'API de navigation de fichiers et le frontend React compilé.
 """
 
 import json
+import os
 import re
+import subprocess
+import threading
 import datetime
 from pathlib import Path
-from flask import Flask, jsonify, send_file, request, abort, send_from_directory
+from flask import Flask, jsonify, send_file, request, abort, send_from_directory, Response, stream_with_context
 
 app = Flask(__name__)
+
+# Suivi du process RSS keyword (un seul à la fois)
+_rss_job: dict = {"process": None, "lock": threading.Lock()}
+
+# Charge les variables d'environnement depuis .env (si disponible)
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+except ImportError:
+    pass
 
 # La racine du projet est le dossier parent de viewer/
 # resolve() AVANT parent.parent : __file__ peut être un chemin relatif
@@ -960,6 +973,142 @@ def api_entities_images():
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return jsonify({e["name"]: cache.get(e["name"]) for e in entities})
+
+
+@app.route("/api/entities/info")
+def api_entities_info():
+    """Génère en streaming une synthèse encyclopédique sur une entité via EurIA."""
+    import requests as req
+
+    entity_type  = request.args.get("type",  "").strip()
+    entity_value = request.args.get("value", "").strip()
+    if not entity_type or not entity_value:
+        return jsonify({"error": "Paramètres type et value requis"}), 400
+
+    api_url = os.environ.get("URL", "")
+    bearer  = os.environ.get("bearer", "")
+    if not api_url or not bearer:
+        return jsonify({"error": "Configuration API EurIA manquante (.env)"}), 503
+
+    type_labels = {
+        "PERSON":      "personne physique",
+        "ORG":         "organisation ou entreprise",
+        "GPE":         "lieu géopolitique",
+        "LOC":         "lieu géographique",
+        "PRODUCT":     "produit ou technologie",
+        "EVENT":       "événement",
+        "WORK_OF_ART": "œuvre",
+        "LAW":         "loi ou règlement",
+        "NORP":        "groupe national, religieux ou politique",
+        "FAC":         "site ou bâtiment",
+    }
+    label = type_labels.get(entity_type, entity_type.lower())
+
+    prompt = (
+        f"Fournis une synthèse encyclopédique en français sur « {entity_value} » ({label}).\n\n"
+        "Structure ta réponse en Markdown avec des sections pertinentes "
+        "(présentation, rôle, contexte, actualité récente, chiffres clés, liens avec d'autres acteurs…).\n"
+        "Sois factuel et concis. Génère uniquement le contenu Markdown, sans balises <think>."
+    )
+
+    payload = {
+        "messages": [{"role": "user", "content": prompt}],
+        "model": "qwen3",
+        "stream": True,
+        "enable_web_search": True,
+    }
+    api_headers = {
+        "Authorization": f"Bearer {bearer}",
+        "Content-Type": "application/json",
+    }
+
+    def generate():
+        try:
+            r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=90)
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if line:
+                    yield line.decode("utf-8") + "\n\n"
+        except Exception as exc:
+            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+
+@app.route("/api/scripts/keyword-rss/stream")
+def stream_keyword_rss():
+    """Lance get-keyword-from-rss.py et stream la sortie via SSE."""
+    script = PROJECT_ROOT / "scripts" / "get-keyword-from-rss.py"
+    if not script.exists():
+        return jsonify({"error": f"Script introuvable : {script}"}), 404
+
+    def generate():
+        with _rss_job["lock"]:
+            proc = _rss_job["process"]
+            if proc is not None and proc.poll() is None:
+                yield f'data: {json.dumps({"log": f"⚠ Script déjà en cours (PID {proc.pid})"})}\n\n'
+                return
+            env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+            try:
+                proc = subprocess.Popen(
+                    ["python3", str(script)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=str(PROJECT_ROOT),
+                    env=env,
+                )
+                _rss_job["process"] = proc
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+                return
+
+        yield f'data: {json.dumps({"log": f"▶ Démarré (PID {proc.pid})"})}\n\n'
+
+        try:
+            for line in proc.stdout:
+                stripped = line.rstrip("\n")
+                if stripped:
+                    yield f'data: {json.dumps({"log": stripped})}\n\n'
+        except Exception as exc:
+            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+        rc = proc.wait()
+        msg = f"✓ Terminé (code : {rc})" if rc == 0 else f"✗ Erreur (code : {rc})"
+        yield f'data: {json.dumps({"done": True, "returncode": rc, "log": msg})}\n\n'
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/files", methods=["DELETE"])
+def api_delete_file():
+    """Supprime un fichier de data/ ou rapports/ (avec validation de sécurité)."""
+    rel = request.args.get("path", "").strip()
+    if not rel:
+        abort(400, "Paramètre path requis")
+    if not (rel.startswith("data/") or rel.startswith("rapports/")):
+        abort(403, "Suppression non autorisée hors de data/ et rapports/")
+    target = (PROJECT_ROOT / rel).resolve()
+    if not str(target).startswith(str(PROJECT_ROOT) + "/"):
+        abort(403, "Accès refusé")
+    if not target.exists():
+        abort(404, "Fichier non trouvé")
+    try:
+        target.unlink()
+    except OSError as exc:
+        abort(500, f"Erreur de suppression : {exc}")
+    return jsonify({"ok": True, "deleted": rel})
 
 
 # ── Serveur frontend React (production) ──────────────────────────────────────

@@ -1,6 +1,6 @@
 # Architecture — AnalyseActualités
 
-> Document de référence technique · Version 4.0 · 1er mars 2026
+> Document de référence technique · Version 4.1 · 2 mars 2026
 
 ---
 
@@ -607,27 +607,31 @@ L'algorithme de layout implémente Fruchterman-Reingold en pur SVG (sans D3) :
 flowchart LR
     subgraph BACKEND["Backend Flask (viewer/app.py)"]
         API_FILES["GET /api/files\nListage par flux"]
-        API_FILE["GET/POST /api/file/<path>\nLecture / écriture"]
+        API_FILE["GET/POST /api/file/path\nLecture / écriture"]
+        API_DEL["DELETE /api/files\nSuppression data/ ou rapports/"]
         API_SEARCH["GET /api/search?q=\nRecherche plein texte"]
         API_ENT["GET /api/entities/dashboard\nStats NER agrégées"]
         API_ENT_ART["GET /api/entities/articles\nArticles par entité"]
         API_GEO["GET /api/entities/geocode\nCoordonnées Wikipedia"]
         API_IMG["GET /api/entities/images\nImages Wikidata"]
         API_COOC["GET /api/entities/cooccurrences\nGraphe de relations"]
-        API_SCHED["GET/POST /api/scheduler/*\nStatut + déclenchement"]
-        API_CFG["GET/POST /api/config/*\nFlux + mots-clés"]
+        API_INFO["GET /api/entities/info\nSynthèse SSE par entité"]
+        API_SCRIPT["GET /api/scripts/keyword-rss/stream\nLancement script + logs SSE"]
+        API_SCHED["GET/POST /api/scheduler\nStatut + déclenchement"]
+        API_CFG["GET/POST /api/keywords, /api/flux-sources\nFlux + mots-clés"]
     end
 
     subgraph FRONTEND["Frontend React 18 (viewer/src/)"]
         SIDEBAR["Sidebar.jsx\nArborescence fichiers"]
-        FILEVIEW["FileViewer.jsx\nDispatcheur type"]
+        FILEVIEW["FileViewer.jsx\nDispatcheur type + bouton supprimer"]
         JSONVIEW["JsonViewer.jsx\nÉditeur JSON"]
         MDVIEW["MarkdownViewer.jsx\nMarkdown + Mermaid"]
         SEARCH_OV["SearchOverlay.jsx\nRecherche ⌘K"]
         SETTINGS["SettingsPanel.jsx\nFlux + mots-clés"]
         SCHEDPAN["SchedulerPanel.jsx\nStatut cron"]
+        SCRIPT_CON["ScriptConsolePanel.jsx\nConsole mots-clés RSS · SSE"]
         E_DASH["EntityDashboard.jsx\nListe/Carte/Galerie"]
-        E_PANEL["EntityArticlePanel.jsx\nFenêtre draggable"]
+        E_PANEL["EntityArticlePanel.jsx\nFenêtre draggable + onglet Infos"]
         E_GRAPH["EntityGraph.jsx\nCooccurrence SVG"]
         E_MAP["EntityWorldMap.jsx\nLeaflet GPE/LOC"]
         E_GALL["EntityGallery.jsx\nImages Wikidata"]
@@ -636,14 +640,17 @@ flowchart LR
     BACKEND --> FRONTEND
     API_ENT --> E_DASH
     API_ENT_ART --> E_PANEL
+    API_INFO --> E_PANEL
     API_COOC --> E_GRAPH
     API_GEO --> E_MAP
     API_IMG --> E_GALL
+    API_DEL --> FILEVIEW
+    API_SCRIPT --> SCRIPT_CON
 
     classDef be fill:#fff3e0,stroke:#f57c00,stroke-width:1px
     classDef fe fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
-    class API_FILES,API_FILE,API_SEARCH,API_ENT,API_ENT_ART,API_GEO,API_IMG,API_COOC,API_SCHED,API_CFG be
-    class SIDEBAR,FILEVIEW,JSONVIEW,MDVIEW,SEARCH_OV,SETTINGS,SCHEDPAN,E_DASH,E_PANEL,E_GRAPH,E_MAP,E_GALL fe
+    class API_FILES,API_FILE,API_DEL,API_SEARCH,API_ENT,API_ENT_ART,API_GEO,API_IMG,API_COOC,API_INFO,API_SCRIPT,API_SCHED,API_CFG be
+    class SIDEBAR,FILEVIEW,JSONVIEW,MDVIEW,SEARCH_OV,SETTINGS,SCHEDPAN,SCRIPT_CON,E_DASH,E_PANEL,E_GRAPH,E_MAP,E_GALL fe
 ```
 
 ### Démarrage
@@ -655,21 +662,44 @@ flowchart LR
 
 > Le `viewer/dist/` est baked dans l'image Docker (`docker compose build` obligatoire après `npm run build`).
 
+### Routes API — détail
+
+| Route | Méthode | Description | Restrictions |
+|-------|---------|-------------|--------------|
+| `/api/files` | GET | Liste tous les fichiers JSON/MD de `data/`, `rapports/`, `samples/` | — |
+| `/api/files` | DELETE | Supprime un fichier par son chemin relatif | `data/` et `rapports/` uniquement |
+| `/api/content` | GET | Lit le contenu brut d'un fichier | — |
+| `/api/content` | POST | Sauvegarde le contenu (JSON validé) | `data/` et `config/` uniquement |
+| `/api/download` | GET | Télécharge un fichier en pièce jointe | — |
+| `/api/search` | GET | Recherche plein texte (param `q`) | — |
+| `/api/scheduler` | GET | Liste les tâches cron avec dernier/prochain passage | — |
+| `/api/keywords` | GET/POST | Lit/sauvegarde `keyword-to-search.json` | — |
+| `/api/flux-sources` | GET/POST | Lit/sauvegarde `flux_json_sources.json` | — |
+| `/api/search/entity` | GET | Recherche cross-fichiers d'une entité NER | — |
+| `/api/entities/dashboard` | GET | Statistiques NER agrégées (top 50 par type) | — |
+| `/api/entities/articles` | GET | Articles contenant une entité (type + value) | — |
+| `/api/entities/cooccurrences` | GET | Graphe de relations (depth 1 ou 2) | — |
+| `/api/entities/geocode` | POST | Géocode des entités via Wikipedia (cache JSON) | — |
+| `/api/entities/images` | POST | Images via Wikidata P154 + Wikipedia pageimages | — |
+| `/api/entities/info` | GET | Synthèse encyclopédique en streaming SSE (EurIA) | Token EurIA requis |
+| `/api/scripts/keyword-rss/stream` | GET | Lance `get-keyword-from-rss.py` et stream les logs SSE | Un seul process à la fois |
+
 ### Composants React — détail
 
 | Composant | Rôle |
 |-----------|------|
 | `Sidebar.jsx` | Arborescence par flux (articles, articles-from-rss, rapports) |
-| `FileViewer.jsx` | Détecte le type de fichier et route vers le bon composant |
+| `FileViewer.jsx` | Détecte le type de fichier, route vers le bon composant, bouton Supprimer |
 | `JsonViewer.jsx` | Édition JSON inline avec syntaxe colorée + sauvegarde |
 | `MarkdownViewer.jsx` | Rendu Markdown + diagrammes Mermaid (v11) |
 | `SearchOverlay.jsx` | Recherche plein texte globale (raccourci ⌘K) |
 | `SettingsPanel.jsx` | Gestion des flux et mots-clés |
 | `SchedulerPanel.jsx` | Statut cron + déclenchement manuel |
-| `EntityDashboard.jsx` | Dashboard NER : 3 onglets (Liste / Carte / Galerie) |
-| `EntityArticlePanel.jsx` | Fenêtre flottante draggable : articles + graphe + export |
+| `ScriptConsolePanel.jsx` | Console modale SSE pour lancer `get-keyword-from-rss.py` ; logs en temps réel, rechargement auto de la liste de fichiers à la fin |
+| `EntityDashboard.jsx` | Dashboard NER : 3 onglets (Liste / Carte / Galerie), plein écran |
+| `EntityArticlePanel.jsx` | Fenêtre draggable/redimensionnable : articles + graphe + synthèse IA (streaming SSE, cache par entité) + export |
 | `EntityGraph.jsx` | Réseau de cooccurrence (SVG pur, algorithme FR, zoom/pan) |
-| `EntityWorldMap.jsx` | Carte Leaflet pour entités GPE/LOC (géocodage Wikipedia) |
+| `EntityWorldMap.jsx` | Carte Leaflet pour entités GPE/LOC (géocodage Wikipedia, redimensionnement dynamique) |
 | `EntityGallery.jsx` | Galerie d'images pour PERSON/ORG/PRODUCT (Wikidata + Wikipedia) |
 
 ---

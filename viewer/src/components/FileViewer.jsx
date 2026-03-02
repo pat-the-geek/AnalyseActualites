@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp, Tag, Braces, LayoutList } from 'lucide-react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp, Tag, Braces, LayoutList, Trash2, AlertTriangle } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 import EntityPanel from './EntityPanel'
@@ -193,12 +193,14 @@ function Lightbox({ images, index, onClose, onNav }) {
   )
 }
 
-export default function FileViewer({ file, content, loading, onDownload, onContentSaved, onEntitySearch }) {
+export default function FileViewer({ file, content, loading, onDownload, onContentSaved, onEntitySearch, onDelete }) {
   const scrollRef = useRef(null)
   const entitiesRef = useRef(null)
   const imagesRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewMode, setViewMode] = useState('json') // 'json' | 'articles'
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleteError, setDeleteError]     = useState(null)
 
   // Écoute le scroll du conteneur principal (re-attaché à chaque changement de fichier)
   useEffect(() => {
@@ -240,6 +242,16 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   const scrollToTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   const scrollToEntities = () => entitiesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   const scrollToImages = () => imagesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  const handleDelete = async () => {
+    setDeleteError(null)
+    try {
+      await onDelete(file)
+      setDeleteConfirm(false)
+    } catch (e) {
+      setDeleteError(e.message)
+    }
+  }
 
   if (!file) {
     return (
@@ -328,6 +340,18 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
           <Download size={12} />
           Télécharger
         </button>
+
+        {/* Bouton supprimer */}
+        {onDelete && (
+          <button
+            onClick={() => { setDeleteConfirm(true); setDeleteError(null) }}
+            title="Supprimer ce fichier"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg transition-colors shrink-0"
+          >
+            <Trash2 size={12} />
+            Supprimer
+          </button>
+        )}
       </div>
 
       {/* ── Contenu ── */}
@@ -359,6 +383,49 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
         )}
       </div>
       {/* ── Boutons de navigation flottants ── */}
+      {/* ── Dialog de confirmation suppression ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                <AlertTriangle size={16} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                  Supprimer ce fichier ?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 break-all leading-relaxed">
+                  {file.path}
+                </p>
+                <p className="text-xs text-red-500 dark:text-red-400 mt-1.5">
+                  Cette action est irréversible.
+                </p>
+              </div>
+            </div>
+            {deleteError && (
+              <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2 mb-4">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setDeleteConfirm(false); setDeleteError(null) }}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-500 active:bg-red-700 transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scrollTop > 50 && (
         <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
           {hasImages && (

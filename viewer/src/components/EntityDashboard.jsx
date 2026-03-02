@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Tag, Loader2, BarChart2, FileText, Newspaper, List, Map, Images } from 'lucide-react'
+import { X, Tag, Loader2, BarChart2, FileText, Newspaper, List, Map, Images, Maximize2, Minimize2 } from 'lucide-react'
 import EntityArticlePanel from './EntityArticlePanel'
 import EntityWorldMap from './EntityWorldMap'
 import EntityGallery from './EntityGallery'
@@ -110,6 +110,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
   const [loading, setLoading] = useState(true)
   const [selectedEntity, setSelectedEntity] = useState(null)
   const [viewMode, setViewMode] = useState('list') // 'list' | 'map'
+  const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
     fetch('/api/entities/dashboard')
@@ -145,10 +146,10 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-start p-4 overflow-y-auto'}`}
         onClick={e => e.target === e.currentTarget && onClose()}
       >
-        <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 overflow-hidden my-4">
+        <div className={`bg-slate-50 dark:bg-slate-900 shadow-2xl w-full border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4'}`}>
 
           {/* ── En-tête ── */}
           <div className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
@@ -205,6 +206,13 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
             )}
 
             <button
+              onClick={() => setIsMaximized(m => !m)}
+              title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
+              className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+            >
+              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </button>
+            <button
               onClick={onClose}
               className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
@@ -213,7 +221,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
           </div>
 
           {/* ── Corps ── */}
-          <div className="p-6">
+          <div className={`p-6 ${isMaximized ? (viewMode === 'map' ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto') : ''}`}>
             {loading ? (
               <div className="flex items-center justify-center py-20 gap-2 text-slate-400 dark:text-slate-500">
                 <Loader2 size={20} className="animate-spin" />
@@ -231,7 +239,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
             ) : (
               <>
                 {/* Statistiques globales */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+                <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8 ${isMaximized && viewMode === 'map' ? 'shrink-0' : ''}`}>
                   <StatCard icon={FileText}  value={data.total_files}          label="Fichiers analysés" />
                   <StatCard icon={Newspaper} value={data.total_articles}        label="Articles au total" />
                   <StatCard
@@ -249,6 +257,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                   <EntityWorldMap
                     entities={geoEntities}
                     onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                    style={isMaximized ? { flex: 1, minHeight: 0 } : undefined}
                   />
                 ) : viewMode === 'gallery' ? (
                   /* ── Vue Galerie ── */

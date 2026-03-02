@@ -1,10 +1,25 @@
-import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const TYPE_COLORS = {
   GPE: '#3B82F6', // bleu
   LOC: '#10B981', // vert
+}
+
+/** Déclenche map.invalidateSize() dès que le conteneur parent est redimensionné. */
+function MapResizer({ containerRef }) {
+  const map = useMap()
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => {
+      setTimeout(() => map.invalidateSize(), 0)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [map, containerRef])
+  return null
 }
 
 const DEFAULT_COLOR = '#6B7280'
@@ -13,9 +28,10 @@ function markerRadius(count) {
   return Math.max(5, Math.min(28, Math.log2(count + 1) * 4.5))
 }
 
-export default function EntityWorldMap({ entities, onEntityClick }) {
+export default function EntityWorldMap({ entities, onEntityClick, style }) {
   const [coords, setCoords] = useState({})
   const [loading, setLoading] = useState(true)
+  const containerRef = useRef(null)
 
   useEffect(() => {
     if (!entities || entities.length === 0) {
@@ -43,7 +59,7 @@ export default function EntityWorldMap({ entities, onEntityClick }) {
     .map((e) => ({ ...e, ...coords[e.name] }))
 
   return (
-    <div className="relative w-full" style={{ height: '520px' }}>
+    <div ref={containerRef} className="relative w-full" style={style ?? { height: '520px' }}>
       {loading && (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-gray-900/70 rounded-lg">
           <span className="text-white text-sm">Géocodage en cours…</span>
@@ -58,6 +74,7 @@ export default function EntityWorldMap({ entities, onEntityClick }) {
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%', borderRadius: '0.5rem' }}
       >
+        <MapResizer containerRef={containerRef} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
