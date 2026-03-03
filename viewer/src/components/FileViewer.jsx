@@ -272,9 +272,12 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900 relative">
       {/* ── Barre de fichier ── */}
-      <div className="flex items-center gap-3 px-5 py-2.5 bg-white/70 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <div
+        className="flex items-center gap-3 px-5 py-2.5 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 fixed left-0 right-0 z-40 md:static md:z-auto"
+        style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom))' }}
+      >
         {/* Fil d'Ariane */}
-        <div className="flex items-center gap-0.5 min-w-0 flex-1 text-xs text-slate-400 dark:text-slate-500 overflow-hidden">
+        <div className="hidden md:flex items-center gap-0.5 min-w-0 flex-1 text-xs text-slate-400 dark:text-slate-500 overflow-hidden">
           {pathParts.map((part, i) => (
             <span key={i} className="flex items-center gap-0.5 shrink-0">
               {i > 0 && <ChevronRight size={10} className="text-slate-300 dark:text-slate-700" />}
@@ -346,16 +349,15 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
           <button
             onClick={() => { setDeleteConfirm(true); setDeleteError(null) }}
             title="Supprimer ce fichier"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg transition-colors shrink-0"
+            className="flex items-center justify-center p-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 rounded-lg transition-colors shrink-0"
           >
-            <Trash2 size={12} />
-            Supprimer
+            <Trash2 size={14} />
           </button>
         )}
       </div>
 
       {/* ── Contenu ── */}
-      <div ref={scrollRef} className="flex-1 overflow-auto p-6">
+      <div ref={scrollRef} className="flex-1 overflow-auto p-6 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:p-6">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 dark:text-slate-500">
             <div className="w-5 h-5 border-2 border-slate-300 dark:border-slate-600 border-t-blue-500 rounded-full animate-spin" />
@@ -427,7 +429,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
       )}
 
       {scrollTop > 50 && (
-        <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-50">
+        <div className="fixed bottom-[calc(7.5rem+env(safe-area-inset-bottom))] md:bottom-5 right-5 flex flex-col gap-2 z-50">
           {hasImages && (
             <button
               onClick={scrollToImages}

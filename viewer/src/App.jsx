@@ -6,7 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu } from 'lucide-react'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 const THEME_OPTIONS = [
@@ -17,13 +17,23 @@ const THEME_OPTIONS = [
 
 function applyTheme(theme) {
   const html = document.documentElement
+  let isDark
   if (theme === 'nuit') {
     html.classList.add('dark')
+    isDark = true
   } else if (theme === 'jour') {
     html.classList.remove('dark')
+    isDark = false
   } else {
-    html.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches)
+    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    html.classList.toggle('dark', isDark)
   }
+  let meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.remove()
+  meta = document.createElement('meta')
+  meta.name = 'theme-color'
+  meta.content = isDark ? '#1e293b' : '#ffffff'
+  document.head.appendChild(meta)
 }
 
 export default function App() {
@@ -38,6 +48,7 @@ export default function App() {
   const [entitySearch, setEntitySearch] = useState(null) // { value, type } | null
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [consoleOpen, setConsoleOpen]     = useState(false)
+  const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -82,6 +93,7 @@ export default function App() {
     setSelectedFile(file)
     setFileContent(null)
     setContentLoading(true)
+    if (window.innerWidth < 768) setSidebarOpen(false)
     fetch(`/api/content?path=${encodeURIComponent(file.path)}`)
       .then(r => r.json())
       .then(data => {
@@ -134,18 +146,26 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* ── Barre de navigation ── */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
+        {/* Bouton hamburger — mobile uniquement */}
+        <button
+          onClick={() => setSidebarOpen(v => !v)}
+          className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          title="Afficher / masquer les fichiers"
+        >
+          <Menu size={18} />
+        </button>
         <div className="flex items-center gap-2">
-          <img src={wuddLogo} alt="WUDD.ai" className="w-12 h-12 rounded-md select-none" />
+          <img src={wuddLogo} alt="WUDD.ai" className="hidden sm:block w-12 h-12 rounded-md select-none" />
           <span className="font-semibold text-slate-900 dark:text-slate-100">WUDD.ai</span>
-          <span className="text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
+          <span className="hidden sm:inline text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
         </div>
 
         <div className="flex-1" />
 
         {/* Sélecteur de thème */}
         <div
-          className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0"
+          className="hidden md:flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0"
           title="Thème d'affichage"
         >
           {THEME_OPTIONS.map(({ key, Icon, title }) => (
@@ -167,7 +187,7 @@ export default function App() {
         {/* Console RSS keywords */}
         <button
           onClick={() => setConsoleOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Lancer l'extraction des mots-clés RSS"
         >
           <Terminal size={13} />
@@ -177,7 +197,7 @@ export default function App() {
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Dashboard des entités nommées"
         >
           <BarChart2 size={13} />
@@ -187,7 +207,7 @@ export default function App() {
         {/* Réglages */}
         <button
           onClick={() => setSettingsOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Réglages — planification, mots-clés, flux"
         >
           <Settings size={13} />
@@ -197,7 +217,7 @@ export default function App() {
         {/* Recherche plein texte */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
         >
           <Search size={13} />
           <span className="hidden sm:inline">Recherche plein texte</span>
@@ -208,7 +228,14 @@ export default function App() {
       </header>
 
       {/* ── Corps principal ── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative pb-16 md:pb-0">
+        {/* Overlay backdrop — mobile uniquement, ferme la sidebar au clic */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
         <Sidebar
           files={filteredFiles}
           selectedFile={selectedFile}
@@ -217,6 +244,8 @@ export default function App() {
           onTypeFilterChange={setTypeFilter}
           nameSearch={nameSearch}
           onNameSearchChange={setNameSearch}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
         <FileViewer
           file={selectedFile}
@@ -228,6 +257,64 @@ export default function App() {
           onDelete={deleteFile}
         />
       </div>
+
+      {/* ── Barre de navigation bas — mobile uniquement ── */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-50 flex items-stretch"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {/* Sélecteur de thème */}
+        <div className="flex items-center justify-center px-2 border-r border-slate-200 dark:border-slate-700">
+          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+            {THEME_OPTIONS.map(({ key, Icon, title }) => (
+              <button
+                key={key}
+                onClick={() => setTheme(key)}
+                title={title}
+                className={`px-2 py-1.5 transition-colors ${
+                  theme === key
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Icon size={13} />
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Console RSS */}
+        <button
+          onClick={() => setConsoleOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Terminal size={18} />
+          <span className="text-[10px]">RSS</span>
+        </button>
+        {/* Dashboard entités */}
+        <button
+          onClick={() => setDashboardOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <BarChart2 size={18} />
+          <span className="text-[10px]">Entités</span>
+        </button>
+        {/* Réglages */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Settings size={18} />
+          <span className="text-[10px]">Réglages</span>
+        </button>
+        {/* Recherche */}
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Search size={18} />
+          <span className="text-[10px]">Recherche</span>
+        </button>
+      </nav>
 
       {/* ── Overlays ── */}
       {consoleOpen && (

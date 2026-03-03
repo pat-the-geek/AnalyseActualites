@@ -22,14 +22,13 @@
 
 Toutes les tâches planifiées sont **exclusivement gérées dans le conteneur Docker** via une crontab personnalisée. Aucune tâche cron n'est programmée sur l'hôte.
 
-### Tâches actives (vérification 21/02/2026)
+### Tâches actives (vérification 03/03/2026)
 
 | Tâche | Script | Fréquence | Log |
-|-------|--------|-----------|-----|
+| --- | --- | --- | --- |
 | Scheduler d'articles | `scheduler_articles.py` | Lundi 6h | `/app/rapports/cron_scheduler.log` |
-| Extraction par mot-clé | `get-keyword-from-rss.py` | Quotidien 1h | `/app/rapports/cron_get_keyword.log` |
+| Extraction par mot-clé | `get-keyword-from-rss.py` | Toutes les 2h de 6h à 22h (9×/jour) | `/app/rapports/cron_get_keyword.log` |
 | Surveillance cron | `check_cron_health.py` | Toutes les 10 min | `/app/rapports/cron_health.log` |
-| Test de vie cron | *(echo)* | Chaque minute | `/app/cron_test.log` |
 
 ---
 
@@ -48,16 +47,14 @@ flowchart TB
 
         subgraph JOBS["Jobs planifiés"]
             J1["scheduler_articles.py\nLundi 6h00"]
-            J2["get-keyword-from-rss.py\nQuotidien 1h00"]
+            J2["get-keyword-from-rss.py\nToutes les 2h (6h-22h)"]
             J3["check_cron_health.py\nToutes les 10 min"]
-            J4["echo cron ok\nChaque minute"]
         end
 
         subgraph LOGS["Logs"]
             L1["/app/rapports/cron_scheduler.log"]
             L2["/app/rapports/cron_get_keyword.log"]
             L3["/app/rapports/cron_health.log"]
-            L4["/app/cron_test.log"]
         end
 
         subgraph VOLUMES["Volumes montés"]
@@ -73,18 +70,17 @@ flowchart TB
     ENV --> DOCKER_CMD
     DOCKER_CMD --> CONTAINER
     CRONTAB --> CRON_SVC
-    CRON_SVC --> J1 & J2 & J3 & J4
+    CRON_SVC --> J1 & J2 & J3
     J1 --> L1
     J2 --> L2
     J3 --> L3
-    J4 --> L4
     J3 -->|Échec détecté| SMTP
 
     classDef job fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     classDef log fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
     classDef alert fill:#ffebee,stroke:#c62828,stroke-width:2px
-    class J1,J2,J3,J4 job
-    class L1,L2,L3,L4 log
+    class J1,J2,J3 job
+    class L1,L2,L3 log
     class SMTP alert
 ```
 
@@ -101,14 +97,11 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Scheduler d'articles — chaque lundi à 6h
 0 6 * * 1 root cd /app && python3 scripts/scheduler_articles.py >> /app/rapports/cron_scheduler.log 2>&1
 
-# Extraction par mot-clé — quotidien à 1h
-0 1 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
+# Extraction par mot-clé — toutes les 2h de 6h à 22h (6,8,10,12,14,16,18,20,22)
+0 6-22/2 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
 
 # Surveillance santé cron — toutes les 10 minutes
 */10 * * * * root cd /app && python3 scripts/check_cron_health.py >> /app/rapports/cron_health.log 2>&1
-
-# Test de vie du cron — chaque minute
-* * * * * root echo "cron ok $(date)" >> /app/cron_test.log
 ```
 
 > Le fichier est copié dans `/etc/cron.d/scheduler_cron` lors du build Docker (format avec utilisateur `root` sur chaque ligne, obligatoire pour `/etc/cron.d/`).
@@ -205,11 +198,10 @@ CRON_ALERT_PASS=motdepasse
 ## 6. Logs
 
 | Fichier | Contenu | Commande de consultation |
-|---------|---------|--------------------------|
-| `/app/cron_test.log` | Pulsation minute (test de vie) | `docker exec wudd-ai-final cat /app/cron_test.log` |
-| `/app/rapports/cron_scheduler.log` | Sorties du scheduler d'articles | `docker exec wudd-ai-final tail -n 50 /app/rapports/cron_scheduler.log` |
-| `/app/rapports/cron_get_keyword.log` | Sorties extraction mot-clé | `docker exec wudd-ai-final tail -n 50 /app/rapports/cron_get_keyword.log` |
-| `/app/rapports/cron_health.log` | Résultats surveillance santé | `docker exec wudd-ai-final tail -n 50 /app/rapports/cron_health.log` |
+| --- | --- | --- |
+| `/app/rapports/cron_scheduler.log` | Sorties du scheduler d'articles | `docker exec analyse-actualites tail -n 50 /app/rapports/cron_scheduler.log` |
+| `/app/rapports/cron_get_keyword.log` | Sorties extraction mot-clé (9×/jour) | `docker exec analyse-actualites tail -n 50 /app/rapports/cron_get_keyword.log` |
+| `/app/rapports/cron_health.log` | Résultats surveillance santé | `docker exec analyse-actualites tail -n 50 /app/rapports/cron_health.log` |
 
 ---
 
@@ -224,4 +216,4 @@ CRON_ALERT_PASS=motdepasse
 
 ---
 
-**Dernière mise à jour** : 22 février 2026 · Version 2.0
+**Dernière mise à jour** : 3 mars 2026 · Version 2.1

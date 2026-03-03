@@ -11,6 +11,9 @@
 html:not(.dark) ::-webkit-scrollbar-thumb { background: #cbd5e1; }
 html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+/* Respecter la taille de police système iOS (annule le 100% du Preflight Tailwind) */
+html { -webkit-text-size-adjust: auto; text-size-adjust: auto; }
+
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
 /* Coloration syntaxique JSON — thème Nuit */

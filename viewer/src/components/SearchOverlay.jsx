@@ -55,7 +55,7 @@ export default function SearchOverlay({ onClose, onSelect }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-20 px-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-4 sm:pt-20 px-3 sm:px-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -128,8 +128,8 @@ export default function SearchOverlay({ onClose, onSelect }) {
           ))}
         </div>
 
-        {/* Pied */}
-        <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-[10px] text-slate-400 dark:text-slate-600 select-none">
+        {/* Pied — masqué sur mobile (peu de place) */}
+        <div className="hidden sm:flex px-4 py-2 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 items-center gap-4 text-[10px] text-slate-400 dark:text-slate-600 select-none">
           <span>↑↓ Naviguer</span>
           <span>↵ Ouvrir</span>
           <span>Échap Fermer</span>

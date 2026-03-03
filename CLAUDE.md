@@ -137,7 +137,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 
 | Schedule | Script | Purpose |
 |---|---|---|
-| Daily 01:00 | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
+| Every 2h from 06:00 to 22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
 | Monday 06:00 | `scheduler_articles.py` | Weekly multi-flux article collection |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
 
@@ -149,7 +149,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 |---|---|---|
 | `Get_data_from_JSONFile_AskSummary_v2.py` | Core: fetch → summarize → save JSON | `--flux`, `--date_debut`, `--date_fin` |
 | `scheduler_articles.py` | Orchestrate all fluxes with adaptive scheduling | (none; reads `config/flux_json_sources.json`) |
-| `get-keyword-from-rss.py` | Daily keyword extraction from OPML RSS | (none; reads `config/keyword-to-search.json`) |
+| `get-keyword-from-rss.py` | Keyword extraction from OPML RSS (every 2h, 06:00–22:00) | (none; reads `config/keyword-to-search.json`) |
 | `articles_json_to_markdown.py` | JSON articles → Markdown report | positional path to JSON file |
 | `analyse_thematiques.py` | Thematic classification statistics | (none; reads `data/articles/`) |
 | `enrich_entities.py` | Enrich existing articles with named entities (NER) | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
@@ -180,6 +180,7 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 
 - **Backend:** Flask (`viewer/app.py`) — REST API for file listing, content read/write, file deletion, search, scheduler status, flux/keyword config, NER stats, entity geocoding/images, AI synthesis streaming, script execution streaming
 - **Frontend:** React 18 + Vite + Tailwind CSS — compiled to `viewer/dist/` for production
+- **Responsive:** Fully mobile/tablet-ready — hamburger sidebar drawer, bottom navigation bar (mobile), iPhone safe-area support (`viewport-fit=cover`, `env(safe-area-inset-top/bottom)`), dynamic `theme-color` meta tag
 - **Port:** 5050 (Flask / Docker) / 5173 (Vite dev server)
 - **Start (dev):** `bash viewer/start.sh` (from project root)
 - **In Docker:** started automatically by `entrypoint.sh` on port 5050

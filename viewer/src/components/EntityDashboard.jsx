@@ -39,7 +39,7 @@ function StatCard({ icon: Icon, value, label, sub }) {
   return (
     <div className="flex flex-col items-center gap-1 px-5 py-4 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-2xl text-center">
       <Icon size={18} className="text-slate-400 dark:text-slate-500 mb-1" />
-      <span className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{value.toLocaleString('fr-FR')}</span>
+      <span className="text-xl sm:text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{value.toLocaleString('fr-FR')}</span>
       <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
       {sub && <span className="text-[11px] text-slate-400 dark:text-slate-500">{sub}</span>}
     </div>
@@ -149,58 +149,58 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
         className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-start p-4 overflow-y-auto'}`}
         onClick={e => e.target === e.currentTarget && onClose()}
       >
-        <div className={`bg-slate-50 dark:bg-slate-900 shadow-2xl w-full border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4'}`}>
+        <div className={`bg-slate-50 dark:bg-slate-900 shadow-2xl w-full border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
 
           {/* ── En-tête ── */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
-            <BarChart2 size={18} className="text-violet-500" />
-            <span className="font-semibold text-slate-800 dark:text-slate-100 text-base">
+          <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 order-last md:order-first" style={isMaximized ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' } : undefined}>
+            <BarChart2 size={18} className="hidden md:block text-violet-500" />
+            <span className="hidden md:block font-semibold text-slate-800 dark:text-slate-100 text-base">
               Dashboard entités
             </span>
             {!loading && data && (
-              <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">
+              <span className="hidden md:inline text-xs text-slate-400 dark:text-slate-500 ml-1">
                 — {data.by_type.length} types
               </span>
             )}
 
             {/* Toggle Liste / Carte */}
             {!loading && data && data.by_type.length > 0 && (
-              <div className="ml-auto mr-2 flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+              <div className="flex-1 md:flex-none md:ml-auto md:mr-2 flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <button
                   onClick={() => setViewMode('list')}
                   title="Vue liste"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                     viewMode === 'list'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   <List size={13} />
-                  Liste
+                  <span className="hidden sm:inline">Liste</span>
                 </button>
                 <button
                   onClick={() => setViewMode('map')}
                   title="Vue carte du monde"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                     viewMode === 'map'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   <Map size={13} />
-                  Carte
+                  <span className="hidden sm:inline">Carte</span>
                 </button>
                 <button
                   onClick={() => setViewMode('gallery')}
                   title="Galerie d'images Wikipedia"
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                     viewMode === 'gallery'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   <Images size={13} />
-                  Galerie
+                  <span className="hidden sm:inline">Galerie</span>
                 </button>
               </div>
             )}
@@ -221,7 +221,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
           </div>
 
           {/* ── Corps ── */}
-          <div className={`p-6 ${isMaximized ? (viewMode === 'map' ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto') : ''}`}>
+          <div className={`p-4 sm:p-6 flex-1 min-h-0 ${viewMode === 'map' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
             {loading ? (
               <div className="flex items-center justify-center py-20 gap-2 text-slate-400 dark:text-slate-500">
                 <Loader2 size={20} className="animate-spin" />

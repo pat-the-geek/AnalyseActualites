@@ -50,8 +50,10 @@ function EntityInfoView({ text, loading, error }) {
 
 const IMAGE_TYPES = new Set(['PERSON', 'ORG', 'PRODUCT'])
 
-// Taille et position initiales centrées
+// Taille et position initiales centrées.
+// Retourne null sur mobile (< 640px) → fullscreen automatique.
 function initialWin() {
+  if (window.innerWidth < 640) return null
   const w = Math.round(Math.min(window.innerWidth  * 0.82, 1300))
   const h = Math.round(Math.min(window.innerHeight * 0.86, 920))
   return {
@@ -130,8 +132,9 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
   const infoStarted  = useRef(false)  // true dès que le fetch a été lancé pour l'entité courante
 
   // ── Position / taille de la fenêtre ────────────────────────────────────────
-  const [win, setWin] = useState(initialWin)
+  const [win, setWin] = useState(initialWin)   // null = fullscreen mobile
   const [isMaximized, setIsMaximized] = useState(false)
+  const isMobileFullscreen = win === null
   const dragData = useRef(null)   // { type: 'move'|'resize', startX, startY, ...init }
 
   // Drag document-level (move + resize)
@@ -165,13 +168,14 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
   }, [])
 
   const handleHeaderMouseDown = (e) => {
-    if (isMaximized) return                  // pas de drag en plein écran
+    if (isMaximized || isMobileFullscreen) return  // pas de drag en plein écran
     if (e.target.closest('button')) return   // ne pas déclencher sur les boutons
     e.preventDefault()
     dragData.current = { type: 'move', startX: e.clientX, startY: e.clientY, initX: win.x, initY: win.y }
   }
 
   const handleResizeMouseDown = (e) => {
+    if (isMobileFullscreen) return
     e.preventDefault()
     e.stopPropagation()
     dragData.current = { type: 'resize', startX: e.clientX, startY: e.clientY, initW: win.w, initH: win.h }
@@ -345,13 +349,14 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
       {/* Fenêtre flottante */}
       <div
         className={`fixed z-[61] flex flex-col bg-slate-50 dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden ${isMaximized ? '' : 'rounded-2xl'}`}
-        style={isMaximized
+        style={isMaximized || isMobileFullscreen
           ? { inset: 0 }
-          : { left: win.x, top: win.y, width: win.w, height: win.h, minWidth: 480, minHeight: 340 }}
+          : { left: win.x, top: win.y, width: win.w, height: win.h, minWidth: 320, minHeight: 300 }}
       >
         {/* ── En-tête (drag zone) ── */}
         <div
-          className={`flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap gap-y-2 select-none ${isMaximized ? 'cursor-default' : 'cursor-move'}`}
+          className={`flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 flex-wrap gap-y-2 select-none order-last md:order-first ${isMaximized ? 'cursor-default' : 'cursor-move'}`}
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           onMouseDown={handleHeaderMouseDown}
         >
           {/* Icône de déplacement */}
@@ -398,13 +403,15 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
               <button
                 onClick={() => setViewMode('articles')}
-                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                title="Articles"
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   viewMode === 'articles'
                     ? 'bg-violet-500 text-white'
                     : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                Articles
+                <FileText size={12} />
+                <span className="hidden sm:inline">Articles</span>
               </button>
               <button
                 onClick={() => setViewMode('graph')}
@@ -416,7 +423,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 }`}
               >
                 <Network size={12} />
-                Graphe
+                <span className="hidden sm:inline">Graphe</span>
               </button>
               <button
                 onClick={() => setViewMode('info')}
@@ -428,7 +435,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 }`}
               >
                 <Info size={12} />
-                Infos
+                <span className="hidden sm:inline">Infos</span>
               </button>
               <button
                 onClick={() => setViewMode('calendar')}
@@ -440,7 +447,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 }`}
               >
                 <Calendar size={12} />
-                Calendrier
+                <span className="hidden sm:inline">Calendrier</span>
               </button>
             </div>
 
@@ -451,7 +458,7 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <FileText size={12} />
-              Rapport
+              <span className="hidden sm:inline">Rapport</span>
             </button>
             <button
               onClick={handleExportJSON}
@@ -460,15 +467,18 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Download size={12} />
-              JSON
+              <span className="hidden sm:inline">JSON</span>
             </button>
-            <button
-              onClick={() => setIsMaximized(m => !m)}
-              title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
-              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
-            >
-              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-            </button>
+            {/* Bouton maximize masqué sur mobile (déjà fullscreen) */}
+            {!isMobileFullscreen && (
+              <button
+                onClick={() => setIsMaximized(m => !m)}
+                title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+              >
+                {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+            )}
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
@@ -542,8 +552,8 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
         </div>
         )}
 
-        {/* ── Poignée de redimensionnement (masquée en plein écran) ── */}
-        {!isMaximized && <ResizeHandle onMouseDown={handleResizeMouseDown} />}
+        {/* ── Poignée de redimensionnement (masquée en plein écran et sur mobile) ── */}
+        {!isMaximized && !isMobileFullscreen && <ResizeHandle onMouseDown={handleResizeMouseDown} />}
       </div>
     </>
   )

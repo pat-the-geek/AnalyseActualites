@@ -389,6 +389,15 @@ Les fichiers Markdown générés (rapports de synthèse, présentations) peuvent
 
 WUDD.ai inclut une interface web locale permettant de naviguer, lire et éditer les fichiers JSON et Markdown générés par le pipeline, sans quitter le navigateur.
 
+L'interface est **entièrement responsive** et optimisée pour iPhone et tablette :
+
+- Navigation hamburger (☰) sur mobile avec sidebar en drawer
+- Barre de navigation fixée en bas de l'écran (thème, entités, réglages, recherche)
+- Support de la zone de sécurité iOS (`safe-area-inset-bottom`)
+- Panneau entités en plein écran sur mobile, flottant sur desktop
+- `theme-color` dynamique (blanc / ardoise) selon le mode clair/sombre
+- Taille de police respectant les préférences système iOS
+
 ### Démarrage
 
 Un script raccourci est disponible à la racine du projet :

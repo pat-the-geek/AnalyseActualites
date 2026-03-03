@@ -161,14 +161,95 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
     })
   }, [applyView])
 
-  // Callback ref : attache le listener { passive: false } dès que l'élément SVG
-  // existe dans le DOM (le useEffect classique ratait car svgRef.current = null
-  // au premier rendu, les données n'étant pas encore chargées).
+  // ── Handlers tactiles (pinch-to-zoom + drag 1 doigt) ─────────────────────
+  const touchState = useRef(null)
+
+  const touchStartHandler = useCallback((e) => {
+    if (e.touches.length === 2) {
+      // Pinch — empêche le zoom natif du navigateur
+      e.preventDefault()
+      const v = viewRef.current
+      const t0 = e.touches[0], t1 = e.touches[1]
+      const ddx = t0.clientX - t1.clientX, ddy = t0.clientY - t1.clientY
+      touchState.current = {
+        type: 'pinch',
+        startDist: Math.sqrt(ddx * ddx + ddy * ddy),
+        startScale: v.scale,
+        startViewX: v.x,
+        startViewY: v.y,
+        midX: (t0.clientX + t1.clientX) / 2,
+        midY: (t0.clientY + t1.clientY) / 2,
+      }
+    } else if (e.touches.length === 1) {
+      // Drag — pas de preventDefault → le tap génère toujours un click
+      dragMoved.current = false
+      const v = viewRef.current
+      touchState.current = {
+        type: 'drag',
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        viewX: v.x, viewY: v.y, scale: v.scale,
+      }
+    }
+  }, [])
+
+  const touchMoveHandler = useCallback((e) => {
+    const ts = touchState.current
+    if (!ts) return
+    const el = svgRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+
+    if (ts.type === 'drag' && e.touches.length === 1) {
+      const dx = e.touches[0].clientX - ts.startX
+      const dy = e.touches[0].clientY - ts.startY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        e.preventDefault()
+        dragMoved.current = true
+        applyView({
+          x: ts.viewX - (dx / rect.width)  * (W / ts.scale),
+          y: ts.viewY - (dy / rect.height) * (H / ts.scale),
+          scale: ts.scale,
+        })
+      }
+    } else if (ts.type === 'pinch' && e.touches.length === 2) {
+      e.preventDefault()
+      const t0 = e.touches[0], t1 = e.touches[1]
+      const ddx = t0.clientX - t1.clientX, ddy = t0.clientY - t1.clientY
+      const newDist = Math.sqrt(ddx * ddx + ddy * ddy)
+      const newScale = Math.max(0.2, Math.min(12, ts.startScale * (newDist / ts.startDist)))
+      const cssX = ts.midX - rect.left
+      const cssY = ts.midY - rect.top
+      const svgX = ts.startViewX + (cssX / rect.width)  * (W / ts.startScale)
+      const svgY = ts.startViewY + (cssY / rect.height) * (H / ts.startScale)
+      applyView({
+        x: svgX - (cssX / rect.width)  * (W / newScale),
+        y: svgY - (cssY / rect.height) * (H / newScale),
+        scale: newScale,
+      })
+    }
+  }, [applyView])
+
+  const touchEndHandler = useCallback(() => { touchState.current = null }, [])
+
+  // Callback ref : attache les listeners dès que l'élément SVG existe dans le DOM
   const svgCallbackRef = useCallback((el) => {
-    if (svgRef.current) svgRef.current.removeEventListener('wheel', wheelHandler)
+    if (svgRef.current) {
+      svgRef.current.removeEventListener('wheel', wheelHandler)
+      svgRef.current.removeEventListener('touchstart', touchStartHandler)
+      svgRef.current.removeEventListener('touchmove', touchMoveHandler)
+      svgRef.current.removeEventListener('touchend', touchEndHandler)
+      svgRef.current.removeEventListener('touchcancel', touchEndHandler)
+    }
     svgRef.current = el
-    if (el) el.addEventListener('wheel', wheelHandler, { passive: false })
-  }, [wheelHandler])
+    if (el) {
+      el.addEventListener('wheel', wheelHandler, { passive: false })
+      el.addEventListener('touchstart', touchStartHandler, { passive: false })
+      el.addEventListener('touchmove', touchMoveHandler, { passive: false })
+      el.addEventListener('touchend', touchEndHandler, { passive: true })
+      el.addEventListener('touchcancel', touchEndHandler, { passive: true })
+    }
+  }, [wheelHandler, touchStartHandler, touchMoveHandler, touchEndHandler])
 
   // Drag → pan (listeners document pour suivre hors du SVG)
   useEffect(() => {
@@ -475,7 +556,8 @@ export default function EntityGraph({ entityType, entityValue, onNavigate }) {
           <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">· ● L1 ╌ L2</span>
         )}
         <span className="ml-auto text-[10px] text-slate-300 dark:text-slate-600 whitespace-nowrap shrink-0 pl-2">
-          ⌀ zoom · drag · clic
+          <span className="hidden sm:inline">⌀ zoom · drag · clic</span>
+          <span className="sm:hidden">pince · glisse · touche</span>
         </span>
       </div>
 

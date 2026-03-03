@@ -149,7 +149,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
         <button
           type="button"
           onClick={() => setLightbox(true)}
-          className="group relative w-full h-40 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
+          className="group relative w-full h-32 sm:h-40 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
           title="Agrandir l'image"
         >
           <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -406,7 +406,7 @@ export default function ArticleListViewer({ content }) {
       </div>
 
       {/* ── Toolbar : recherche + tri + vue + export ── */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
         {/* Recherche */}
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
@@ -426,32 +426,34 @@ export default function ArticleListViewer({ content }) {
           )}
         </div>
 
-        {/* Tri */}
-        <div className="relative shrink-0">
-          <ArrowUpDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            className="pl-7 pr-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors appearance-none cursor-pointer">
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
+        {/* Tri + vue + export — sur une seule ligne (2e ligne sur mobile) */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative shrink-0">
+            <ArrowUpDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              className="pl-7 pr-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors appearance-none cursor-pointer">
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
 
-        {/* Bascule vue grille / timeline */}
-        <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
-          <button onClick={() => setViewStyle('grid')} title="Vue grille"
-            className={`px-2.5 py-2 transition-colors ${viewStyle === 'grid' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-            <LayoutGrid size={13} />
-          </button>
-          <button onClick={() => setViewStyle('timeline')} title="Vue timeline"
-            className={`px-2.5 py-2 transition-colors ${viewStyle === 'timeline' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-            <AlignLeft size={13} />
+          {/* Bascule vue grille / timeline */}
+          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
+            <button onClick={() => setViewStyle('grid')} title="Vue grille"
+              className={`px-2.5 py-2 transition-colors ${viewStyle === 'grid' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+              <LayoutGrid size={13} />
+            </button>
+            <button onClick={() => setViewStyle('timeline')} title="Vue timeline"
+              className={`px-2.5 py-2 transition-colors ${viewStyle === 'timeline' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+              <AlignLeft size={13} />
+            </button>
+          </div>
+
+          {/* Export */}
+          <button onClick={handleExport} title={`Exporter ${displayedArticles.length} article(s) en JSON`}
+            className="px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-slate-800 transition-all shrink-0">
+            <Download size={13} />
           </button>
         </div>
-
-        {/* Export */}
-        <button onClick={handleExport} title={`Exporter ${displayedArticles.length} article(s) en JSON`}
-          className="px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-slate-800 transition-all shrink-0">
-          <Download size={13} />
-        </button>
       </div>
 
       {/* ── Panel filtre : types d'entités ── */}

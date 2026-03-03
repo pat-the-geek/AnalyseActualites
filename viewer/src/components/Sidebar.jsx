@@ -17,6 +17,7 @@ export default function Sidebar({
   files, selectedFile, onSelect,
   typeFilter, onTypeFilterChange,
   nameSearch, onNameSearchChange,
+  isOpen, onClose,
 }) {
   // Grouper par flux
   const grouped = useMemo(() => {
@@ -30,7 +31,24 @@ export default function Sidebar({
   }, [files])
 
   return (
-    <aside className="w-72 flex flex-col bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 shrink-0">
+    <aside className={[
+      'w-72 flex flex-col bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 shrink-0',
+      // Desktop : position normale dans le flux
+      'md:relative md:translate-x-0 md:z-auto md:shadow-none',
+      // Mobile : drawer fixe qui slide depuis la gauche
+      'fixed top-0 left-0 h-full z-40 shadow-xl transition-transform duration-200',
+      isOpen ? 'translate-x-0' : '-translate-x-full',
+    ].join(' ')}>
+      {/* Barre mobile uniquement : titre + bouton fermer */}
+      <div className="flex items-center justify-between px-3 py-3 border-b border-slate-200 dark:border-slate-700 md:hidden">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Fichiers</span>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        >
+          <X size={16} />
+        </button>
+      </div>
       {/* ── Filtres ── */}
       <div className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2.5">
         {/* Boutons type */}

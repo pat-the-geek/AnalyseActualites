@@ -102,7 +102,7 @@ export default function JsonViewer({ content, onSave }) {
     return (
       <div className="flex flex-col gap-3">
         {/* Barre d'outils édition */}
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-end order-last md:order-first sticky bottom-0 md:static bg-slate-100 dark:bg-slate-950 py-3 z-10">
           {editError && (
             <span className="text-xs text-red-500 dark:text-red-400 flex-1">{editError}</span>
           )}

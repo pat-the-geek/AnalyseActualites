@@ -144,6 +144,13 @@ def cron_label(cron: str) -> str:
     jours = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
     if minute.startswith("*/"):
         return f"Toutes les {minute[2:]} min"
+    if minute == "0" and "/" in hour and "-" in hour and _ == "*":
+        try:
+            range_part, step = hour.split("/")
+            start, end = range_part.split("-")
+            return f"Toutes les {step}h de {start}h à {end}h"
+        except ValueError:
+            pass
     if minute == "0" and hour.isdigit() and _ == "*":
         t = f"{int(hour):02d}:00"
         if dow == "*":
@@ -254,7 +261,7 @@ def api_scheduler():
         {
             "name": "Extraction mots-clés RSS",
             "script": "get-keyword-from-rss.py",
-            "cron": "0 1 * * *",
+            "cron": "0 6-22/2 * * *",
             "data_dir": PROJECT_ROOT / "data" / "articles-from-rss",
         },
         {

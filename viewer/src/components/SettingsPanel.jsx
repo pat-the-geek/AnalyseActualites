@@ -407,11 +407,11 @@ function KeywordsTab() {
 // ─── Onglet Flux Reeder ───────────────────────────────────────────────────────
 
 const CRON_PRESETS = [
-  { label: 'Quotidien à 01:00',  value: '0 1 * * *' },
-  { label: 'Quotidien à 06:00',  value: '0 6 * * *' },
-  { label: 'Lundi à 06:00',      value: '0 6 * * 1' },
-  { label: 'Dimanche à 06:00',   value: '0 6 * * 0' },
-  { label: 'Toutes les heures',  value: '0 * * * *' },
+  { label: 'Toutes les 2h (6h-22h)', value: '0 6-22/2 * * *' },
+  { label: 'Quotidien à 06:00',      value: '0 6 * * *' },
+  { label: 'Lundi à 06:00',          value: '0 6 * * 1' },
+  { label: 'Dimanche à 06:00',       value: '0 6 * * 0' },
+  { label: 'Toutes les heures',      value: '0 * * * *' },
 ]
 
 function cronLabel(cron) {
@@ -421,6 +421,11 @@ function cronLabel(cron) {
   const [min, hour, , , dow] = p
   const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
   if (min.startsWith('*/')) return `Toutes les ${min.slice(2)} min`
+  if (min === '0' && hour.includes('/') && hour.includes('-')) {
+    const [range, step] = hour.split('/')
+    const [start, end] = range.split('-')
+    return `Toutes les ${step}h de ${start}h à ${end}h`
+  }
   if (min === '0' && /^\d+$/.test(hour)) {
     const t = `${String(hour).padStart(2, '0')}:00`
     if (dow === '*') return `Quotidien à ${t}`
@@ -616,15 +621,18 @@ export default function SettingsPanel({ onClose }) {
 
   return (
     <div
-      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-start pt-10 px-4 pb-4'}`}
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-stretch md:items-start md:pt-10 md:px-4 md:pb-4'}`}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className={`bg-white dark:bg-slate-800 shadow-2xl w-full border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden ${isMaximized ? '' : 'max-w-5xl max-h-[88vh] rounded-2xl'}`}>
+      <div className={`bg-white dark:bg-slate-800 shadow-2xl w-full border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
 
-        {/* ── En-tête ── */}
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
-          <Settings size={15} className="text-slate-400 dark:text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
+        {/* ── En-tête / toolbar ── */}
+        <div
+          className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 order-last md:order-first"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <Settings size={15} className="hidden md:block text-slate-400 dark:text-slate-400" />
+          <h2 className="hidden md:block text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
 
           {/* Onglets */}
           <div className="flex items-center gap-1 flex-1">
@@ -654,10 +662,17 @@ export default function SettingsPanel({ onClose }) {
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             aria-label="Fermer"
           >
             <X size={14} />
+          </button>
+          <button
+            onClick={onClose}
+            className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors"
+          >
+            <X size={13} />
+            Fermer
           </button>
         </div>
 
