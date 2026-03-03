@@ -89,6 +89,11 @@ def parse_cron_field(s: str, lo: int, hi: int) -> list:
     if "," in s:
         return [int(x) for x in s.split(",")]
     if "-" in s:
+        # Gère a-b/step (ex: 6-22/2) et a-b
+        if "/" in s:
+            rng, step_str = s.split("/", 1)
+            a, b = rng.split("-", 1)
+            return list(range(int(a), int(b) + 1, int(step_str)))
         a, b = s.split("-", 1)
         return list(range(int(a), int(b) + 1))
     return [int(s)]
