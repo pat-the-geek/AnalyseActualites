@@ -1,19 +1,24 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 
-// ── Parsing de date robuste (ISO 8601 ou DD/MM/YYYY) ─────────────────────────
+// ── Parsing de date robuste (ISO 8601, DD/MM/YYYY ou RFC822) ─────────────────
 function parseArticleDate(raw) {
   if (!raw) return null
+  // ISO 8601 : "2026-01-23T10:00:00Z" ou "2026-01-23"
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
     const d = new Date(raw)
     return isNaN(d) ? null : d
   }
+  // DD/MM/YYYY : "23/01/2026"
   const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
   if (m) {
     const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
     return isNaN(d) ? null : d
   }
-  return null
+  // RFC822 et autres formats reconnus nativement par JS
+  // ex. "Mon, 03 Mar 2026 09:00:00 +0000"
+  const d = new Date(raw)
+  return isNaN(d) ? null : d
 }
 
 // Extrait la première phrase du résumé comme titre de l'article
