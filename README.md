@@ -187,12 +187,48 @@ pip install -r requirements.txt
 
 ### Configuration
 
-Créez un fichier `.env` à la racine :
+#### 1. Variables d'environnement
 
-```env
-URL=https://api.infomaniak.com/euria/v1/chat/completions
-bearer=VOTRE_TOKEN_API_INFOMANIAK
+Créez un fichier `.env` à la racine à partir du template fourni :
+
+```bash
+cp .env.example .env
+# Éditez .env et renseignez vos vraies valeurs
 ```
+
+Le fichier `.env` n'est jamais commité (`.gitignore`). Référez-vous à `.env.example` pour la liste complète des variables requises.
+
+#### 2. Fichier de flux `config/flux_json_sources.json`
+
+> **⚠️ Ce fichier n'est pas dans le dépôt git** (il contient vos URLs privées Reeder).
+> Seul le template `config/flux_json_sources.example.json` est versionné.
+
+Créez votre fichier à partir de l'exemple :
+
+```bash
+cp config/flux_json_sources.example.json config/flux_json_sources.json
+# Éditez config/flux_json_sources.json et renseignez vos URLs de flux
+```
+
+Voir la section [Configuration des flux](#6-configuration-des-flux) pour le format détaillé.
+
+#### 3. Fichier de mots-clés `config/keyword-to-search.json`
+
+> **⚠️ Ce fichier n'est pas dans le dépôt git** (contenu spécifique à chaque déploiement).
+> Aucun template n'est fourni — il doit être créé manuellement.
+
+Ce fichier est utilisé par `scripts/get-keyword-from-rss.py` (extraction quotidienne par mot-clé). Créez-le dans `config/` avec le format suivant :
+
+```json
+[
+  { "keyword": "Intelligence artificielle" },
+  { "keyword": "Trump" },
+  { "keyword": "UBS", "and": ["banque", "bank"] },
+  { "keyword": "David Bowie", "or": ["Ziggy Stardust", "Thin White Duke"] }
+]
+```
+
+Sans ce fichier, le script `get-keyword-from-rss.py` s'arrête avec une erreur au démarrage. Voir la section [Filtrage avancé](#filtrage-avancé-or--and-dans-configkeyword-to-searchjson) pour la syntaxe complète des filtres `or` / `and`.
 
 ---
 
@@ -431,6 +467,8 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 ## 6. Configuration des flux
 
 ### Format `config/flux_json_sources.json`
+
+> **⚠️ Fichier non versionné** — à créer à partir de `config/flux_json_sources.example.json` (voir section [Configuration](#2-fichier-de-flux-configflux_json_sourcesjson)).
 
 ```json
 [
