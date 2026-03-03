@@ -198,7 +198,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   const entitiesRef = useRef(null)
   const imagesRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
-  const [viewMode, setViewMode] = useState('json') // 'json' | 'articles'
+  const [viewMode, setViewMode] = useState('articles') // 'json' | 'articles'
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleteError, setDeleteError]     = useState(null)
 
@@ -212,7 +212,7 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
   }, [file])
 
   // Remet le scroll à 0 et la vue JSON lors d'un changement de fichier
-  useEffect(() => { setScrollTop(0); setViewMode('json') }, [file])
+  useEffect(() => { setScrollTop(0); setViewMode('articles') }, [file])
 
   // Détecte si le JSON contient des images
   const hasImages = useMemo(() => {
@@ -308,17 +308,6 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
         {isArticleArray && (
           <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0">
             <button
-              onClick={() => setViewMode('json')}
-              title="Vue JSON brut"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
-                viewMode === 'json'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Braces size={12} /> JSON
-            </button>
-            <button
               onClick={() => setViewMode('articles')}
               title="Vue articles annotés"
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
@@ -328,6 +317,17 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
               }`}
             >
               <LayoutList size={12} /> Articles
+            </button>
+            <button
+              onClick={() => setViewMode('json')}
+              title="Vue JSON brut"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+                viewMode === 'json'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Braces size={12} /> JSON
             </button>
           </div>
         )}

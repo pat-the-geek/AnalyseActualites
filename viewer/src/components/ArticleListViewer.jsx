@@ -2,9 +2,10 @@ import { useMemo, useState, useRef } from 'react'
 import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
-  Download, LayoutGrid, AlignLeft,
+  Download, LayoutGrid, AlignLeft, Maximize2,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
+import EntityArticlePanel from './EntityArticlePanel'
 
 // ── Palette de couleurs pour les chips de type d'entité ──────────────────────
 const CHIP_COLORS = {
@@ -107,9 +108,33 @@ function SearchHighlighter({ text, query }) {
   )
 }
 
+/** Lightbox plein écran pour une image unique. */
+function ImageLightbox({ url, alt, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <img
+        src={url}
+        alt={alt}
+        className="max-w-full max-h-[90vh] rounded-xl object-contain shadow-2xl"
+      />
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-9 h-9 bg-slate-700/80 hover:bg-slate-600 rounded-full flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+        title="Fermer"
+      >
+        <X size={16} />
+      </button>
+    </div>
+  )
+}
+
 /** Carte article complète (vue grille). */
-function ArticleCard({ article, index, highlight }) {
+function ArticleCard({ article, index, highlight, onEntityClick }) {
   const [expanded, setExpanded] = useState(index < 3)
+  const [lightbox, setLightbox] = useState(false)
   const titre = article['Titre']?.trim() || ''
   const resume = article['Résumé'] ?? ''
   const entities = article.entities ?? null
@@ -121,10 +146,21 @@ function ArticleCard({ article, index, highlight }) {
   return (
     <article className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       {imgUrl && (
-        <div className="h-40 overflow-hidden bg-slate-100 dark:bg-slate-900">
-          <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover"
-            loading="lazy" onError={e => { e.currentTarget.parentElement.style.display = 'none' }} />
-        </div>
+        <button
+          type="button"
+          onClick={() => setLightbox(true)}
+          className="group relative w-full h-40 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
+          title="Agrandir l'image"
+        >
+          <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy" onError={e => { e.currentTarget.closest('button').style.display = 'none' }} />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+            <Maximize2 size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+          </div>
+        </button>
+      )}
+      {lightbox && imgUrl && (
+        <ImageLightbox url={imgUrl} alt={(titre || article['Sources']) ?? ''} onClose={() => setLightbox(false)} />
       )}
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-2">
@@ -155,7 +191,7 @@ function ArticleCard({ article, index, highlight }) {
         </div>
         <div className={`text-sm overflow-hidden transition-all ${expanded ? '' : 'max-h-24'}`}>
           {hasEntities
-            ? <EntityHighlighter text={resume} entities={entities} />
+            ? <EntityHighlighter text={resume} entities={entities} onEntityClick={onEntityClick} />
             : <SearchHighlighter text={resume} query={highlight} />
           }
         </div>
@@ -230,6 +266,7 @@ export default function ArticleListViewer({ content }) {
   const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'timeline'
   const [selectedTypes, setSelectedTypes]     = useState(new Set())
   const [selectedSources, setSelectedSources] = useState(new Set())
+  const [selectedEntity, setSelectedEntity]   = useState(null) // { type, value }
   const searchRef = useRef(null)
 
   // Parse JSON
@@ -517,9 +554,18 @@ export default function ArticleListViewer({ content }) {
         /* Vue grille */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {displayedArticles.map((article, i) => (
-            <ArticleCard key={article['URL'] ?? i} article={article} index={i} highlight={searchQuery.trim()} />
+            <ArticleCard key={article['URL'] ?? i} article={article} index={i} highlight={searchQuery.trim()}
+              onEntityClick={(type, value) => setSelectedEntity({ type, value })} />
           ))}
         </div>
+      )}
+
+      {selectedEntity && (
+        <EntityArticlePanel
+          entityType={selectedEntity.type}
+          entityValue={selectedEntity.value}
+          onClose={() => setSelectedEntity(null)}
+        />
       )}
     </div>
   )

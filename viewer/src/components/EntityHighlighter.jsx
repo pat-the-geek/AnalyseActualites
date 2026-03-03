@@ -74,11 +74,12 @@ function segmentText(text, entities) {
 /**
  * Composant principal.
  *
- * @param {string}  text      - Texte brut à annoter (ex: article.Résumé)
- * @param {object}  entities  - Dict { TYPE: [valeur, …] }
- * @param {string}  className - Classes supplémentaires sur le <p> conteneur
+ * @param {string}   text           - Texte brut à annoter (ex: article.Résumé)
+ * @param {object}   entities       - Dict { TYPE: [valeur, …] }
+ * @param {string}   className      - Classes supplémentaires sur le <p> conteneur
+ * @param {function} onEntityClick  - Callback(type, value) appelé au clic sur une entité
  */
-export default function EntityHighlighter({ text, entities, className = '' }) {
+export default function EntityHighlighter({ text, entities, className = '', onEntityClick }) {
   const segments = segmentText(text, entities)
 
   return (
@@ -86,6 +87,21 @@ export default function EntityHighlighter({ text, entities, className = '' }) {
       {segments.map((seg, i) => {
         if (!seg.type) return <span key={i}>{seg.text}</span>
         const style = CHIP_STYLE[seg.type] ?? FALLBACK_STYLE
+        if (onEntityClick) {
+          return (
+            <button
+              key={i}
+              type="button"
+              title={`${seg.type} — cliquer pour voir l'identité`}
+              onClick={() => onEntityClick(seg.type, seg.text)}
+              className={`rounded px-0.5 mx-px ring-1 ring-inset font-medium cursor-pointer
+                hover:ring-2 hover:brightness-95 transition-all
+                ${style.bg} ${style.text} ${style.ring}`}
+            >
+              {seg.text}
+            </button>
+          )
+        }
         return (
           <mark
             key={i}
