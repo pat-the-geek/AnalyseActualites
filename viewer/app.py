@@ -1030,6 +1030,14 @@ def api_entities_images():
         "Q1298765",  # mathematical object
         "Q17451",    # typeface (ex. Blackboard bold → article sur la lettre X)
         "Q58481926", # typeface family (ex. Fraktur)
+        # Concepts linguistiques — ex. "Word" (PRODUCT) → article "Mot" (Q8171)
+        "Q8171",     # word / mot (unité linguistique)
+        "Q58778",    # linguistic concept (concept linguistique)
+        "Q82042",    # part of speech (partie du discours)
+        # Taxons biologiques — ex. "Apple" (ORG) → article "Pomme / Malus domestica"
+        "Q16521",    # taxon (espèce végétale, animale…)
+        "Q89",       # Malus domestica (pommier / pomme)
+        "Q1364",     # apple (fruit générique)
     }
 
     def _wikidata_type_ok(qid: str, strict: bool = False) -> bool:
