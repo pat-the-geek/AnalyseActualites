@@ -63,7 +63,44 @@ python3 scripts/repair_failed_summaries.py --dry-run
 
 ---
 
-# Usage multi-flux (février 2026)
+### 8. generate_48h_report.py
+
+**Description** : Génère chaque soir un rapport de veille analytique basé sur les **Top 10 entités nommées** des 48 dernières heures. Lit `data/articles-from-rss/_WUDD.AI_/48-heures.json` (produit par `get-keyword-from-rss.py`), pré-calcule les entités les plus citées (personnes, organisations, pays, produits, événements), sélectionne les 5 articles les plus récents par entité, et génère un rapport structuré via l'API EurIA.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--dry-run` | Affiche le prompt et le Top 10 entités sans appeler l'API | désactivé |
+
+**Utilisation** :
+
+```bash
+# Génération réelle du rapport
+python3 scripts/generate_48h_report.py
+
+# Simulation — affiche le Top 10 et le prompt (sans appel API)
+python3 scripts/generate_48h_report.py --dry-run
+```
+
+**Automatisation (cron)** — exécuté chaque jour à 23h00, après la dernière collecte RSS :
+```
+0 23 * * * root cd /app && python3 scripts/generate_48h_report.py 2>&1 | tee -a /app/rapports/cron_48h_report.log
+```
+
+**Sortie** :
+- `rapports/markdown/_WUDD.AI_/rapport_48h.md` — fichier unique, écrasé chaque jour
+
+**Structure du rapport généré** :
+1. Frontmatter YAML (titre, date, période, nombre d'articles analysés)
+2. **10 sections entité** : Contexte · Actualité des 48h (sources citées inline) · Analyse stratégique · Image `![](URL)`
+3. **Corrélations inter-entités** : liens significatifs entre les Top 10
+4. **Constatations générales** : dynamiques, ruptures, signaux faibles
+5. **Tableau de références** : tous les articles cités (date, source, URL)
+
+**Prérequis** : `data/articles-from-rss/_WUDD.AI_/48-heures.json` doit exister (généré par `get-keyword-from-rss.py`). Pour un rapport enrichi, les articles doivent avoir été traités par `enrich_entities.py`.
+
+---
 
 ## Générer les résumés d'un flux
 

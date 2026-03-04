@@ -140,6 +140,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | Every 2h from 06:00 to 22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
 | Monday 06:00 | `scheduler_articles.py` | Weekly multi-flux article collection |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
+| Daily 23:00 | `generate_48h_report.py` | Daily Top 10 entities report (48h window) |
 
 ---
 
@@ -156,6 +157,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Keyword-based report generation | (none) |
+| `generate_48h_report.py` | Daily Top 10 named-entity report from last 48h articles | `--dry-run` |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
 
 ---

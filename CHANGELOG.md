@@ -1,3 +1,18 @@
+# 04/03/2026 — Rapport quotidien Top 10 entités (48h)
+
+## Nouveau script `generate_48h_report.py`
+
+- Génère chaque soir à 23h00 un rapport de veille analytique depuis `data/articles-from-rss/_WUDD.AI_/48-heures.json`
+- Pré-calcule les **Top 10 entités nommées** (PERSON, ORG, GPE, PRODUCT, EVENT) avant l'appel API pour garantir un comptage exact
+- Sélectionne les 5 articles les plus récents par entité (~50 articles) pour respecter les limites de contexte de l'API EurIA
+- Structure du rapport : frontmatter YAML · 10 sections entité (Contexte / Actualité 48h / Analyse) · Corrélations inter-entités · Constatations générales · Tableau de références
+- Images intégrées au format Markdown `![](URL)` (une par section entité, sans doublon)
+- Nettoyage automatique des blocs de code parasites que le LLM peut générer autour du frontmatter
+- Sortie : `rapports/markdown/_WUDD.AI_/rapport_48h.md` — fichier unique remplacé chaque jour
+- Mode test : `--dry-run` (affiche Top 10 + prompt sans appel API)
+- Cron ajouté dans `archives/crontab` : `0 23 * * *`
+- Documentation : `scripts/USAGE.md` §8, `CLAUDE.md` (tables Key Scripts et Scheduled cron jobs)
+
 # 28/02/2026 — Dashboard entités, export article, correction API
 
 ## Viewer — Détail entités avec export
