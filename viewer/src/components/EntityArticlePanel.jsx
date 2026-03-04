@@ -189,7 +189,12 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
       .then(r => r.json())
       .then(data => {
         if (data?.error) throw new Error(data.error)
-        setArticles(Array.isArray(data) ? data : [])
+        const sorted = (Array.isArray(data) ? data : []).sort((a, b) => {
+          const ta = new Date(a['Date de publication'] ?? 0).getTime()
+          const tb = new Date(b['Date de publication'] ?? 0).getTime()
+          return tb - ta
+        })
+        setArticles(sorted)
         setLoading(false)
       })
       .catch(e => { setError(e.message); setLoading(false) })
@@ -359,9 +364,9 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           onMouseDown={handleHeaderMouseDown}
         >
-          {/* Icône de déplacement */}
+          {/* Icône de déplacement — desktop uniquement */}
           {!isMaximized && (
-            <GripHorizontal size={14} className="text-slate-300 dark:text-slate-600 shrink-0 pointer-events-none" />
+            <GripHorizontal size={14} className="hidden md:block text-slate-300 dark:text-slate-600 shrink-0 pointer-events-none" />
           )}
 
           {/* Bouton retour */}
@@ -376,13 +381,15 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
             </button>
           )}
 
-          {/* Avatar */}
+          {/* Avatar — desktop uniquement */}
           {IMAGE_TYPES.has(current.type) && (
-            <EntityAvatar image={entityImage} type={current.type} name={current.value} size={36} />
+            <div className="hidden md:flex">
+              <EntityAvatar image={entityImage} type={current.type} name={current.value} size={36} />
+            </div>
           )}
 
-          {/* Titre */}
-          <div className="flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none">
+          {/* Titre — desktop uniquement */}
+          <div className="hidden md:flex items-center gap-1.5 min-w-0 flex-1 pointer-events-none">
             <span className="font-semibold text-slate-800 dark:text-slate-100 text-sm truncate">
               Occurrences de{' '}
               <span className="text-violet-600 dark:text-violet-400">{current.value}</span>
@@ -398,55 +405,59 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-1.5 shrink-0 flex-wrap cursor-default">
+          <div className="flex items-center gap-1.5 sm:gap-1.5 w-full md:w-auto shrink-0 flex-wrap cursor-default">
             {/* Toggle Articles / Graphe / Informations */}
-            <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="flex flex-1 md:flex-none rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
               <button
                 onClick={() => setViewMode('articles')}
                 title="Articles"
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 text-xs font-medium transition-colors ${
                   viewMode === 'articles'
                     ? 'bg-violet-500 text-white'
                     : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <FileText size={12} />
+                <FileText size={18} className="md:hidden" />
+                <FileText size={12} className="hidden md:block" />
                 <span className="hidden sm:inline">Articles</span>
               </button>
               <button
                 onClick={() => setViewMode('graph')}
                 title="Graphe de co-occurrences"
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                   viewMode === 'graph'
                     ? 'bg-violet-500 text-white'
                     : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <Network size={12} />
+                <Network size={18} className="md:hidden" />
+                <Network size={12} className="hidden md:block" />
                 <span className="hidden sm:inline">Graphe</span>
               </button>
               <button
                 onClick={() => setViewMode('info')}
                 title="Synthèse générée par l'IA"
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                   viewMode === 'info'
                     ? 'bg-violet-500 text-white'
                     : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <Info size={12} />
+                <Info size={18} className="md:hidden" />
+                <Info size={12} className="hidden md:block" />
                 <span className="hidden sm:inline">Infos</span>
               </button>
               <button
                 onClick={() => setViewMode('calendar')}
                 title="Calendrier des articles"
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                   viewMode === 'calendar'
                     ? 'bg-violet-500 text-white'
                     : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <Calendar size={12} />
+                <Calendar size={18} className="md:hidden" />
+                <Calendar size={12} className="hidden md:block" />
                 <span className="hidden sm:inline">Calendrier</span>
               </button>
             </div>
@@ -455,18 +466,20 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               onClick={handleGenerateReport}
               disabled={loading || articles.length === 0}
               title="Générer un rapport Markdown"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 rounded-lg text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <FileText size={12} />
+              <FileText size={18} className="md:hidden" />
+              <FileText size={12} className="hidden md:block" />
               <span className="hidden sm:inline">Rapport</span>
             </button>
             <button
               onClick={handleExportJSON}
               disabled={loading || articles.length === 0}
               title="Exporter les articles en JSON"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 rounded-lg text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <Download size={12} />
+              <Download size={18} className="md:hidden" />
+              <Download size={12} className="hidden md:block" />
               <span className="hidden sm:inline">JSON</span>
             </button>
             {/* Bouton maximize masqué sur mobile (déjà fullscreen) */}
@@ -474,16 +487,16 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               <button
                 onClick={() => setIsMaximized(m => !m)}
                 title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+                className="w-11 h-11 md:w-8 md:h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
               >
-                {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
             )}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+              className="w-11 h-11 md:w-8 md:h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         </div>

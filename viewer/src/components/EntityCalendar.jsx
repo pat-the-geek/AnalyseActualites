@@ -67,7 +67,7 @@ function CalHeader({ title, scale, onScaleChange, onPrev, onNext, onToday }) {
       </h2>
       {/* Sélecteur d'échelle */}
       <div className="flex rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
-        {[['annee','Année'],['mois','Mois'],['jour','Jour']].map(([key, label]) => (
+        {[['annee','Année'],['mois','Mois'],['semaine','Semaine'],['jour','Jour']].map(([key, label]) => (
           <button
             key={key}
             onClick={() => onScaleChange(key)}
@@ -231,6 +231,100 @@ function MonthView({ year, month, dayMap, onSelectDay }) {
   )
 }
 
+// ── Vue Semaine ─────────────────────────────────────────────────────────────
+function WeekView({ monday, dayMap, onSelectDay }) {
+  const today  = new Date()
+  const todayK = dayKey(today)
+
+  // Génère les 7 jours de lun. à dim.
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return d
+  })
+
+  return (
+    <div className="flex flex-col">
+      {/* En-têtes */}
+      <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+        {days.map((d, i) => {
+          const k = dayKey(d)
+          const isToday = k === todayK
+          const count = (dayMap[k] || []).length
+          return (
+            <div
+              key={i}
+              className="flex flex-col items-center py-2 gap-0.5"
+            >
+              <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wide">
+                {DAYS_FR[i]}
+              </span>
+              <span className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${
+                isToday
+                  ? 'bg-violet-500 text-white'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}>
+                {d.getDate()}
+              </span>
+              {count > 0 && (
+                <span className="text-[9px] bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-full px-1.5 font-semibold">
+                  {count}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Corps : colonnes d'articles */}
+      <div className="grid grid-cols-7 min-h-[320px]">
+        {days.map((d, i) => {
+          const k    = dayKey(d)
+          const arts = dayMap[k] || []
+          const isToday = k === todayK
+          return (
+            <div
+              key={k}
+              className={`border-r border-slate-100 dark:border-slate-800/80 last:border-r-0 p-1 flex flex-col gap-1 ${
+                isToday ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''
+              }`}
+            >
+              {arts.map((art, j) => {
+                const titre  = art['Titre']?.trim() || ''
+                const resume = art['Résumé'] || ''
+                const source = art['Sources'] || ''
+                return (
+                  <button
+                    key={j}
+                    onClick={() => onSelectDay(d)}
+                    title={resume}
+                    className="w-full text-left rounded-md overflow-hidden border border-slate-100 dark:border-slate-800 hover:border-violet-300 dark:hover:border-violet-600 bg-white dark:bg-slate-800/50 transition-colors"
+                  >
+                    {/* Bandeau source coloré */}
+                    <div className={`px-1.5 py-0.5 text-[9px] font-semibold text-white truncate ${sourceColor(source)}`}>
+                      {source || '—'}
+                    </div>
+                    {/* Titre ou début du résumé */}
+                    {titre && (
+                      <p className="px-1.5 pt-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-200 line-clamp-2 leading-snug">
+                        {titre}
+                      </p>
+                    )}
+                    {/* Extrait du résumé */}
+                    <p className="px-1.5 py-0.5 text-[10px] text-slate-500 dark:text-slate-400 line-clamp-3 leading-snug">
+                      {resume}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Vue Jour ─────────────────────────────────────────────────────────────────
 function DayView({ date, dayMap }) {
   const k    = dayKey(date)
@@ -281,7 +375,7 @@ function DayView({ date, dayMap }) {
 
 // ── Composant principal ──────────────────────────────────────────────────────
 export default function EntityCalendar({ articles }) {
-  const [scale, setScale] = useState('mois')
+  const [scale, setScale] = useState('semaine')
 
   const initDate = useMemo(() => {
     let latest = null
@@ -310,6 +404,7 @@ export default function EntityCalendar({ articles }) {
       const d = new Date(prev)
       if (scale === 'annee') d.setFullYear(d.getFullYear() + dir)
       else if (scale === 'mois') d.setMonth(d.getMonth() + dir)
+      else if (scale === 'semaine') d.setDate(d.getDate() + dir * 7)
       else d.setDate(d.getDate() + dir)
       return d
     })
@@ -325,9 +420,25 @@ export default function EntityCalendar({ articles }) {
     setScale('jour')
   }
 
+  // Calcule le lundi de la semaine de navDate
+  function weekMonday(d) {
+    const m = new Date(d)
+    const dow = (m.getDay() + 6) % 7   // lundi = 0
+    m.setDate(m.getDate() - dow)
+    m.setHours(0, 0, 0, 0)
+    return m
+  }
+
   function title() {
     if (scale === 'annee') return String(navDate.getFullYear())
     if (scale === 'mois')  return `${MONTHS_FR[navDate.getMonth()]} ${navDate.getFullYear()}`
+    if (scale === 'semaine') {
+      const mon = weekMonday(navDate)
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
+      const fmtDay = (d) => `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`
+      const sameyear = mon.getFullYear() === sun.getFullYear()
+      return `${fmtDay(mon)}${sameyear ? '' : ' ' + mon.getFullYear()} – ${fmtDay(sun)} ${sun.getFullYear()}`
+    }
     return navDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   }
 
@@ -349,6 +460,13 @@ export default function EntityCalendar({ articles }) {
         <MonthView
           year={navDate.getFullYear()}
           month={navDate.getMonth()}
+          dayMap={dayMap}
+          onSelectDay={handleSelectDay}
+        />
+      )}
+      {scale === 'semaine' && (
+        <WeekView
+          monday={weekMonday(navDate)}
           dayMap={dayMap}
           onSelectDay={handleSelectDay}
         />
