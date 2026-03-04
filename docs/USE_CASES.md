@@ -15,6 +15,7 @@
 6. [Rapport ad hoc avec Claude](#6-rapport-ad-hoc-avec-claude)
 7. [Lecture des résumés en déplacement (mobile)](#7-lecture-des-résumés-en-déplacement-mobile)
 8. [Briefing entités avant réunion (mobile)](#8-briefing-entités-avant-réunion-mobile)
+9. [Rapport de veille quotidien Top 10 entités (48h)](#9-rapport-de-veille-quotidien-top-10-entités-48h)
 
 ---
 
@@ -379,9 +380,85 @@ flowchart TD
 
 **Valeur produite :** En moins de trois minutes depuis un smartphone, l'utilisateur identifie les acteurs dominants de l'actualité récente, visualise leur ancrage géographique et les reconnaît visuellement — sans ordinateur, sans application dédiée, sur ses propres données.
 
----
+## 9. Rapport de veille quotidien Top 10 entités (48h)
 
-## Synthèse des use cases
+**Contexte :** Chaque soir à 23h00, un rapport de veille analytique est généré automatiquement à partir des articles collectés dans les 48 dernières heures. Le script identifie les 10 entités nommées les plus citées (personnes, organisations, pays, produits, événements), rédige une analyse structurée pour chacune — contexte encyclopédique, actualité des 48h avec sources, analyse stratégique — puis synthétise les corrélations et signaux faibles détectés.
+
+**Acteurs :** Docker/cron · `generate_48h_report.py` · `get-keyword-from-rss.py` · API EurIA (Qwen3)
+
+**Prérequis :** `data/articles-from-rss/_WUDD.AI_/48-heures.json` doit être à jour (généré par `get-keyword-from-rss.py` après chaque collecte RSS).
+
+```mermaid
+flowchart TD
+    CRON([Cron 23h00 — chaque jour]) --> SCRIPT[generate_48h_report.py]
+    SCRIPT --> READ[Lit 48-heures.json
+data/articles-from-rss/_WUDD.AI_/]
+    READ --> COUNT[Pré-calcule Top 10 entités
+PERSON · ORG · GPE · PRODUCT · EVENT]
+    COUNT --> SELECT[Sélectionne 5 articles
+les plus récents par entité]
+    SELECT --> PROMPT[Construit le prompt enrichi
+Top 10 précalculé + 50 articles allégés]
+    PROMPT --> EURIA[POST EurIA — timeout 300s
+3 tentatives avec backoff]
+
+    subgraph RAPPORT["Structure du rapport généré"]
+        S0[Frontmatter YAML
+titre · date · nb articles]
+        S1[Section par entité × 10
+Contexte · Actualité 48h · Analyse]
+        S2[Image Markdown par section
+![URL] sans doublon]
+        S3[Corrélations inter-entités
+3-5 liens significatifs]
+        S4[Constatations générales
+dynamiques · ruptures · signaux faibles]
+        S5[Tableau de références
+date · source · URL]
+        S0 --> S1 --> S2 --> S3 --> S4 --> S5
+    end
+
+    EURIA --> RAPPORT
+    RAPPORT --> CLEAN[Nettoyage post-LLM
+suppression backticks parasites]
+    CLEAN --> SAVE[rapports/markdown/_WUDD.AI_/
+rapport_48h.md — remplacé chaque jour]
+    SAVE --> VIEWER[Consultable dans le Viewer
+Rendu Markdown avec images]
+
+    classDef auto fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef storage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    classDef report fill:#fff3e0,stroke:#f57c00,stroke-width:1px
+    classDef viewer fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    class CRON,SCRIPT,READ,COUNT,SELECT,PROMPT,EURIA,CLEAN auto
+    class SAVE storage
+    class S0,S1,S2,S3,S4,S5 report
+    class VIEWER viewer
+```
+
+**Exemple de Top 10 généré (04/03/2026) :**
+
+| Rang | Entité | Type | Articles |
+|------|--------|------|----------|
+| 1 | Apple | ORG | 202 |
+| 2 | États-Unis | GPE | 83 |
+| 3 | MacBook Neo | PRODUCT | 82 |
+| 4 | Iran | GPE | 76 |
+| 5 | iPhone 17e | PRODUCT | 54 |
+| 6 | OpenAI | ORG | 47 |
+| 7 | Suisse | GPE | 46 |
+| 8 | MacBook Air M5 | PRODUCT | 46 |
+| 9 | Studio Display XDR | PRODUCT | 45 |
+| 10 | MacBook Air | PRODUCT | 40 |
+
+**Test sans API :**
+```bash
+python3 scripts/generate_48h_report.py --dry-run
+```
+
+**Valeur produite :** Chaque matin, un rapport de veille analytique est disponible sans aucune intervention — 10 analyses d'entités avec contexte et sources, les corrélations entre acteurs, et une lecture des signaux faibles de la veille. Un seul fichier, toujours à jour : `rapports/markdown/_WUDD.AI_/rapport_48h.md`.
+
+---
 
 ```mermaid
 quadrantChart
@@ -400,6 +477,7 @@ quadrantChart
     UC6 Rapport Claude ad hoc: [0.48, 0.82]
     UC7 Lecture mobile: [0.72, 0.32]
     UC8 Briefing entites mobile: [0.62, 0.55]
+    UC9 Rapport Top10 entites 48h: [0.90, 0.95]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
@@ -412,8 +490,9 @@ quadrantChart
 | 6 | Rapport Claude ad hoc | Ad hoc (Claude) | 2–5 min | Rapport Markdown / PDF |
 | 7 | Lecture mobile en déplacement | Quotidien (smartphone) | 5–10 min | Lecture · recherche plein texte |
 | 8 | Briefing entités avant réunion | Ad hoc (smartphone) | 2–3 min | Orientation · sélection articles |
+| 9 | Rapport Top 10 entités 48h | Cron 23h00 quotidien | ~5 min (script) | Rapport Markdown structuré |
 
 ---
 
 **Maintenu par** : Patrick Ostertag · patrick.ostertag@gmail.com
-**Créé le** : 2 mars 2026 · **Mis à jour le** : 4 mars 2026
+**Créé le** : 2 mars 2026 · **Mis à jour le** : 4 mars 2026 (UC9 — Rapport Top 10 entités 48h)
