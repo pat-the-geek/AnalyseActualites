@@ -392,14 +392,14 @@ quadrantChart
     quadrant-2 Veille operationnelle
     quadrant-3 Analyse ad hoc
     quadrant-4 Exploration ouverte
-    UC1 Veille mots-cles: [0.82, 0.68]
-    UC2 Rapport multi-flux: [0.90, 0.88]
-    UC3 Recherche entite: [0.28, 0.72]
-    UC4 Carte geopolitique: [0.22, 0.48]
-    UC5 Reseau semantique: [0.15, 0.22]
-    UC6 Rapport Claude ad hoc: [0.52, 0.88]
-    UC7 Lecture mobile: [0.75, 0.35]
-    UC8 Briefing entites mobile: [0.58, 0.52]
+    UC1 Veille mots-cles: [0.80, 0.65]
+    UC2 Rapport multi-flux: [0.88, 0.92]
+    UC3 Recherche entite: [0.22, 0.78]
+    UC4 Carte geopolitique: [0.18, 0.45]
+    UC5 Reseau semantique: [0.12, 0.18]
+    UC6 Rapport Claude ad hoc: [0.48, 0.82]
+    UC7 Lecture mobile: [0.72, 0.32]
+    UC8 Briefing entites mobile: [0.62, 0.55]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
