@@ -98,7 +98,7 @@ function SearchHighlighter({ text, query }) {
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
   return (
-    <p className="leading-7 text-slate-700 dark:text-slate-300">
+    <p className="leading-7 text-base text-slate-700 dark:text-slate-300">
       {parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase()
           ? <mark key={i} className="bg-yellow-200 dark:bg-yellow-700/60 text-yellow-900 dark:text-yellow-100 rounded px-0.5">{part}</mark>
@@ -177,7 +177,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
               )}
             </div>
             {titre && (
-              <h3 className="mt-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">
+              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">
                 {titre}
               </h3>
             )}
@@ -189,7 +189,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
             </a>
           )}
         </div>
-        <div className={`text-sm overflow-hidden transition-all ${expanded ? '' : 'max-h-24'}`}>
+        <div className={`text-base overflow-hidden transition-all ${expanded ? '' : 'max-h-28'}`}>
           {hasEntities
             ? <EntityHighlighter text={resume} entities={entities} onEntityClick={onEntityClick} />
             : <SearchHighlighter text={resume} query={highlight} />
@@ -246,11 +246,11 @@ function TimelineItem({ article }) {
           )}
         </div>
         {titre && (
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-snug line-clamp-1 mb-0.5">
+          <p className="text-lg font-medium text-slate-700 dark:text-slate-200 leading-snug line-clamp-1 mb-0.5">
             {titre}
           </p>
         )}
-        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
+        <p className="text-base text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
           {resume.slice(0, 220)}{resume.length > 220 ? '…' : ''}
         </p>
       </div>

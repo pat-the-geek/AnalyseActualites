@@ -193,7 +193,7 @@ function Lightbox({ images, index, onClose, onNav }) {
   )
 }
 
-export default function FileViewer({ file, content, loading, onDownload, onContentSaved, onEntitySearch, onDelete }) {
+export default function FileViewer({ file, content, loading, loadingProgress, onDownload, onContentSaved, onEntitySearch, onDelete }) {
   const scrollRef = useRef(null)
   const entitiesRef = useRef(null)
   const imagesRef = useRef(null)
@@ -361,7 +361,19 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400 dark:text-slate-500">
             <div className="w-5 h-5 border-2 border-slate-300 dark:border-slate-600 border-t-blue-500 rounded-full animate-spin" />
-            <span className="text-sm">Chargement…</span>
+            {loadingProgress > 0 ? (
+              <>
+                <div className="w-48 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                    style={{ width: `${loadingProgress}%` }}
+                  />
+                </div>
+                <span className="text-xs">{loadingProgress} % chargé</span>
+              </>
+            ) : (
+              <span className="text-sm">Chargement…</span>
+            )}
           </div>
         ) : content === null ? (
           <div className="text-slate-400 dark:text-slate-500 text-sm">Contenu indisponible</div>

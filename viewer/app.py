@@ -196,6 +196,33 @@ def api_content():
     return jsonify({"path": path, "content": f.read_text(encoding="utf-8", errors="replace")})
 
 
+@app.route("/api/stream-content")
+def api_stream_content():
+    """Diffuse le contenu d'un fichier en streaming pour une meilleure réactivité."""
+    path = request.args.get("path", "")
+    if not path:
+        abort(400)
+    f = safe_path(path)
+    file_size = f.stat().st_size
+
+    def generate():
+        with open(f, "rb") as fh:
+            while True:
+                chunk = fh.read(16384)  # 16 Ko par chunk
+                if not chunk:
+                    break
+                yield chunk
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/plain; charset=utf-8",
+        headers={
+            "X-File-Size": str(file_size),
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
 @app.route("/api/content", methods=["POST"])
 def api_save_content():
     data = request.get_json(force=True)

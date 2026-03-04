@@ -1,4 +1,4 @@
-import { Search, FileJson, FileText, X, Folder } from 'lucide-react'
+import { Search, FileJson, FileText, X, Folder, RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 
 function formatSize(bytes) {
@@ -18,6 +18,7 @@ export default function Sidebar({
   typeFilter, onTypeFilterChange,
   nameSearch, onNameSearchChange,
   isOpen, onClose,
+  onRefresh, isRefreshing,
 }) {
   // Grouper par flux
   const grouped = useMemo(() => {
@@ -92,8 +93,21 @@ export default function Sidebar({
           )}
         </div>
 
-        <div className="text-xs text-slate-400 dark:text-slate-600">
-          {files.length} fichier{files.length !== 1 ? 's' : ''}
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-slate-400 dark:text-slate-600">
+            {files.length} fichier{files.length !== 1 ? 's' : ''}
+          </div>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              title="Actualiser la liste des fichiers"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
+              Actualiser
+            </button>
+          )}
         </div>
       </div>
 

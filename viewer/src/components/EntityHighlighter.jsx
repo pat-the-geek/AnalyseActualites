@@ -55,9 +55,12 @@ function segmentText(text, entities) {
 
   terms.sort((a, b) => b.value.length - a.value.length)
 
-  // Construire un regex global insensible à la casse avec les termes échappés
+  // Construire un regex global insensible à la casse avec les termes échappés.
+  // Les lookahead/lookbehind Unicode (?<![a-zA-ZÀ-ÿ0-9]) garantissent que
+  // l'entité n'est détectée que si elle forme un mot indépendant.
+  // Ex : "sion" ne matche pas dans "pression" ou "commission".
   const escaped = terms.map(t => t.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
+  const regex = new RegExp(`(?<![a-zA-ZÀ-ÿ0-9])(${escaped.join('|')})(?![a-zA-ZÀ-ÿ0-9])`, 'gi')
 
   // Découper le texte
   const rawParts = text.split(regex)

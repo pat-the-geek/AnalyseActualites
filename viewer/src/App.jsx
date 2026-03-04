@@ -49,6 +49,8 @@ export default function App() {
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [consoleOpen, setConsoleOpen]     = useState(false)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+  const [isRefreshing, setIsRefreshing]   = useState(false)
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -69,13 +71,25 @@ export default function App() {
 
   // ── Données ────────────────────────────────────────────────────────────────
   const refreshFiles = useCallback(() => {
+    setIsRefreshing(true)
     fetch('/api/files')
       .then(r => r.json())
-      .then(setFiles)
-      .catch(console.error)
+      .then(data => { setFiles(data); setIsRefreshing(false) })
+      .catch(err => { console.error(err); setIsRefreshing(false) })
   }, [])
 
   useEffect(() => { refreshFiles() }, [refreshFiles])
+
+  // Recharge la liste au retour de l'application (mobile : mise en arrière-plan)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFiles()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [refreshFiles])
 
   // Raccourci clavier Ctrl/Cmd+K pour la recherche plein texte
   useEffect(() => {
@@ -93,14 +107,39 @@ export default function App() {
     setSelectedFile(file)
     setFileContent(null)
     setContentLoading(true)
+    setLoadingProgress(0)
     if (window.innerWidth < 768) setSidebarOpen(false)
-    fetch(`/api/content?path=${encodeURIComponent(file.path)}`)
-      .then(r => r.json())
-      .then(data => {
-        setFileContent(data.content)
-        setContentLoading(false)
+
+    fetch(`/api/stream-content?path=${encodeURIComponent(file.path)}`)
+      .then(async (response) => {
+        const fileSize = parseInt(response.headers.get('X-File-Size') || '0', 10)
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        const chunks = []
+        let loaded = 0
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(decoder.decode(value, { stream: true }))
+          loaded += value.length
+          if (fileSize > 0) {
+            setLoadingProgress(Math.min(99, Math.round((loaded / fileSize) * 100)))
+          }
+        }
+        // Flush le décodeur
+        chunks.push(decoder.decode())
+        return chunks.join('')
       })
-      .catch(() => setContentLoading(false))
+      .then(text => {
+        setFileContent(text)
+        setContentLoading(false)
+        setLoadingProgress(0)
+      })
+      .catch(() => {
+        setContentLoading(false)
+        setLoadingProgress(0)
+      })
   }, [])
 
   const downloadFile = useCallback(() => {
@@ -246,11 +285,14 @@ export default function App() {
           onNameSearchChange={setNameSearch}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          onRefresh={refreshFiles}
+          isRefreshing={isRefreshing}
         />
         <FileViewer
           file={selectedFile}
           content={fileContent}
           loading={contentLoading}
+          loadingProgress={loadingProgress}
           onDownload={downloadFile}
           onContentSaved={saveContent}
           onEntitySearch={(value, type) => setEntitySearch({ value, type })}

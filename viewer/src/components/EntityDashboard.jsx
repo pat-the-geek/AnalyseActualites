@@ -169,38 +169,38 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                 <button
                   onClick={() => setViewMode('list')}
                   title="Vue liste"
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-3 py-3 sm:py-1.5 text-sm sm:text-xs font-medium transition-colors ${
                     viewMode === 'list'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
-                  <List size={13} />
-                  <span className="hidden sm:inline">Liste</span>
+                  <List size={16} />
+                  <span>Liste</span>
                 </button>
                 <button
                   onClick={() => setViewMode('map')}
                   title="Vue carte du monde"
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-3 py-3 sm:py-1.5 text-sm sm:text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                     viewMode === 'map'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
-                  <Map size={13} />
-                  <span className="hidden sm:inline">Carte</span>
+                  <Map size={16} />
+                  <span>Carte</span>
                 </button>
                 <button
                   onClick={() => setViewMode('gallery')}
                   title="Galerie d'images Wikipedia"
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-3 py-3 sm:py-1.5 text-sm sm:text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
                     viewMode === 'gallery'
                       ? 'bg-violet-500 text-white'
                       : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
-                  <Images size={13} />
-                  <span className="hidden sm:inline">Galerie</span>
+                  <Images size={16} />
+                  <span>Galerie</span>
                 </button>
               </div>
             )}
@@ -208,15 +208,15 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
             <button
               onClick={() => setIsMaximized(m => !m)}
               title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
-              className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+              className="shrink-0 w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
-              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
             <button
               onClick={onClose}
-              className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+              className="shrink-0 w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
 
