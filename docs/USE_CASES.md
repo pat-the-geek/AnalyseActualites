@@ -1,6 +1,6 @@
 # Use Cases — WUDD.ai
 
-> Sept scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
+> Huit scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
 > Chaque use case est illustré par un diagramme Mermaid.
 
 ---
@@ -392,14 +392,14 @@ quadrantChart
     quadrant-2 Veille operationnelle
     quadrant-3 Analyse ad hoc
     quadrant-4 Exploration ouverte
-    UC1 Veille mots-cles: [0.80, 0.70]
-    UC2 Rapport multi-flux: [0.90, 0.90]
-    UC3 Recherche entite: [0.40, 0.75]
-    UC4 Carte geopolitique: [0.30, 0.55]
-    UC5 Reseau semantique: [0.20, 0.25]
-    UC6 Rapport Claude ad hoc: [0.35, 0.85]
-    UC7 Lecture mobile: [0.80, 0.40]
-    UC8 Briefing entites mobile: [0.50, 0.55]
+    UC1 Veille mots-cles: [0.82, 0.68]
+    UC2 Rapport multi-flux: [0.90, 0.88]
+    UC3 Recherche entite: [0.28, 0.72]
+    UC4 Carte geopolitique: [0.22, 0.48]
+    UC5 Reseau semantique: [0.15, 0.22]
+    UC6 Rapport Claude ad hoc: [0.52, 0.88]
+    UC7 Lecture mobile: [0.75, 0.35]
+    UC8 Briefing entites mobile: [0.58, 0.52]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
