@@ -1,6 +1,6 @@
 # Use Cases — WUDD.ai
 
-> Cinq scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur.
+> Sept scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
 > Chaque use case est illustré par un diagramme Mermaid.
 
 ---
@@ -12,6 +12,9 @@
 3. [Recherche transversale sur une entité nommée](#3-recherche-transversale-sur-une-entité-nommée)
 4. [Cartographie géopolitique des sujets](#4-cartographie-géopolitique-des-sujets)
 5. [Exploration du réseau sémantique](#5-exploration-du-réseau-sémantique)
+6. [Rapport ad hoc avec Claude](#6-rapport-ad-hoc-avec-claude)
+7. [Lecture des résumés en déplacement (mobile)](#7-lecture-des-résumés-en-déplacement-mobile)
+8. [Briefing entités avant réunion (mobile)](#8-briefing-entités-avant-réunion-mobile)
 
 ---
 
@@ -285,6 +288,99 @@ sequenceDiagram
 
 ---
 
+## 7. Lecture des résumés en déplacement (mobile)
+
+**Contexte :** L'utilisateur consulte ses résumés pendant ses trajets quotidiens (métro, train, salle d'attente) depuis son iPhone. L'interface responsive du viewer — drawer hamburger, navigation en bas d'écran, vue cartes en pleine largeur — permet une lecture fluide sans souris ni clavier. En quelques secondes, il retrouve les derniers articles collectés, les parcourt en mode carte ou chronologique, et accède aux images associées.
+
+**Acteurs :** Utilisateur (smartphone) · Viewer (Flask · React responsive) · Fichiers JSON locaux
+
+**Caractéristiques iPhone :** sidebar en drawer (☰), barre de navigation fixée en bas (`safe-area-inset-bottom`), taille de police respectant les préférences système iOS, `theme-color` dynamique clair/sombre.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur (iPhone)
+    participant V as Viewer (navigateur mobile)
+    participant F as Flask
+
+    Note over U,F: Déplacement — connexion Wi-Fi ou LAN domestique
+    U->>V: Ouvre http://localhost:5050 depuis Safari
+    V->>F: GET /api/files
+    F-->>V: Liste des flux et fichiers JSON
+    V-->>U: Sidebar fermée — icône ☰ visible
+
+    U->>V: Tape ☰ — drawer s'ouvre
+    U->>V: Sélectionne le flux « Intelligence-IA »
+    V-->>U: Liste des fichiers JSON du flux
+    U->>V: Tape le fichier articles_generated_2026-02-01_2026-02-28.json
+    V->>F: GET /api/stream-content?path=… (streaming)
+    F-->>V: Contenu JSON en chunks (progress bar)
+    V-->>U: Vue Articles — cartes en pleine largeur
+
+    loop Pour chaque article
+        U->>V: Scroll vertical — lit le résumé (20 lignes max)
+        U->>V: Appuie sur une image → lien source
+        U->>V: Appuie sur l'URL → ouvre dans Safari
+    end
+
+    U->>V: Appuie sur 🔍 (barre de nav bas) → Recherche plein texte
+    U->>V: Tape « Mistral »
+    V->>F: GET /api/search?q=Mistral
+    F-->>V: Articles correspondants (cross-flux)
+    V-->>U: Résultats avec extraits mis en évidence
+```
+
+![Liste des fichiers — vue iPhone](Screen-captures/WWUD.ai-Viewer-files.mobile.png)
+
+![Articles — vue iPhone](Screen-captures/WWUD.ai-Viewer-articles-mobile.png)
+
+**Valeur produite :** Accès instantané à l'ensemble des résumés collectés depuis un iPhone, sans application native ni synchronisation cloud — la veille se consulte comme un journal personnalisé, sur ses propres données, en toute confidentialité.
+
+---
+
+## 8. Briefing entités avant réunion (mobile)
+
+**Contexte :** Avant d'entrer en réunion ou en conférence, l'utilisateur veut en deux minutes identifier quels acteurs (personnes, organisations, pays) dominent l'actualité de ses flux, visualiser leur répartition géographique sur une carte, et parcourir la galerie des images associées pour ancrer visuellement les sujets du jour.
+
+**Acteurs :** Utilisateur (smartphone) · EntityDashboard · Carte Leaflet (mobile) · Galerie NER · Wikipedia/Wikidata
+
+**Usage type :** couloir, salle de réunion, 2–3 minutes avant le début d'un entretien ou d'une présentation.
+
+```mermaid
+flowchart TD
+    U([Utilisateur iPhone]) --> NAV[Barre de nav bas\nAppuie sur l icone Entites]
+    NAV --> DASH[EntityDashboard\nchargement stats agregees]
+
+    DASH --> CHOIX{Que cherche-t-il ?}
+
+    CHOIX -->|Acteurs cles| LISTE[Vue Liste\nTop entites par type\nPERSON · ORG · GPE]
+    LISTE --> CARD[Appuie sur une entite\nOuvre EntityArticlePanel]
+    CARD --> ART[Articles filtres\nvue carte mobile pleine largeur]
+
+    CHOIX -->|Zones geographiques| CARTE[Vue Carte Leaflet\nCircleMarker proportionnel\nau nb de mentions]
+    CARTE --> MARKER[Appuie sur un marqueur\nnom + compteur]
+    MARKER --> ART
+
+    CHOIX -->|Apercu visuel rapide| GALERIE[Vue Galerie\nImages NER Wikipedia / Wikidata]
+    GALERIE --> IMG[Grille d imagettes\nIdentification visuelle des acteurs]
+    IMG --> ART
+
+    ART --> READ[Lecture resume\nscroll vertical]
+    READ --> DONE([Briefing termine\nReunion prete])
+
+    classDef mobile fill:#e3f2fd,stroke:#1565c0,stroke-width:1px
+    classDef entity fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    class U,NAV,CARD,ART,READ,DONE mobile
+    class DASH,LISTE,CARTE,GALERIE,MARKER,IMG entity
+```
+
+![Dashboard entités — carte géographique mobile](Screen-captures/WWUD.ai-Viewer-entities-map-mobile.png)
+
+![Dashboard entités — galerie d'images mobile](Screen-captures/WWUD.ai-Viewer-entities-galerie-mobile.png)
+
+**Valeur produite :** En moins de trois minutes depuis un smartphone, l'utilisateur identifie les acteurs dominants de l'actualité récente, visualise leur ancrage géographique et les reconnaît visuellement — sans ordinateur, sans application dédiée, sur ses propres données.
+
+---
+
 ## Synthèse des use cases
 
 ```mermaid
@@ -302,6 +398,8 @@ quadrantChart
     UC4 Carte geopolitique: [0.30, 0.55]
     UC5 Reseau semantique: [0.20, 0.25]
     UC6 Rapport Claude ad hoc: [0.35, 0.85]
+    UC7 Lecture mobile: [0.80, 0.40]
+    UC8 Briefing entites mobile: [0.50, 0.55]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
@@ -312,8 +410,10 @@ quadrantChart
 | 4 | Carte géopolitique | Ad hoc (viewer) | 1–3 min | Lecture + export |
 | 5 | Réseau sémantique | Ad hoc (viewer) | 5–20 min | Découverte / navigation |
 | 6 | Rapport Claude ad hoc | Ad hoc (Claude) | 2–5 min | Rapport Markdown / PDF |
+| 7 | Lecture mobile en déplacement | Quotidien (smartphone) | 5–10 min | Lecture · recherche plein texte |
+| 8 | Briefing entités avant réunion | Ad hoc (smartphone) | 2–3 min | Orientation · sélection articles |
 
 ---
 
 **Maintenu par** : Patrick Ostertag · patrick.ostertag@gmail.com
-**Créé le** : 2 mars 2026
+**Créé le** : 2 mars 2026 · **Mis à jour le** : 4 mars 2026
