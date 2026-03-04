@@ -466,6 +466,42 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 
 ![Détail entité](docs/Screen-captures/WWUD.ai-Viewer-entity-detail.png)
 
+**Calendrier des entités — vue semaine**
+
+![Calendrier entités](docs/Screen-captures/WWUD.ai-Viewer-entitiy-calendar.png)
+
+**Carte géographique des entités — monde**
+
+![Carte entités monde](docs/Screen-captures/WWUD.ai-Viewer-entities-map-world.png)
+
+**Carte géographique des entités — zoom**
+
+![Carte entités zoom](docs/Screen-captures/WWUD.ai-Viewer-entities-map-zoom.png)
+
+**Carte géographique — vue mobile**
+
+![Carte entités mobile](docs/Screen-captures/WWUD.ai-Viewer-entities-map-mobile.png)
+
+**Graphe de relations entre entités**
+
+![Relations entre entités](docs/Screen-captures/WWUD.ai-Viewer-entities-relations.png)
+
+**Galerie d'images des entités — desktop**
+
+![Galerie entités](docs/Screen-captures/WWUD.ai-Viewer-entities-galerie.png)
+
+**Galerie d'images des entités — mobile**
+
+![Galerie entités mobile](docs/Screen-captures/WWUD.ai-Viewer-entities-galerie-mobile.png)
+
+**Liste des fichiers — vue mobile**
+
+![Liste fichiers mobile](docs/Screen-captures/WWUD.ai-Viewer-files.mobile.png)
+
+**Articles — vue mobile**
+
+![Articles mobile](docs/Screen-captures/WWUD.ai-Viewer-articles-mobile.png)
+
 ### Prérequis
 
 - `python3` avec Flask (`pip install flask`)
