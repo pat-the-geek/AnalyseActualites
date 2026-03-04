@@ -1,6 +1,6 @@
 # Use Cases — WUDD.ai
 
-> Huit scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
+> Neuf scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
 > Chaque use case est illustré par un diagramme Mermaid.
 
 ---
@@ -408,7 +408,7 @@ titre · date · nb articles]
         S1[Section par entité × 10
 Contexte · Actualité 48h · Analyse]
         S2[Image Markdown par section
-![URL] sans doublon]
+une image par entité, sans doublon]
         S3[Corrélations inter-entités
 3-5 liens significatifs]
         S4[Constatations générales
