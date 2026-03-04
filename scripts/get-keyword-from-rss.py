@@ -172,3 +172,52 @@ for kw, articles in results.items():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(list(merged.values()), f, ensure_ascii=False, indent=4)
     print_console(f"✓ {len(merged)} articles pour le mot-clé '{kw}' dans {out_path}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Génération du fichier 48-heures.json dans data/articles-from-rss/_WUDD.AI_/
+# Agrège tous les articles créés dans les dernières 48h depuis tous les fichiers
+# JSON du répertoire articles-from-rss/ (sans doublon, triés par date décroissante)
+# ─────────────────────────────────────────────────────────────────────────────
+print_console("Génération du fichier 48-heures.json (_WUDD.AI_)...")
+
+WUDD_DIR = OUTPUT_DIR / "_WUDD.AI_"
+WUDD_DIR.mkdir(parents=True, exist_ok=True)
+
+two_days_ago = now - timedelta(hours=48)
+seen_urls: set = set()
+articles_48h: list = []
+
+for json_file in sorted(OUTPUT_DIR.glob("*.json")):
+    try:
+        with open(json_file, "r", encoding="utf-8") as f:
+            file_articles = json.load(f)
+        for article in file_articles:
+            url = article.get("URL", "")
+            if not url or url in seen_urls:
+                continue
+            pub_date_str = article.get("Date de publication", "")
+            try:
+                pub_dt = datetime.strptime(pub_date_str[:25], "%a, %d %b %Y %H:%M:%S")
+            except Exception:
+                continue
+            if pub_dt >= two_days_ago:
+                seen_urls.add(url)
+                articles_48h.append(article)
+    except Exception as e:
+        print_console(f"Erreur lecture {json_file.name} pour 48h : {e}", level="error")
+
+
+def _parse_date_safe(article: dict) -> datetime:
+    try:
+        return datetime.strptime(article.get("Date de publication", "")[:25], "%a, %d %b %Y %H:%M:%S")
+    except Exception:
+        return datetime.min
+
+
+articles_48h.sort(key=_parse_date_safe, reverse=True)
+
+wudd_path = WUDD_DIR / "48-heures.json"
+with open(wudd_path, "w", encoding="utf-8") as f:
+    json.dump(articles_48h, f, ensure_ascii=False, indent=4)
+
+print_console(f"✓ {len(articles_48h)} articles des dernières 48h sauvegardés dans {wudd_path}")

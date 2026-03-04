@@ -344,8 +344,8 @@ export default function FileViewer({ file, content, loading, onDownload, onConte
           Télécharger
         </button>
 
-        {/* Bouton supprimer */}
-        {onDelete && (
+        {/* Bouton supprimer (uniquement pour les fichiers non-JSON) */}
+        {onDelete && file?.type !== 'json' && (
           <button
             onClick={() => { setDeleteConfirm(true); setDeleteError(null) }}
             title="Supprimer ce fichier"
