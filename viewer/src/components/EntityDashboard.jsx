@@ -152,7 +152,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
         <div className={`bg-slate-50 dark:bg-slate-900 shadow-2xl w-full border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
 
           {/* ── En-tête ── */}
-          <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 order-last md:order-first" style={isMaximized ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' } : undefined}>
+          <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-t border-white/30 dark:border-slate-700/40 md:border-t-0 md:border-b shrink-0 order-last md:order-first" style={isMaximized ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' } : undefined}>
             <BarChart2 size={18} className="hidden md:block text-violet-500" />
             <span className="hidden md:block font-semibold text-slate-800 dark:text-slate-100 text-base">
               Dashboard entités

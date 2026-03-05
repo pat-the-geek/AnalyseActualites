@@ -61,7 +61,7 @@ function sourceColor(source) {
 // ── Barre de navigation commune ──────────────────────────────────────────────
 function CalHeader({ title, scale, onScaleChange, onPrev, onNext, onToday }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex-wrap">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0 flex-wrap">
       <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex-1 min-w-0 truncate">
         {title}
       </h2>

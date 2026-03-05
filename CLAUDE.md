@@ -76,7 +76,7 @@ Required variables:
 ### 2. Install dependencies
 
 ```bash
-pip install -r archives/requirements.txt
+pip install -r viewer/requirements.txt
 ```
 
 Dependencies: `requests`, `beautifulsoup4`, `python-dotenv`, `pytest`, `pytest-cov`
@@ -192,7 +192,7 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `JsonViewer.jsx` | Syntax-highlighted JSON with inline edit/save |
 | `MarkdownViewer.jsx` | Rendered Markdown with image support |
 | `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
-| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config |
+| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config; RSS tab: manage `data/WUDD.opml` feeds (check availability, add via URL paste with title resolution, delete, save) |
 | `Sidebar.jsx` | File navigation by flux and type |
 | `FileViewer.jsx` | File content viewer; "Supprimer" button with confirmation dialog (restricted to data/ and rapports/) |
 | `ScriptConsolePanel.jsx` | Modal console to launch `get-keyword-from-rss.py` in the background; real-time SSE log streaming; auto-refreshes the file list on success |

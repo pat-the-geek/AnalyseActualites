@@ -99,7 +99,7 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
              style={{ maxHeight: '75vh' }}>
 
           {/* En-tête */}
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700 shrink-0">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700/50 bg-slate-900/60 backdrop-blur-xl shrink-0">
             <Terminal size={14} className="text-green-400 shrink-0" />
             <span className="text-sm font-medium text-slate-100 flex-1">
               Extraction mots-clés RSS
@@ -147,7 +147,7 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
           </div>
 
           {/* Pied de fenêtre */}
-          <div className="px-4 py-3 border-t border-slate-700 shrink-0 flex items-center gap-3">
+          <div className="px-4 py-3 border-t border-slate-700/50 bg-slate-900/60 backdrop-blur-xl shrink-0 flex items-center gap-3">
             <button
               onClick={startScript}
               disabled={running}

@@ -6,8 +6,41 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock } from 'lucide-react'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
+
+// Heures de passage du cron get-keyword-from-rss.py (Europe/Paris)
+const RSS_CRON_HOURS = [6, 8, 10, 12, 14, 16, 18, 20, 22]
+
+function useNextRssCountdown() {
+  const [label, setLabel] = useState('')
+  useEffect(() => {
+    function compute() {
+      const now = new Date()
+      const parts = new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(now)
+      const h = parseInt(parts.find(p => p.type === 'hour').value)
+      const m = parseInt(parts.find(p => p.type === 'minute').value)
+      const curMin = h * 60 + m
+      let diff = null
+      for (const hr of RSS_CRON_HOURS) {
+        if (hr * 60 > curMin) { diff = hr * 60 - curMin; break }
+      }
+      if (diff === null) diff = (24 - h) * 60 - m + RSS_CRON_HOURS[0] * 60
+      if (diff <= 0) { setLabel('Actualisation en cours…'); return }
+      if (diff < 60) { setLabel(`Actu. dans ${diff}min`); return }
+      const hh = Math.floor(diff / 60)
+      const mm = diff % 60
+      setLabel(mm === 0 ? `Actu. dans ${hh}h` : `Actu. dans ${hh}h${String(mm).padStart(2, '0')}`)
+    }
+    compute()
+    const interval = setInterval(compute, 60000)
+    return () => clearInterval(interval)
+  }, [])
+  return label
+}
 
 const THEME_OPTIONS = [
   { key: 'jour', Icon: Sun,     title: 'Jour' },
@@ -37,6 +70,7 @@ function applyTheme(theme) {
 }
 
 export default function App() {
+  const nextRssLabel = useNextRssCountdown()
   const [files, setFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
   const [fileContent, setFileContent] = useState(null)
@@ -185,7 +219,7 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* ── Barre de navigation ── */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
+      <header className="flex items-center gap-3 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/40 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
         {/* Bouton hamburger — mobile uniquement */}
         <button
           onClick={() => setSidebarOpen(v => !v)}
@@ -199,6 +233,12 @@ export default function App() {
           <span className="font-semibold text-slate-900 dark:text-slate-100">WUDD.ai</span>
           <span className="hidden sm:inline text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
         </div>
+
+        {nextRssLabel && (
+          <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 ml-3">
+            <Clock size={11} />{nextRssLabel}
+          </span>
+        )}
 
         <div className="flex-1" />
 

@@ -1,6 +1,6 @@
 # Cron & Docker — AnalyseActualités
 
-> Document de référence · Version 2.0 · 22 février 2026
+> Document de référence · Version 2.1 · 3 mars 2026
 
 ---
 

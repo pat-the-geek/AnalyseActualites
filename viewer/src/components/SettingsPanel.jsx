@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   X, Settings, Clock, Tag, Rss, Plus, Trash2, RefreshCw,
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, ExternalLink, Database, Clipboard,
 } from 'lucide-react'
 
 // ─── Helpers partagés ────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ function KeywordsTab() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Barre d'outils */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0">
         <p className="text-xs text-slate-400 dark:text-slate-500 flex-1">
           Mots-clés extraits des flux RSS.{' '}
           <span className="text-blue-600 dark:text-blue-400 font-medium">OU</span> élargit la recherche,{' '}
@@ -404,6 +404,319 @@ function KeywordsTab() {
   )
 }
 
+// ─── Onglet RSS ───────────────────────────────────────────────────────────────
+
+function RssTab() {
+  const [feeds, setFeeds]           = useState(null)
+  const [search, setSearch]         = useState('')
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState(null)
+  const [checking, setChecking]     = useState(new Set())   // xmlUrls en cours de vérif
+  const [results, setResults]       = useState({})          // xmlUrl → true|false
+  const [isDirty, setIsDirty]       = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [saveMsg, setSaveMsg]       = useState(null)        // {ok, text}
+  const [checkingAll, setCheckingAll] = useState(false)
+  const [showPasteInput, setShowPasteInput] = useState(false)
+  const [pasteUrl, setPasteUrl]       = useState('')
+  const [pasteMsg, setPasteMsg]       = useState(null)  // {state:'checking'|'ok'|'error', text}
+  const pasteInputRef                 = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/rss-feeds')
+      .then(r => r.json())
+      .then(d => { setFeeds(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(() => { setError('Impossible de charger les flux RSS'); setLoading(false) })
+  }, [])
+
+  const removeFeed = useCallback((xmlUrl) => {
+    setFeeds(prev => prev.filter(f => f.xmlUrl !== xmlUrl))
+    setIsDirty(true)
+  }, [])
+
+  const checkOne = useCallback(async (xmlUrl) => {
+    setChecking(prev => new Set([...prev, xmlUrl]))
+    try {
+      const r = await fetch('/api/rss-feeds/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: xmlUrl }),
+      })
+      const data = await r.json()
+      const ok = !!data.ok
+      setResults(prev => ({ ...prev, [xmlUrl]: ok }))
+      if (!ok) {
+        // Supprimer automatiquement après un bref délai pour que l'utilisateur voie le résultat
+        setTimeout(() => removeFeed(xmlUrl), 1200)
+      }
+    } catch {
+      setResults(prev => ({ ...prev, [xmlUrl]: false }))
+      setTimeout(() => removeFeed(xmlUrl), 1200)
+    } finally {
+      setChecking(prev => { const s = new Set(prev); s.delete(xmlUrl); return s })
+    }
+  }, [removeFeed])
+
+  const checkAll = useCallback(async () => {
+    if (!feeds || checkingAll) return
+    setCheckingAll(true)
+    setResults({})
+    // Vérification séquentielle pour ne pas surcharger
+    for (const f of feeds) {
+      await checkOne(f.xmlUrl)
+    }
+    setCheckingAll(false)
+  }, [feeds, checkingAll, checkOne])
+
+  const handlePaste = useCallback(async () => {
+    const url = pasteUrl.trim()
+    if (!url.startsWith('http')) {
+      setPasteMsg({ state: 'error', text: `URL invalide : "${url.slice(0, 60)}"` })
+      return
+    }
+    // Normalisation : retire le slash final et force lowercase pour la comparaison
+    const normalize = u => u.replace(/\/+$/, '').toLowerCase()
+    const urlNorm = normalize(url)
+    const duplicate = feeds?.find(f => normalize(f.xmlUrl) === urlNorm)
+    if (duplicate) {
+      setPasteMsg({ state: 'error', text: `Ce flux est déjà dans la liste : « ${duplicate.title} »` })
+      return
+    }
+    setPasteMsg({ state: 'checking', text: `Vérification de ${url}…` })
+    try {
+      const r = await fetch('/api/rss-feeds/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await r.json()
+      if (data.ok) {
+        const newFeed = { title: data.title, xmlUrl: data.xmlUrl, htmlUrl: data.htmlUrl || '' }
+        setFeeds(prev => [...(prev || []), newFeed].sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' })))
+        setIsDirty(true)
+        setResults(prev => ({ ...prev, [url]: true }))
+        setPasteMsg({ state: 'ok', text: `« ${data.title} » ajouté à la liste.` })
+        setPasteUrl('')
+        setShowPasteInput(false)
+      } else {
+        setPasteMsg({ state: 'error', text: data.error || 'URL non accessible' })
+      }
+    } catch (e) {
+      setPasteMsg({ state: 'error', text: String(e) })
+    } finally {
+      setTimeout(() => setPasteMsg(null), 5000)
+    }
+  }, [feeds, pasteUrl])
+
+  const saveFeed = useCallback(async () => {
+    if (!feeds || saving) return
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const r = await fetch('/api/rss-feeds/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feeds),
+      })
+      const data = await r.json()
+      if (data.ok) {
+        setSaveMsg({ ok: true, text: `${data.count} flux sauvegardés dans WUDD.opml` })
+        setIsDirty(false)
+      } else {
+        setSaveMsg({ ok: false, text: data.error || 'Erreur lors de la sauvegarde' })
+      }
+    } catch (e) {
+      setSaveMsg({ ok: false, text: String(e) })
+    } finally {
+      setSaving(false)
+      setTimeout(() => setSaveMsg(null), 4000)
+    }
+  }, [feeds, saving])
+
+  const filtered = feeds
+    ? feeds.filter(f => f.title.toLowerCase().includes(search.toLowerCase()) || f.htmlUrl.toLowerCase().includes(search.toLowerCase()))
+    : []
+
+  const grouped = filtered.reduce((acc, f) => {
+    const letter = f.title[0]?.toUpperCase() ?? '#'
+    if (!acc[letter]) acc[letter] = []
+    acc[letter].push(f)
+    return acc
+  }, {})
+  const letters = Object.keys(grouped).sort()
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Barre d'outils */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0 flex-wrap">
+        <Database size={12} className="text-slate-400 dark:text-slate-500 shrink-0" />
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex-1 min-w-0">
+          {feeds
+            ? <><span className="font-medium text-slate-600 dark:text-slate-300">{feeds.length}</span> flux RSS</>
+            : 'Flux RSS'}
+        </p>
+        {/* Coller une URL */}
+        <button
+          onClick={() => {
+            setShowPasteInput(v => {
+              const next = !v
+              if (next) setTimeout(() => pasteInputRef.current?.focus(), 50)
+              return next
+            })
+            setPasteMsg(null)
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors
+            ${showPasteInput
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-400/40'
+              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+          title="Ajouter un flux RSS en collant son URL"
+        >
+          <Clipboard size={11} />
+          <span className="hidden sm:inline">Coller</span>
+        </button>
+        {/* Vérifier tous */}
+        <button
+          onClick={checkAll}
+          disabled={checkingAll || !feeds?.length}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors disabled:opacity-40
+            bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+          title="Vérifier toutes les URLs (supprime les non-répondants)"
+        >
+          {checkingAll
+            ? <RefreshCw size={11} className="animate-spin" />
+            : <Check size={11} />}
+          <span className="hidden sm:inline">Vérifier</span>
+        </button>
+        {/* Sauvegarder */}
+        <button
+          onClick={saveFeed}
+          disabled={!isDirty || saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors disabled:opacity-40
+            bg-blue-500 hover:bg-blue-600 text-white"
+          title="Sauvegarder les flux dans data/WUDD.opml"
+        >
+          {saving
+            ? <RefreshCw size={11} className="animate-spin" />
+            : <Save size={11} />}
+          <span className="hidden sm:inline">Sauver</span>
+        </button>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Filtrer…"
+          className="pl-3 pr-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors w-36"
+        />
+      </div>
+
+      {/* Barre de saisie URL */}
+      {showPasteInput && (
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-slate-200/50 dark:border-slate-700/50 bg-blue-50/60 dark:bg-blue-900/20 shrink-0">
+          <Rss size={12} className="text-blue-400 shrink-0" />
+          <input
+            ref={pasteInputRef}
+            type="url"
+            value={pasteUrl}
+            onChange={e => { setPasteUrl(e.target.value); setPasteMsg(null) }}
+            onKeyDown={e => { if (e.key === 'Enter') handlePaste(); if (e.key === 'Escape') { setShowPasteInput(false); setPasteUrl('') } }}
+            placeholder="Coller l'URL RSS ici (Entrée pour valider)"
+            className="flex-1 min-w-0 pl-3 pr-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
+          />
+          <button
+            onClick={handlePaste}
+            disabled={!pasteUrl.trim() || pasteMsg?.state === 'checking'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors shrink-0"
+          >
+            {pasteMsg?.state === 'checking' ? <RefreshCw size={11} className="animate-spin" /> : <Plus size={11} />}
+            Ajouter
+          </button>
+          <button onClick={() => { setShowPasteInput(false); setPasteUrl(''); setPasteMsg(null) }}
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors shrink-0">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {pasteMsg && (
+        <div className={`mx-5 mt-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
+          pasteMsg.state === 'checking' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+          : pasteMsg.state === 'ok'     ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+          :                               'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
+          {pasteMsg.state === 'checking' && <RefreshCw size={13} className="animate-spin shrink-0" />}
+          {pasteMsg.state === 'ok'       && <CheckCircle2 size={13} className="shrink-0" />}
+          {pasteMsg.state === 'error'    && <AlertTriangle size={13} className="shrink-0" />}
+          <span className="truncate">{pasteMsg.text}</span>
+        </div>
+      )}
+
+      {saveMsg && (
+        <div className={`mx-5 mt-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${saveMsg.ok ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
+          {saveMsg.ok ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+          {saveMsg.text}
+        </div>
+      )}
+
+      <ErrorBanner message={error} />
+
+      {/* Liste groupée par lettre */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {letters.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-sm">Aucun flux trouvé.</div>
+        ) : letters.map(letter => (
+          <div key={letter}>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest w-5 text-center">{letter}</span>
+              <div className="flex-1 h-px bg-slate-100 dark:bg-slate-700/60" />
+            </div>
+            <div className="space-y-1 ml-8">
+              {grouped[letter].map((f) => {
+                const isChecking = checking.has(f.xmlUrl)
+                const result = results[f.xmlUrl]  // undefined | true | false
+                return (
+                  <div key={f.xmlUrl} className={`flex items-center gap-2 py-1 group rounded transition-colors ${result === false ? 'bg-red-50/60 dark:bg-red-900/20' : ''}`}>
+                    <Rss size={11} className="text-orange-400 dark:text-orange-500 shrink-0" />
+                    <span className="text-sm text-slate-700 dark:text-slate-200 flex-1 truncate">{f.title}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[160px] hidden sm:block">
+                      {f.htmlUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </span>
+                    {/* Icône de résultat */}
+                    {isChecking && <RefreshCw size={11} className="animate-spin text-blue-400 shrink-0" />}
+                    {!isChecking && result === true  && <CheckCircle2 size={11} className="text-green-500 shrink-0" />}
+                    {!isChecking && result === false && <AlertTriangle size={11} className="text-red-400 shrink-0" />}
+                    {/* Bouton vérifier individuel */}
+                    {!isChecking && result === undefined && (
+                      <button
+                        onClick={() => checkOne(f.xmlUrl)}
+                        className="opacity-30 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-500 dark:hover:text-blue-400"
+                        title="Vérifier ce flux"
+                      >
+                        <Check size={11} />
+                      </button>
+                    )}
+                    <a href={f.xmlUrl} target="_blank" rel="noopener noreferrer"
+                      className="opacity-30 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-blue-500 dark:hover:text-blue-400"
+                      title="Ouvrir le flux RSS">
+                      <ExternalLink size={11} />
+                    </a>
+                    <button
+                      onClick={() => removeFeed(f.xmlUrl)}
+                      className="opacity-30 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 dark:hover:text-red-400"
+                      title="Supprimer ce flux"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Onglet Flux Reeder ───────────────────────────────────────────────────────
 
 const CRON_PRESETS = [
@@ -485,7 +798,7 @@ function FluxTab() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Barre d'outils */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0">
         <p className="text-xs text-slate-400 dark:text-slate-500 flex-1">
           Sources de flux JSON Reeder. Chaque flux est traité indépendamment avec son propre planning cron.
         </p>
@@ -604,13 +917,14 @@ function FluxTab() {
 // ─── Panneau principal Réglages ───────────────────────────────────────────────
 
 const TABS = [
+  { id: 'rss',       label: 'RSS',          Icon: Rss      },
   { id: 'scheduler', label: 'Planification', Icon: Clock },
   { id: 'keywords',  label: 'Mots-clés',     Icon: Tag  },
-  { id: 'flux',      label: 'Flux Reeder',   Icon: Rss  },
+  { id: 'flux',      label: 'Flux Reeder',   Icon: Database  },
 ]
 
 export default function SettingsPanel({ onClose }) {
-  const [activeTab, setActiveTab] = useState('scheduler')
+  const [activeTab, setActiveTab] = useState('rss')
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
@@ -624,11 +938,11 @@ export default function SettingsPanel({ onClose }) {
       className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-stretch md:items-start md:pt-10 md:px-4 md:pb-4'}`}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className={`bg-white dark:bg-slate-800 shadow-2xl w-full border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
+      <div className={`bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl shadow-2xl w-full border border-white/40 dark:border-slate-700/50 flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
 
         {/* ── En-tête / toolbar ── */}
         <div
-          className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 order-last md:order-first"
+          className="flex items-center gap-2 px-5 py-3 border-t border-white/30 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl md:border-t-0 md:border-b shrink-0 order-last md:order-first"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
           <Settings size={15} className="hidden md:block text-slate-400 dark:text-slate-400" />
@@ -655,29 +969,23 @@ export default function SettingsPanel({ onClose }) {
           <button
             onClick={() => setIsMaximized(m => !m)}
             title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             aria-label={isMaximized ? 'Réduire' : 'Agrandir'}
           >
             {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
           <button
             onClick={onClose}
-            className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             aria-label="Fermer"
           >
             <X size={14} />
-          </button>
-          <button
-            onClick={onClose}
-            className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors"
-          >
-            <X size={13} />
-            Fermer
           </button>
         </div>
 
         {/* ── Contenu de l'onglet actif ── */}
         <div className="flex flex-col flex-1 overflow-hidden">
+          {activeTab === 'rss'       && <RssTab />}
           {activeTab === 'scheduler' && <SchedulerTab />}
           {activeTab === 'keywords'  && <KeywordsTab />}
           {activeTab === 'flux'      && <FluxTab />}

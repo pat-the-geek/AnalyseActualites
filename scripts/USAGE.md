@@ -1,6 +1,6 @@
 ### 6. get-keyword-from-rss.py
 
-**Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de Reeder.opml.
+**Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de WUDD.opml.
 Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
 
 **Filtrage avancé (OR / AND)**

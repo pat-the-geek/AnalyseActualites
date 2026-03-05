@@ -386,6 +386,121 @@ def api_save_keywords():
     return jsonify({"ok": True})
 
 
+@app.route("/api/rss-feeds", methods=["GET"])
+def api_get_rss_feeds():
+    """Parse le fichier OPML Reeder et retourne les flux RSS triés alphabétiquement."""
+    import xml.etree.ElementTree as ET
+    opml_path = PROJECT_ROOT / "data" / "WUDD.opml"
+    if not opml_path.exists():
+        return jsonify([])
+    try:
+        tree = ET.parse(opml_path)
+        root = tree.getroot()
+        feeds = []
+        for o in root.findall(".//outline[@type='rss']"):
+            title   = o.get("title") or o.get("text") or ""
+            xml_url = o.get("xmlUrl") or ""
+            html_url = o.get("htmlUrl") or ""
+            if xml_url:
+                feeds.append({"title": title, "xmlUrl": xml_url, "htmlUrl": html_url})
+        feeds.sort(key=lambda f: f["title"].lower())
+        return jsonify(feeds)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rss-feeds/check", methods=["POST"])
+def api_check_rss_feed():
+    """Vérifie si une URL RSS répond. Body JSON: {"url": "..."}"""
+    import requests as req
+    data = request.get_json(force=True) or {}
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL manquante"}), 400
+    try:
+        r = req.head(url, timeout=8, allow_redirects=True,
+                     headers={"User-Agent": "WUDD.ai/1.0"})
+        ok = r.status_code < 400
+        return jsonify({"ok": ok, "status": r.status_code})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/rss-feeds/resolve", methods=["POST"])
+def api_resolve_rss_feed():
+    """Résout une URL RSS : vérifie qu'elle répond et extrait le titre du canal."""
+    import requests as req
+    import xml.etree.ElementTree as ET
+    from urllib.parse import urlparse
+    data = request.get_json(force=True) or {}
+    url = data.get("url", "").strip()
+    if not url or not url.startswith("http"):
+        return jsonify({"ok": False, "error": "URL invalide"}), 400
+    try:
+        r = req.get(url, timeout=10, allow_redirects=True,
+                    headers={"User-Agent": "WUDD.ai/1.0"})
+        if r.status_code >= 400:
+            return jsonify({"ok": False, "error": f"HTTP {r.status_code}"})
+        title = ""
+        html_url = ""
+        try:
+            root = ET.fromstring(r.content)
+            # RSS 2.0
+            chan = root.find("channel")
+            if chan is not None:
+                t = chan.find("title")
+                if t is not None and t.text:
+                    title = t.text.strip()
+                lk = chan.find("link")
+                if lk is not None and lk.text:
+                    html_url = lk.text.strip()
+            # Atom
+            if not title:
+                ns = {"atom": "http://www.w3.org/2005/Atom"}
+                t = root.find("atom:title", ns) or root.find("title")
+                if t is not None and t.text:
+                    title = t.text.strip()
+                lk = root.find("atom:link", ns)
+                if lk is not None:
+                    html_url = lk.get("href", "")
+        except Exception:
+            pass
+        if not title:
+            title = urlparse(url).netloc
+        return jsonify({"ok": True, "title": title, "xmlUrl": url, "htmlUrl": html_url})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/rss-feeds/save", methods=["POST"])
+def api_save_rss_feeds():
+    """Sauvegarde la liste de flux dans data/WUDD.opml en respectant le format OPML."""
+    import xml.etree.ElementTree as ET
+    feeds = request.get_json(force=True)
+    if not isinstance(feeds, list):
+        return jsonify({"error": "Données invalides"}), 400
+    opml_path = PROJECT_ROOT / "data" / "WUDD.opml"
+    try:
+        root = ET.Element("opml", version="2.0")
+        head = ET.SubElement(root, "head")
+        ET.SubElement(head, "title").text = "Reeder"
+        body = ET.SubElement(root, "body")
+        for f in feeds:
+            ET.SubElement(body, "outline",
+                          type="rss",
+                          title=f.get("title", ""),
+                          text=f.get("title", ""),
+                          xmlUrl=f.get("xmlUrl", ""),
+                          htmlUrl=f.get("htmlUrl", ""))
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="  ")
+        with open(opml_path, "wb") as fh:
+            tree.write(fh, encoding="UTF-8", xml_declaration=True)
+        return jsonify({"ok": True, "count": len(feeds)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/flux-sources", methods=["GET"])
 def api_get_flux_sources():
     path = PROJECT_ROOT / "config" / "flux_json_sources.json"

@@ -72,7 +72,7 @@ export default function EntitySearchModal({ query, entityType, onClose, onSelect
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-slate-200 dark:border-slate-700 overflow-hidden">
 
         {/* ── En-tête ── */}
-        <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0">
           <Tag size={15} className="text-violet-500 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

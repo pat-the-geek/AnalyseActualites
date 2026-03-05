@@ -193,7 +193,7 @@ Scripts Python exécutables. Tous utilisent des chemins absolus (voir section 4)
 |--------|------|------|
 | `Get_data_from_JSONFile_AskSummary_v2.py` | ETL principal : collecte, résumés IA, stockage | CLI |
 | `scheduler_articles.py` | Orchestre le traitement de tous les flux | CLI / cron |
-| `get-keyword-from-rss.py` | Extrait les articles par mot-clé depuis Reeder.opml | CLI / cron |
+| `get-keyword-from-rss.py` | Extrait les articles par mot-clé depuis WUDD.opml | CLI / cron |
 | `articles_json_to_markdown.py` | Convertit JSON → Markdown formaté | GUI / CLI |
 | `analyse_thematiques.py` | Analyse thématique sociétale des articles | CLI |
 | `check_cron_health.py` | Vérifie la santé des tâches cron | cron |
@@ -224,7 +224,7 @@ Convention : `<nom_script>_YYYYMMDD_HHMMSS.py`
 flowchart LR
     subgraph INPUT["Entrées"]
         FLUX["flux_json_sources.json\nListe des flux"]
-        OPML["Reeder.opml\nFlux RSS"]
+        OPML["WUDD.opml\nFlux RSS"]
         KW["keyword-to-search.json\nMots-clés"]
     end
 

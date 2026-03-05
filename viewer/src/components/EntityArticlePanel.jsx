@@ -353,14 +353,14 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
 
       {/* Fenêtre flottante */}
       <div
-        className={`fixed z-[61] flex flex-col bg-slate-50 dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden ${isMaximized ? '' : 'rounded-2xl'}`}
+        className={`fixed z-[61] flex flex-col bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-2xl shadow-2xl border border-white/30 dark:border-slate-700/50 overflow-hidden ${isMaximized ? '' : 'rounded-2xl'}`}
         style={isMaximized || isMobileFullscreen
           ? { inset: 0 }
           : { left: win.x, top: win.y, width: win.w, height: win.h, minWidth: 320, minHeight: 300 }}
       >
         {/* ── En-tête (drag zone) ── */}
         <div
-          className={`flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 md:border-t-0 md:border-b shrink-0 flex-wrap gap-y-2 select-none order-last md:order-first ${isMaximized ? 'cursor-default' : 'cursor-move'}`}
+          className={`flex items-center gap-2 px-4 py-3 bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border-t border-white/40 dark:border-slate-700/50 md:border-t-0 md:border-b shrink-0 flex-wrap gap-y-2 select-none order-last md:order-first ${isMaximized ? 'cursor-default' : 'cursor-move'}`}
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           onMouseDown={handleHeaderMouseDown}
         >

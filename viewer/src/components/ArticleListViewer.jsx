@@ -56,6 +56,14 @@ function formatDate(raw) {
   } catch { return raw }
 }
 
+function formatTime(raw) {
+  // ISO 8601 : "2026-03-02T03:14:00Z"  — RFC 822 : "Fri, 27 Feb 2026 17:23:48 +0000"
+  if (!raw || (!/T\d{2}:\d{2}/.test(raw) && !/\d{2}:\d{2}:\d{2}/.test(raw))) return ''
+  try {
+    return new Date(raw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
+}
+
 function firstImage(images) {
   if (!Array.isArray(images)) return null
   return images.find(i => i?.url)?.url ?? null
@@ -141,10 +149,11 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
   const hasEntities = entities && Object.keys(entities).length > 0
   const imgUrl = firstImage(article['Images'])
   const date = formatDate(article['Date de publication'])
+  const time = formatTime(article['Date de publication'])
   const count = useMemo(() => entityCount(article), [article])
 
   return (
-    <article className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <article className="bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-white/50 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
       {imgUrl && (
         <button
           type="button"
@@ -169,7 +178,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {article['Sources'] ?? '—'}
               </span>
-              {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}</span>}
+              {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
               {hasEntities && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
                   <Tag size={9} />{count} entités
@@ -177,7 +186,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
               )}
             </div>
             {titre && (
-              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">
+              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-3">
                 {titre}
               </h3>
             )}
@@ -197,7 +206,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
         </div>
         {resume.length > 300 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="mt-2 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+            className="mt-2 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors justify-end w-full">
             {expanded ? <><ChevronUp size={12} /> Réduire</> : <><ChevronDown size={12} /> Lire la suite</>}
           </button>
         )}
@@ -214,6 +223,7 @@ function TimelineItem({ article }) {
   const hasEntities = entities && Object.keys(entities).length > 0
   const count = useMemo(() => entityCount(article), [article])
   const date = formatDate(article['Date de publication'])
+  const time = formatTime(article['Date de publication'])
 
   return (
     <div className="flex gap-3 group pb-4 last:pb-0">
@@ -231,7 +241,7 @@ function TimelineItem({ article }) {
           <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
             {article['Sources'] ?? '—'}
           </span>
-          {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}</span>}
+          {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
           {hasEntities && (
             <span className="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
               <Tag size={9} />{count}
@@ -267,6 +277,8 @@ export default function ArticleListViewer({ content }) {
   const [selectedTypes, setSelectedTypes]     = useState(new Set())
   const [selectedSources, setSelectedSources] = useState(new Set())
   const [selectedEntity, setSelectedEntity]   = useState(null) // { type, value }
+  const [typesOpen, setTypesOpen]             = useState(false)
+  const [sourcesOpen, setSourcesOpen]         = useState(false)
   const searchRef = useRef(null)
 
   // Parse JSON
@@ -406,7 +418,7 @@ export default function ArticleListViewer({ content }) {
       </div>
 
       {/* ── Toolbar : recherche + tri + vue + export ── */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-4 sticky top-0 z-10 -mx-6 px-6 py-3 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/30">
         {/* Recherche */}
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
@@ -458,63 +470,89 @@ export default function ArticleListViewer({ content }) {
 
       {/* ── Panel filtre : types d'entités ── */}
       {availableTypes.length > 0 && (
-        <div className="mb-3 p-3 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Filter size={12} className="text-slate-400 dark:text-slate-500" />
+        <div className="mb-3 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setTypesOpen(v => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+          >
+            <Filter size={12} className="text-slate-400 dark:text-slate-500 shrink-0" />
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Type d'entité</span>
             {selectedTypes.size > 0 && (
-              <button onClick={() => setSelectedTypes(new Set())}
-                className="ml-auto flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                <X size={10} /> Effacer
-              </button>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">{selectedTypes.size}</span>
             )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {availableTypes.map(([type, count]) => {
-              const colors = CHIP_COLORS[type] ?? FALLBACK_CHIP
-              const active = selectedTypes.has(type)
-              return (
-                <button key={type} onClick={() => toggleType(type)}
-                  title={`Filtrer les articles avec des entités de type ${type}`}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all hover:scale-105 active:scale-95 ${active ? colors.on : colors.idle}`}>
-                  {type}
-                  <span className={`tabular-nums text-[10px] ${active ? 'opacity-80' : 'opacity-55'}`}>{count}</span>
-                </button>
-              )
-            })}
-          </div>
+            {selectedTypes.size > 0 && (
+              <span
+                role="button"
+                onClick={e => { e.stopPropagation(); setSelectedTypes(new Set()) }}
+                className="ml-auto flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors mr-1"
+              >
+                <X size={10} /> Effacer
+              </span>
+            )}
+            {selectedTypes.size === 0 && <span className="ml-auto" />}
+            {typesOpen ? <ChevronUp size={12} className="text-slate-400 shrink-0" /> : <ChevronDown size={12} className="text-slate-400 shrink-0" />}
+          </button>
+          {typesOpen && (
+            <div className="px-3 pb-3 pt-1 flex flex-wrap gap-1.5">
+              {availableTypes.map(([type, count]) => {
+                const colors = CHIP_COLORS[type] ?? FALLBACK_CHIP
+                const active = selectedTypes.has(type)
+                return (
+                  <button key={type} onClick={() => toggleType(type)}
+                    title={`Filtrer les articles avec des entités de type ${type}`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all hover:scale-105 active:scale-95 ${active ? colors.on : colors.idle}`}>
+                    {type}
+                    <span className={`tabular-nums text-[10px] ${active ? 'opacity-80' : 'opacity-55'}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── Panel filtre : sources ── */}
       {availableSources.length > 1 && (
-        <div className="mb-5 p-3 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Newspaper size={12} className="text-slate-400 dark:text-slate-500" />
+        <div className="mb-5 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setSourcesOpen(v => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+          >
+            <Newspaper size={12} className="text-slate-400 dark:text-slate-500 shrink-0" />
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Source</span>
             {selectedSources.size > 0 && (
-              <button onClick={() => setSelectedSources(new Set())}
-                className="ml-auto flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                <X size={10} /> Effacer
-              </button>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">{selectedSources.size}</span>
             )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {availableSources.map(([src, count]) => {
-              const active = selectedSources.has(src)
-              return (
-                <button key={src} onClick={() => toggleSource(src)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all hover:scale-105 active:scale-95 ${
-                    active
-                      ? 'bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-800 border-slate-700 dark:border-slate-200'
-                      : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-400'
-                  }`}>
-                  {src}
-                  <span className={`tabular-nums text-[10px] ${active ? 'opacity-75' : 'opacity-55'}`}>{count}</span>
-                </button>
-              )
-            })}
-          </div>
+            {selectedSources.size > 0 && (
+              <span
+                role="button"
+                onClick={e => { e.stopPropagation(); setSelectedSources(new Set()) }}
+                className="ml-auto flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors mr-1"
+              >
+                <X size={10} /> Effacer
+              </span>
+            )}
+            {selectedSources.size === 0 && <span className="ml-auto" />}
+            {sourcesOpen ? <ChevronUp size={12} className="text-slate-400 shrink-0" /> : <ChevronDown size={12} className="text-slate-400 shrink-0" />}
+          </button>
+          {sourcesOpen && (
+            <div className="px-3 pb-3 pt-1 flex flex-wrap gap-1.5">
+              {availableSources.map(([src, count]) => {
+                const active = selectedSources.has(src)
+                return (
+                  <button key={src} onClick={() => toggleSource(src)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all hover:scale-105 active:scale-95 ${
+                      active
+                        ? 'bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-800 border-slate-700 dark:border-slate-200'
+                        : 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-400'
+                    }`}>
+                    {src}
+                    <span className={`tabular-nums text-[10px] ${active ? 'opacity-75' : 'opacity-55'}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

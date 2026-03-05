@@ -48,7 +48,7 @@ flowchart TB
         F1["Flux JSON 1\n(ex: IA généraliste)"]
         F2["Flux JSON 2\n(ex: Tech & numérique)"]
         FN["... N flux\n(config/flux_json_sources.json)"]
-        RSS["Flux RSS\n(data/Reeder.opml)"]
+        RSS["Flux RSS\n(data/WUDD.opml)"]
     end
 
     subgraph ORCHESTRATION["Orchestration"]
@@ -407,7 +407,7 @@ Analyse temporelle des thèmes dans les articles, avec comparaison entre deux p�
 
 #### `get-keyword-from-rss.py` — Extraction RSS quotidienne
 
-- Lit `data/Reeder.opml` (liste flux RSS de l'app Reeder)
+- Lit `data/WUDD.opml` (liste des flux RSS)
 - Fenêtre de 7 jours, recherche par contrainte `or` / `and` avec word-boundary
 - Résumé IA + extraction d'entités NER inline + image principale (min 500px)
 - Sortie : `data/articles-from-rss/<mot-clé>.json` (déduplication par URL)

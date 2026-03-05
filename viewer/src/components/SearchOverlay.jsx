@@ -58,7 +58,7 @@ export default function SearchOverlay({ onClose, onSelect }) {
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-4 sm:pt-20 px-3 sm:px-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="w-full max-w-2xl bg-white/85 dark:bg-slate-800/85 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/40 dark:border-slate-700/50 overflow-hidden">
         {/* Input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
           <Search size={16} className="text-slate-400 shrink-0" />

@@ -1,7 +1,7 @@
 """
 Script : get-keyword-from-rss.py
 
-Pour chaque flux RSS dans Reeder.opml :
+Pour chaque flux RSS dans WUDD.opml :
 - Consulte le flux RSS (xmlUrl)
 - Pour chaque article publié il y a moins d'une semaine :
     - Si le titre contient un mot-clé de keyword-to-search.json :
@@ -35,7 +35,7 @@ from utils.logging import print_console
 # Constantes
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-OPML_PATH = PROJECT_ROOT / "data/Reeder.opml"
+OPML_PATH = PROJECT_ROOT / "data/WUDD.opml"
 KEYWORDS_PATH = PROJECT_ROOT / "config/keyword-to-search.json"
 OUTPUT_DIR = PROJECT_ROOT / "data/articles-from-rss"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,7 +53,7 @@ with open(KEYWORDS_PATH, "r", encoding="utf-8") as f:
 print_console(f"{len(keywords)} mots-clés chargés : {[k['keyword'] for k in keywords]}")
 
 # Charger les flux RSS depuis OPML
-print_console("Chargement des flux RSS depuis Reeder.opml...")
+print_console("Chargement des flux RSS depuis WUDD.opml...")
 with open(OPML_PATH, "r", encoding="utf-8") as f:
     tree = ET.parse(f)
     root = tree.getroot()
