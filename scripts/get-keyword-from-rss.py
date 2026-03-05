@@ -20,7 +20,7 @@ import sys
 import json
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Ajout du dossier racine au sys.path pour les imports relatifs (utils.*)
@@ -39,6 +39,17 @@ OPML_PATH = PROJECT_ROOT / "data/WUDD.opml"
 KEYWORDS_PATH = PROJECT_ROOT / "config/keyword-to-search.json"
 OUTPUT_DIR = PROJECT_ROOT / "data/articles-from-rss"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+PROGRESS_FILE = PROJECT_ROOT / "data" / "rss_progress.json"
+
+
+def _write_progress(data: dict) -> None:
+    """Écrit (de manière atomique) le fichier de progression."""
+    try:
+        tmp = PROGRESS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(PROGRESS_FILE)
+    except Exception:
+        pass  # Ne jamais planter le script à cause du tracking
 
 # Fenêtre temporelle : 7 derniers jours
 now = datetime.utcnow()
@@ -73,8 +84,25 @@ api_client = EurIAClient()
 # Index par mot-clé
 results = {kw_obj["keyword"]: {} for kw_obj in keywords}
 
+# Démarrage du suivi de progression
+_progress = {
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "finished_at": None,
+    "current_feed_idx": 0,
+    "current_feed_title": "",
+    "total_feeds": len(feeds),
+    "last_action": "Démarrage…",
+    "articles_added": 0,
+    "returncode": None,
+}
+_write_progress(_progress)
+
 total_feeds = len(feeds)
 for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
+    _progress["current_feed_idx"] = feed_idx
+    _progress["current_feed_title"] = feed_title
+    _progress["last_action"] = f"Lecture flux : {feed_title}"
+    _write_progress(_progress)
     print_console(f"Lecture du flux {feed_idx} sur {total_feeds} : {feed_title} ({feed_url})")
     try:
         resp = requests.get(feed_url, timeout=15)
@@ -150,6 +178,9 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 if entities:
                     article["entities"] = entities
                 results[kw][link] = article
+                _progress["articles_added"] += 1
+                _progress["last_action"] = f"Article ajouté '{kw}' — {feed_title}"
+                _write_progress(_progress)
                 print_console(f"      ✓ Article ajouté pour '{kw}'.")
     except Exception as e:
         print_console(f"Erreur flux {feed_url}: {e}", level="error")
@@ -221,3 +252,9 @@ with open(wudd_path, "w", encoding="utf-8") as f:
     json.dump(articles_48h, f, ensure_ascii=False, indent=4)
 
 print_console(f"✓ {len(articles_48h)} articles des dernières 48h sauvegardés dans {wudd_path}")
+
+# Marquer la progression comme terminée
+_progress["finished_at"] = datetime.now(timezone.utc).isoformat()
+_progress["last_action"] = f"Terminé — {_progress['articles_added']} articles ajoutés"
+_progress["returncode"] = 0
+_write_progress(_progress)

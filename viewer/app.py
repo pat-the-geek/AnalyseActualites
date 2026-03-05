@@ -15,7 +15,12 @@ from flask import Flask, jsonify, send_file, request, abort, send_from_directory
 app = Flask(__name__)
 
 # Suivi du process RSS keyword (un seul à la fois)
-_rss_job: dict = {"process": None, "lock": threading.Lock()}
+_rss_job: dict = {
+    "process": None,
+    "lock": threading.Lock(),
+    "last_run": None,        # ISO 8601 UTC — horodatage de la dernière fin d'exécution
+    "last_returncode": None, # Code retour de la dernière exécution
+}
 
 # Charge les variables d'environnement depuis .env (si disponible)
 try:
@@ -1397,6 +1402,84 @@ def api_entities_info():
 
 # ── Scripts ───────────────────────────────────────────────────────────────────
 
+@app.route("/api/scripts/keyword-rss/status")
+def keyword_rss_status():
+    """Retourne l'état courant du script get-keyword-from-rss.py.
+
+    Combine trois sources :
+    1. _rss_job   — suivi du process lancé via le viewer
+    2. ps aux     — détection d'un process externe (cron)
+    3. rss_progress.json — fichier de progression écrit par le script lui-même
+    """
+    # ── 1. Process suivi par le viewer ────────────────────────────────────────
+    with _rss_job["lock"]:
+        proc = _rss_job.get("process")
+        viewer_running = proc is not None and proc.poll() is None
+        viewer_pid     = proc.pid if viewer_running and proc else None
+        last_run       = _rss_job.get("last_run")
+        last_rc        = _rss_job.get("last_returncode")
+
+    # ── 2. Détection d'un process externe (cron / terminal) ──────────────────
+    external_pid = None
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-f", "get-keyword-from-rss"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        pids = [int(p) for p in out.splitlines() if p.strip().isdigit()]
+        # Exclure le PID du viewer lui-même et de son process enfant (si lancé via viewer)
+        for p in pids:
+            if viewer_pid and p == viewer_pid:
+                continue
+            external_pid = p
+            break
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    running = viewer_running or (external_pid is not None)
+    pid     = viewer_pid or external_pid
+
+    # ── 3. Fichier de progression écrit par le script ─────────────────────────
+    progress = None
+    progress_file = PROJECT_ROOT / "data" / "rss_progress.json"
+    if progress_file.exists():
+        try:
+            progress = json.loads(progress_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Réconcilier : si le fichier dit "finished" mais le process tourne encore,
+    # on considère quand même running=True
+    if progress and progress.get("finished_at") and not running:
+        last_run = last_run or progress.get("finished_at")
+        last_rc  = last_rc if last_rc is not None else progress.get("returncode")
+
+    # ── 4. Comptage des fichiers et articles dans articles-from-rss ──────────
+    articles_dir = PROJECT_ROOT / "data" / "articles-from-rss"
+    file_count    = 0
+    article_count = 0
+    if articles_dir.exists():
+        for f in articles_dir.glob("*.json"):
+            file_count += 1
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    article_count += len(data)
+            except Exception:
+                pass
+
+    result = {
+        "running":          running,
+        "pid":              pid,
+        "last_run":         last_run,
+        "last_returncode":  last_rc,
+        "file_count":       file_count,
+        "article_count":    article_count,
+        "progress":         progress,  # None si le script n'a jamais écrit le fichier
+    }
+    return jsonify(result)
+
+
 @app.route("/api/scripts/keyword-rss/stream")
 def stream_keyword_rss():
     """Lance get-keyword-from-rss.py et stream la sortie via SSE."""
@@ -1437,6 +1520,9 @@ def stream_keyword_rss():
             yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
         rc = proc.wait()
+        with _rss_job["lock"]:
+            _rss_job["last_run"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _rss_job["last_returncode"] = rc
         msg = f"✓ Terminé (code : {rc})" if rc == 0 else f"✗ Erreur (code : {rc})"
         yield f'data: {json.dumps({"done": True, "returncode": rc, "log": msg})}\n\n'
 

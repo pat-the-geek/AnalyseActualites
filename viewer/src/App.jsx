@@ -42,6 +42,138 @@ function useNextRssCountdown() {
   return label
 }
 
+// Formate un timestamp ISO UTC en label relatif français
+function formatLastRun(isoStr) {
+  if (!isoStr) return null
+  const d = new Date(isoStr)
+  const diffMin = Math.round((Date.now() - d.getTime()) / 60000)
+  if (diffMin < 1) return 'il y a quelques sec'
+  if (diffMin < 60) return `il y a ${diffMin}min`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24) return `il y a ${diffH}h`
+  return `il y a ${Math.floor(diffH / 24)}j`
+}
+
+// Interroge l'endpoint de statut du script get-keyword-from-rss.py
+function useRssStatus() {
+  const [status, setStatus] = useState(null)
+  useEffect(() => {
+    const fetchStatus = () => {
+      fetch('/api/scripts/keyword-rss/status')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => d && setStatus(d))
+        .catch(() => {})
+    }
+    fetchStatus()
+    // Poll rapide (5s) quand en cours, lent (15s) sinon
+    let id = null
+    function schedule(isRunning) {
+      clearInterval(id)
+      id = setInterval(() => {
+        fetch('/api/scripts/keyword-rss/status')
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (!d) return
+            setStatus(d)
+            if (!!d.running !== isRunning) schedule(!!d.running)
+          })
+          .catch(() => {})
+      }, isRunning ? 5000 : 15000)
+    }
+    schedule(false)
+    return () => clearInterval(id)
+  }, [])
+  return status
+}
+
+// Barre de statut RSS — affichée dans le header
+function RssStatusBar({ status, nextRssLabel }) {
+  if (!status) return null
+  const prog = status.progress
+  const running = status.running
+  const pct = prog && prog.total_feeds > 0
+    ? Math.round((prog.current_feed_idx / prog.total_feeds) * 100)
+    : null
+
+  // Durée écoulée depuis started_at
+  let elapsed = ''
+  if (prog?.started_at) {
+    const mins = Math.round((Date.now() - new Date(prog.started_at).getTime()) / 60000)
+    elapsed = mins < 60 ? `${mins}min` : `${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')}`
+  }
+
+  const tooltipLines = [
+    prog?.current_feed_title && `Flux : ${prog.current_feed_title}`,
+    prog?.last_action && `Action : ${prog.last_action}`,
+    prog?.started_at && `Démarré : ${new Date(prog.started_at).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})}`,
+    status.article_count > 0 && `${status.article_count} articles / ${status.file_count} mots-clés`,
+  ].filter(Boolean).join(' • ')
+
+  return (
+    <div className="hidden sm:flex items-center gap-2 ml-3" title={tooltipLines}>
+      {running ? (
+        <>
+          {/* Indicateur en cours */}
+          <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+            En cours{elapsed ? ` (${elapsed})` : ''}
+          </span>
+          {/* Progression flux X/Y */}
+          {prog && prog.total_feeds > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <span className="tabular-nums">{prog.current_feed_idx}/{prog.total_feeds}</span>
+              {/* barre de progression */}
+              <span className="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden inline-block align-middle">
+                <span
+                  className="h-full bg-green-500 rounded-full block transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </span>
+              <span className="tabular-nums">{pct}%</span>
+            </span>
+          )}
+          {/* Dernier flux / action */}
+          {prog?.current_feed_title && (
+            <span className="text-xs text-slate-400 dark:text-slate-500 max-w-[160px] truncate">
+              {prog.current_feed_title}
+            </span>
+          )}
+          {/* Articles ajoutés cette passe */}
+          {prog?.articles_added > 0 && (
+            <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+              +{prog.articles_added} art.
+            </span>
+          )}
+        </>
+      ) : status.last_run || prog?.finished_at ? (
+        <>
+          <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+            <span className={`w-1.5 h-1.5 rounded-full inline-block ${status.last_returncode === 0 || prog?.returncode === 0 ? 'bg-green-500' : status.last_returncode != null || prog?.returncode != null ? 'bg-red-500' : 'bg-slate-400'}`} />
+            {formatLastRun(status.last_run || prog?.finished_at)}
+          </span>
+          {status.article_count > 0 && (
+            <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+              {status.article_count} art.
+            </span>
+          )}
+        </>      ) : status.article_count > 0 ? (
+        /* Script jamais suivi (avant instrumentation) — affiche juste le compteur */
+        <span
+          className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500"
+          title={`${status.article_count} articles dans ${status.file_count} fichiers mots-clés`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+          {status.article_count} art. / {status.file_count} mots-clés
+        </span>      ) : null}
+      {nextRssLabel && !running && (
+        <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+          <Clock size={11} />{nextRssLabel}
+        </span>
+      )}
+    </div>
+  )
+}
+
 const THEME_OPTIONS = [
   { key: 'jour', Icon: Sun,     title: 'Jour' },
   { key: 'auto', Icon: Monitor, title: 'Automatique' },
@@ -71,6 +203,7 @@ function applyTheme(theme) {
 
 export default function App() {
   const nextRssLabel = useNextRssCountdown()
+  const rssStatus = useRssStatus()
   const [files, setFiles] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
   const [fileContent, setFileContent] = useState(null)
@@ -234,11 +367,8 @@ export default function App() {
           <span className="hidden sm:inline text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
         </div>
 
-        {nextRssLabel && (
-          <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 ml-3">
-            <Clock size={11} />{nextRssLabel}
-          </span>
-        )}
+        {/* Statut RSS + prochain passage */}
+        <RssStatusBar status={rssStatus} nextRssLabel={nextRssLabel} />
 
         <div className="flex-1" />
 
@@ -266,11 +396,30 @@ export default function App() {
         {/* Console RSS keywords */}
         <button
           onClick={() => setConsoleOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Lancer l'extraction des mots-clés RSS"
+          className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm transition-colors ${
+            rssStatus?.running
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
+              : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+          title={rssStatus
+            ? `Dernier : ${rssStatus.last_run ? new Date(rssStatus.last_run).toLocaleString('fr-FR') : 'inconnu'} • ${rssStatus.article_count ?? 0} articles / ${rssStatus.file_count ?? 0} mots-clés`
+            : "Lancer l'extraction des mots-clés RSS"
+          }
         >
           <Terminal size={13} />
+          {rssStatus?.running ? (
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+          ) : rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null ? (
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+          ) : rssStatus?.file_count > 0 ? (
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+          ) : null}
           <span className="hidden sm:inline">Mots-clés RSS</span>
+          {!rssStatus?.running && rssStatus?.file_count > 0 && (
+            <span className="ml-0.5 text-xs tabular-nums opacity-60">{rssStatus.file_count}</span>
+          )}
         </button>
 
         {/* Dashboard entités */}
@@ -367,9 +516,20 @@ export default function App() {
         {/* Console RSS */}
         <button
           onClick={() => setConsoleOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors relative"
         >
-          <Terminal size={18} />
+          <span className="relative inline-block">
+            <Terminal size={18} />
+            {rssStatus?.running ? (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500" />
+            ) : rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null ? (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
+            ) : rssStatus?.file_count > 0 ? (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-slate-400" />
+            ) : null}
+          </span>
           <span className="text-[10px]">RSS</span>
         </button>
         {/* Dashboard entités */}
