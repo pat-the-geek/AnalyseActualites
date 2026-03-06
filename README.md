@@ -776,4 +776,4 @@ Merci de respecter : la structure du projet, la langue française pour les clés
 
 ---
 
-_Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md) · Entités NER : [docs/ENTITIES.md](docs/ENTITIES.md) · Services externes : [docs/EXTERNAL_SERVICES.md](docs/EXTERNAL_SERVICES.md) · Use Cases : [docs/USE_CASES.md](docs/USE_CASES.md)_
+_Documentation prompts : [docs/PROMPTS.md](docs/PROMPTS.md) · Entités NER : [docs/ENTITIES.md](docs/ENTITIES.md) · Services externes : [docs/EXTERNAL_SERVICES.md](docs/EXTERNAL_SERVICES.md) · Use Cases : [docs/USE_CASES.md](docs/USE_CASES.md) · Rapports automatiques : [docs/RAPPORTS_AUTOMATIQUES.md](docs/RAPPORTS_AUTOMATIQUES.md)_

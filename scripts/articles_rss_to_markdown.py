@@ -11,7 +11,10 @@ Usage :
 """
 
 import argparse
+import calendar
+import json
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -26,14 +29,57 @@ ARTICLES_DIR = PROJECT_ROOT / "data" / "articles-from-rss"
 RAPPORTS_BASE = PROJECT_ROOT / "rapports" / "markdown" / "keyword"
 
 
+def _get_month_range():
+    """Retourne (premier_jour, dernier_jour) du mois courant."""
+    now = datetime.now()
+    last_day_num = calendar.monthrange(now.year, now.month)[1]
+    first_day = datetime(now.year, now.month, 1)
+    last_day = datetime(now.year, now.month, last_day_num, 23, 59, 59)
+    return first_day, last_day
+
+
+def _parse_pub_date(date_str: str):
+    """Parse une date RFC 822 (ex: 'Fri, 06 Mar 2026 10:00:00 +0000')."""
+    try:
+        return datetime.strptime(date_str[:25].strip(), "%a, %d %b %Y %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+
+
 def process_file(json_file: Path) -> None:
     keyword_slug = json_file.stem          # ex: "intelligence-artificielle"
-    today = datetime.now().strftime("%Y-%m-%d")
+    first_day, last_day = _get_month_range()
+    month_start = first_day.strftime("%Y-%m-%d")
+    month_end = last_day.strftime("%Y-%m-%d")
+
+    # Charger et filtrer les articles du mois courant
+    with open(json_file, "r", encoding="utf-8") as f:
+        articles = json.load(f)
+
+    filtered = [
+        a for a in articles
+        if (dt := _parse_pub_date(a.get("Date de publication", ""))) is not None
+        and first_day <= dt <= last_day
+    ]
+
+    if not filtered:
+        print_console(f"Aucun article pour {month_start}/{month_end} dans {json_file.name}", level="warning")
+        return
+
     rapport_dir = RAPPORTS_BASE / keyword_slug
     rapport_dir.mkdir(parents=True, exist_ok=True)
-    output_file = rapport_dir / f"{keyword_slug}_{today}.md"
-    print_console(f"Conversion : {json_file.name} → {output_file.relative_to(PROJECT_ROOT)}")
-    json_to_markdown(str(json_file), str(output_file))
+    output_file = rapport_dir / f"{keyword_slug}_{month_start}_{month_end}.md"
+
+    # Écriture dans un fichier temporaire pour compatibilité avec json_to_markdown()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+        json.dump(filtered, tmp, ensure_ascii=False)
+        tmp_path = tmp.name
+
+    try:
+        print_console(f"Conversion : {json_file.name} ({len(filtered)} articles du {month_start} au {month_end}) → {output_file.relative_to(PROJECT_ROOT)}")
+        json_to_markdown(tmp_path, str(output_file))
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 def main():
