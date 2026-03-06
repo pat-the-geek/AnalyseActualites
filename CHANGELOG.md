@@ -1,3 +1,62 @@
+# 06/03/2026 — Quotas : resync disque + UX header
+
+## `utils/quota.py` — resync disque automatique
+
+- `get_stats()` relit maintenant `data/quota_state.json` depuis le disque à chaque appel
+- Permet la synchronisation immédiate après une mise à jour externe (script `rebuild_quota.py`, autre processus cron…) sans redémarrage de Flask
+- L'onglet **Quota** dans les Réglages reflète toujours la consommation réelle
+
+## Header — suppression de « / Explorateur »
+
+- `viewer/src/App.jsx` : le texte `/ Explorateur` à côté du logo WUDD.ai a été supprimé pour épurer le header
+
+---
+
+# 06/03/2026 — Système de quota adaptatif & fix sys.path Flask
+
+## Quota adaptatif (`utils/quota.py`)
+
+- Nouveau module `utils/quota.py` : `QuotaManager` singleton thread-safe qui régule les imports journaliers selon trois plafonds cumulatifs :
+  - **Global** : nombre total d'articles/jour (défaut 150)
+  - **Par mot-clé** : max articles/mot-clé/jour (défaut 30) — évite 200 articles "Trump" en une journée
+  - **Par source × mot-clé** : max articles d'un même site pour un mot-clé donné (défaut 5) — garantit la diversité des sources
+- **Tri adaptatif** : à chaque article traité, les mots-clés sont classés par ratio de consommation croissant → les moins alimentés sont traités en priorité, le budget inutilisé est redistribué automatiquement
+- **Auto-reset à minuit** : détection de changement de date, remise à zéro des compteurs sans intervention
+- **Écriture atomique** : état persisté dans `data/quota_state.json` via fichier `.tmp` (pas de corruption)
+- Configuration dans `config/quota.json` : modifiable à chaud via l'UI
+
+## Intégration dans les scripts d'import
+
+- `scripts/get-keyword-from-rss.py` : appel `quota.can_process(kw, source)` avant tout appel EurIA + `quota.record_article()` après ajout + arrêt immédiat si `is_global_exhausted()`
+- `scripts/flux_watcher.py` : même logique + tri adaptatif des mots-clés avant chaque article
+- Les articles déjà indexés (doublons) ne consomment pas de quota
+
+## Onglet "Quota" dans Réglages
+
+- Nouveau 5ème onglet **Quota** dans `SettingsPanel.jsx` :
+  - Toggle activer/désactiver la régulation
+  - 3 sliders : plafond global (10–500), par mot-clé (1–100), par source (1–20)
+  - Toggle tri adaptatif avec description
+  - **Visualisation temps réel** : barres de progression colorées (vert → orange → rouge) par mot-clé, badges sources saturées, indicateur "Plafond atteint"
+  - Bouton "Réinitialiser" (avec confirmation) pour remise à zéro manuelle
+
+## 4 endpoints Flask
+
+| Route | Description |
+|---|---|
+| `GET /api/quota/config` | Lire la configuration |
+| `POST /api/quota/config` | Sauvegarder la configuration |
+| `GET /api/quota/stats` | Statistiques de consommation du jour |
+| `POST /api/quota/reset` | Réinitialiser les compteurs |
+
+## Fix sys.path Flask en production Docker
+
+- `viewer/app.py` : ajout de `sys.path.insert(0, PROJECT_ROOT)` juste après la définition de `PROJECT_ROOT`
+- Sans ce fix, les imports `utils.*` échouaient avec `ModuleNotFoundError` quand Flask était lancé via `python3 /app/viewer/app.py` (le répertoire courant `/app/viewer` était ajouté à sys.path au lieu de `/app`)
+- Ce correctif profite aussi aux routes existantes `utils.scoring`, `utils.exporters.*`
+
+---
+
 # 06/03/2026 — Sentiment, Export & Diffusion, robustesse explorateur
 
 ## Analyse de sentiment (`enrich_sentiment.py`)

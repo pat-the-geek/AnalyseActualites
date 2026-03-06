@@ -437,7 +437,6 @@ export default function App() {
         <div className="flex items-center gap-2">
           <img src={wuddLogo} alt="WUDD.ai" className="hidden sm:block w-12 h-12 rounded-md select-none" />
           <span className="font-semibold text-slate-900 dark:text-slate-100">WUDD.ai</span>
-          <span className="hidden sm:inline text-slate-400 dark:text-slate-500 text-sm">/ Explorateur</span>
         </div>
 
         {/* Statut RSS + prochain passage */}

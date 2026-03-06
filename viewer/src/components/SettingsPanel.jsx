@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   X, Settings, Clock, Tag, Rss, Plus, Trash2, RefreshCw,
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
-  Maximize2, Minimize2, ExternalLink, Database, Clipboard,
+  Maximize2, Minimize2, ExternalLink, Database, Clipboard, BarChart2,
+  ToggleLeft, ToggleRight, RotateCcw,
 } from 'lucide-react'
 
 // ─── Helpers partagés ────────────────────────────────────────────────────────
@@ -949,13 +950,299 @@ function FluxTab() {
   )
 }
 
+// ─── Onglet Quota ────────────────────────────────────────────────────────────
+
+function QuotaBar({ count, limit, color = 'blue' }) {
+  const pct = limit > 0 ? Math.min(100, Math.round(count / limit * 100)) : 0
+  const colors = {
+    blue:   'bg-blue-500 dark:bg-blue-400',
+    amber:  'bg-amber-500 dark:bg-amber-400',
+    rose:   'bg-rose-500 dark:bg-rose-400',
+    green:  'bg-green-500 dark:bg-green-400',
+    violet: 'bg-violet-500 dark:bg-violet-400',
+  }
+  const barColor = pct >= 90 ? colors.rose : pct >= 70 ? colors.amber : (colors[color] ?? colors.blue)
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`text-xs tabular-nums w-20 text-right ${
+        pct >= 90 ? 'text-rose-500 dark:text-rose-400 font-semibold'
+                  : 'text-slate-500 dark:text-slate-400'
+      }`}>
+        {count} / {limit}
+      </span>
+      <span className="text-xs text-slate-400 dark:text-slate-500 w-9 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+function QuotaTab() {
+  const [config, setConfig]   = useState(null)
+  const [stats, setStats]     = useState(null)
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [error, setError]     = useState(null)
+
+  const load = useCallback(async () => {
+    try {
+      const [cfgRes, statsRes] = await Promise.all([
+        fetch('/api/quota/config'),
+        fetch('/api/quota/stats'),
+      ])
+      const cfg   = await cfgRes.json()
+      const st    = await statsRes.json()
+      setConfig(cfg)
+      setStats(st)
+    } catch (e) {
+      setError('Impossible de charger les données de quota.')
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/quota/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReset = async () => {
+    if (!window.confirm('Réinitialiser tous les compteurs de quota du jour ?')) return
+    setResetting(true)
+    try {
+      await fetch('/api/quota/reset', { method: 'POST' })
+      await load()
+    } catch (e) {
+      setError('Erreur lors de la réinitialisation.')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  if (!config) return <Spinner />
+
+  const allKeywords = stats?.keywords ?? {}
+  const kwEntries = Object.entries(allKeywords).sort(
+    ([, a], [, b]) => b.pct - a.pct
+  )
+
+  // Palette de couleurs pour les mots-clés
+  const palette = ['blue', 'violet', 'green', 'amber', 'blue', 'violet', 'green']
+
+  return (
+    <div className="flex flex-col flex-1 overflow-y-auto">
+      <ErrorBanner message={error} />
+
+      {/* ── En-tête + boutons ── */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700/50 shrink-0">
+        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          Régulation des quotas
+        </h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            disabled={resetting}
+            title="Réinitialiser les compteurs du jour"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
+          >
+            <RotateCcw size={12} className={resetting ? 'animate-spin' : ''} />
+            Réinitialiser
+          </button>
+          <SaveButton saving={saving} saved={saved} onClick={handleSave} />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-6 px-5 py-5">
+
+        {/* ── Activation ── */}
+        <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Activer la régulation</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Limite le nombre d'articles importés et les appels à l'API EurIA</p>
+          </div>
+          <button
+            onClick={() => setConfig(c => ({ ...c, enabled: !c.enabled }))}
+            className="text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+          >
+            {config.enabled
+              ? <ToggleRight size={28} className="text-blue-500 dark:text-blue-400" />
+              : <ToggleLeft  size={28} />}
+          </button>
+        </div>
+
+        {/* ── Plafonds ── */}
+        {config.enabled && (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Plafonds journaliers</p>
+
+            {/* Global */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-700 dark:text-slate-300">Plafond global</label>
+                <span className="text-xs text-slate-400">articles / jour</span>
+              </div>
+              <input
+                type="range" min="10" max="500" step="10"
+                value={config.global_daily_limit}
+                onChange={e => setConfig(c => ({ ...c, global_daily_limit: +e.target.value }))}
+                className="w-full accent-blue-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>10</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">⬦ {config.global_daily_limit} articles</span>
+                <span>500</span>
+              </div>
+            </div>
+
+            {/* Par mot-clé */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-700 dark:text-slate-300">Par mot-clé</label>
+                <span className="text-xs text-slate-400">articles / mot-clé / jour</span>
+              </div>
+              <input
+                type="range" min="1" max="100" step="1"
+                value={config.per_keyword_daily_limit}
+                onChange={e => setConfig(c => ({ ...c, per_keyword_daily_limit: +e.target.value }))}
+                className="w-full accent-violet-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>1</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">⬦ {config.per_keyword_daily_limit} articles</span>
+                <span>100</span>
+              </div>
+            </div>
+
+            {/* Par source */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-700 dark:text-slate-300">Par source</label>
+                <span className="text-xs text-slate-400">articles / source / mot-clé / jour</span>
+              </div>
+              <input
+                type="range" min="1" max="20" step="1"
+                value={config.per_source_daily_limit}
+                onChange={e => setConfig(c => ({ ...c, per_source_daily_limit: +e.target.value }))}
+                className="w-full accent-green-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>1</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">⬦ {config.per_source_daily_limit} articles</span>
+                <span>20</span>
+              </div>
+            </div>
+
+            {/* Tri adaptatif */}
+            <div className="flex items-center justify-between p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
+              <div>
+                <p className="text-sm text-slate-700 dark:text-slate-300">Tri adaptatif</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Priorité aux mots-clés les moins consommés pour équilibrer la diversité
+                </p>
+              </div>
+              <button
+                onClick={() => setConfig(c => ({ ...c, adaptive_sorting: !c.adaptive_sorting }))}
+                className="text-slate-400 hover:text-green-500 dark:hover:text-green-400 transition-colors"
+              >
+                {config.adaptive_sorting
+                  ? <ToggleRight size={24} className="text-green-500 dark:text-green-400" />
+                  : <ToggleLeft  size={24} />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Consommation du jour ── */}
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Consommation aujourd'hui — {stats?.date ?? '…'}
+          </p>
+
+          {/* Global */}
+          {stats && (
+            <div className="flex flex-col gap-1 p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Global</span>
+                {stats.global.exhausted && (
+                  <span className="text-xs font-semibold text-rose-500 dark:text-rose-400 flex items-center gap-1">
+                    <AlertTriangle size={10} /> Plafond atteint
+                  </span>
+                )}
+              </div>
+              <QuotaBar count={stats.global.count} limit={stats.global.limit} color="blue" />
+            </div>
+          )}
+
+          {/* Par mot-clé */}
+          {kwEntries.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {kwEntries.map(([kw, data], i) => (
+                <div key={kw} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[60%]">{kw}</span>
+                    {data.pct >= 100 && (
+                      <span className="text-xs text-rose-500 dark:text-rose-400 font-semibold">Saturé</span>
+                    )}
+                  </div>
+                  <QuotaBar count={data.total} limit={data.limit} color={palette[i % palette.length]} />
+                  {Object.keys(data.sources ?? {}).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {Object.entries(data.sources).map(([src, info]) => (
+                        <span
+                          key={src}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                            info.saturated
+                              ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {src} <span className="opacity-60">{info.count}/{info.limit}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 dark:text-slate-500 italic px-1">
+              Aucun article importé aujourd'hui.
+            </p>
+          )}
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 // ─── Panneau principal Réglages ───────────────────────────────────────────────
 
 const TABS = [
-  { id: 'rss',       label: 'RSS',          Icon: Rss      },
-  { id: 'scheduler', label: 'Planification', Icon: Clock },
-  { id: 'keywords',  label: 'Mots-clés',     Icon: Tag  },
+  { id: 'rss',       label: 'RSS',          Icon: Rss       },
+  { id: 'scheduler', label: 'Planification', Icon: Clock     },
+  { id: 'keywords',  label: 'Mots-clés',     Icon: Tag       },
   { id: 'flux',      label: 'Flux Reeder',   Icon: Database  },
+  { id: 'quota',     label: 'Quota',         Icon: BarChart2 },
 ]
 
 export default function SettingsPanel({ onClose }) {
@@ -1024,6 +1311,7 @@ export default function SettingsPanel({ onClose }) {
           {activeTab === 'scheduler' && <SchedulerTab />}
           {activeTab === 'keywords'  && <KeywordsTab />}
           {activeTab === 'flux'      && <FluxTab />}
+          {activeTab === 'quota'     && <QuotaTab />}
         </div>
       </div>
     </div>

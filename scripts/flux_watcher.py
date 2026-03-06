@@ -34,6 +34,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from utils.api_client import EurIAClient
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
+from utils.quota import get_quota_manager
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -197,6 +198,19 @@ def main(dry_run: bool = False) -> None:
 
     print_console(f"  {len(keywords)} mots-clés chargés.")
 
+    # Initialiser le gestionnaire de quotas
+    quota = get_quota_manager()
+    if quota.enabled:
+        print_console(f"  Quotas activés — global: {quota._config.get('global_daily_limit')}/j, "
+                      f"par mot-clé: {quota._config.get('per_keyword_daily_limit')}/j, "
+                      f"par source: {quota._config.get('per_source_daily_limit')}/source")
+
+    # Arrêt immédiat si le plafond global est déjà atteint
+    if quota.is_global_exhausted():
+        print_console("Plafond global de quota atteint — flux_watcher ignoré.", level="warning")
+        _save_state(next_idx, total, feed_title, 0)
+        return
+
     now = datetime.utcnow()
     one_week_ago = now - timedelta(days=7)
     api_client = EurIAClient()
@@ -218,7 +232,18 @@ def main(dry_run: bool = False) -> None:
         if pub_dt < one_week_ago:
             continue
 
-        for kw_obj in keywords:
+        # Arrêt global si quota épuisé
+        if quota.is_global_exhausted():
+            print_console("Plafond global de quota atteint — arrêt du traitement.", level="warning")
+            break
+
+        # Tri adaptatif : classer les mots-clés par consommation croissante
+        kw_names = [k["keyword"] for k in keywords]
+        sorted_kw_names = quota.sort_by_priority(kw_names)
+        kw_map = {k["keyword"]: k for k in keywords}
+        sorted_keywords = [kw_map[n] for n in sorted_kw_names]
+
+        for kw_obj in sorted_keywords:
             kw        = kw_obj["keyword"]
             or_words  = kw_obj.get("or", [])
             and_words = kw_obj.get("and", [])
@@ -250,6 +275,11 @@ def main(dry_run: bool = False) -> None:
 
             if link in existing_urls:
                 print_console(f"  Déjà présent pour '{kw}' : {link[:60]}...", level="debug")
+                continue
+
+            # Vérifier le quota (global + par mot-clé + par source)
+            if not quota.can_process(kw, feed_title):
+                print_console(f"  Quota atteint pour '{kw}' / '{feed_title}', ignoré.", level="debug")
                 continue
 
             print_console(f"  Mot-clé '{kw}' — {link[:70]}...")
@@ -286,7 +316,12 @@ def main(dry_run: bool = False) -> None:
             existing_list.append(article)
             _write_atomic(out_path, existing_list)
             print_console(f"  ✓ Ajouté dans {out_path.name}")
+            quota.record_article(kw, feed_title)
             new_articles_all.append(article)
+            # Si quota global atteint après cet ajout, sortir de la boucle mots-clés
+            if quota.is_global_exhausted():
+                print_console("Plafond global atteint après ajout.", level="warning")
+                break
 
     # ── Mise à jour incrémentale de 48-heures.json ──────────────────────────
     _update_48h_incremental(new_articles_all)

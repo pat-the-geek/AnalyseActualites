@@ -7,7 +7,7 @@ This file provides essential context for AI assistants working in this codebase.
 **WUDD.ai** (also called *AnalyseActualités*) is a French-language intelligent news monitoring platform. It fetches articles from RSS/JSON feeds (via Reeder), summarizes them with an AI API (Infomaniak EurIA / Qwen3), and produces structured JSON outputs and Markdown reports.
 
 - **Language:** All configuration keys, prompts, log messages, and output are in **French**
-- **Version:** 2.1.0 (utils package)
+- **Version:** 2.2.0 (quota adaptatif)
 - **License:** MIT — Patrick Ostertag
 - **Python:** 3.10+
 
@@ -185,6 +185,7 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | `utils/cache.py` | File-based TTL cache (24h default, MD5 keys) |
 | `utils/parallel.py` | `ThreadPoolExecutor` wrapper for I/O-bound parallelism |
 | `utils/scoring.py` | `ScoringEngine` — ranks articles by relevance score for Top articles and newsletter |
+| `utils/quota.py` | `QuotaManager` — adaptive daily quota regulation: global cap, per-keyword cap, per-source-per-keyword cap, adaptive keyword sorting by consumption ratio. Singleton via `get_quota_manager()`. State in `data/quota_state.json`, config in `config/quota.json`. |
 | `utils/exporters/atom_feed.py` | Atom XML feed generation (`generate_atom_feed()`, `generate_atom_from_flux()`) |
 | `utils/exporters/newsletter.py` | Newsletter HTML generation + SMTP send (`generate_newsletter_html()`, `send_newsletter()`) |
 | `utils/exporters/webhook.py` | Webhook notifications — Discord, Slack, Ntfy (`send_discord()`, `send_slack()`, `send_ntfy()`) |
@@ -205,7 +206,7 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `JsonViewer.jsx` | Syntax-highlighted JSON with inline edit/save |
 | `MarkdownViewer.jsx` | Rendered Markdown with image support |
 | `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
-| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config; RSS tab: manage `data/WUDD.opml` feeds (check availability, add via URL paste with title resolution, delete, save); Keywords tab: displays keywords sorted alphabetically (fr locale) |
+| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config; RSS tab: manage `data/WUDD.opml` feeds (check availability, add via URL paste with title resolution, delete, save); Keywords tab: displays keywords sorted alphabetically (fr locale); Quota tab: configure and monitor daily import quotas |
 | `Sidebar.jsx` | File navigation by flux and type |
 | `FileViewer.jsx` | File content viewer; "Supprimer" button with confirmation dialog (restricted to data/ and rapports/) |
 | `ScriptConsolePanel.jsx` | Modal console to launch `get-keyword-from-rss.py` in the background; real-time SSE log streaming; auto-refreshes the file list on success |
@@ -233,6 +234,7 @@ Config raises `ValueError` at startup if `URL` or `bearer` are missing.
 | File | Purpose |
 |---|---|
 | `flux_json_sources.json` | Array of flux definitions (title, URL, cron schedule, timeout) |
+| `quota.json` | Daily quota configuration: `enabled`, `global_daily_limit`, `per_keyword_daily_limit`, `per_source_daily_limit`, `adaptive_sorting` |
 | `sites_actualite.json` | 133+ RSS news sources registry |
 | `categories_actualite.json` | 214 article categories for classification |
 | `thematiques_societales.json` | 12-theme classification (IA, economy, health, geopolitics, …) |
@@ -340,6 +342,8 @@ Coverage targets: `utils/` ≥ 80%, `scripts/` ≥ 60%, critical functions 100%.
 6. **ThreadPoolExecutor parallelism** — `utils/parallel.py` wraps `ThreadPoolExecutor` for parallel article processing. Default `max_workers=5`.
 
 7. **Headless-first** — Everything runs via CLI and Docker cron. Scripts using `tkinter` (interactive file picker) are legacy patterns; prefer CLI arguments.
+
+8. **Adaptive quota regulation** — `utils/quota.py` enforces three daily ceilings (global, per-keyword, per-source-per-keyword). Before any EurIA API call, scripts must call `quota.can_process(kw, source)` and record the article with `quota.record_article(kw, source)` afterwards. Keywords are sorted by consumption ratio each article so the least-consumed topics are prioritised. The state auto-resets at midnight.
 
 ---
 

@@ -35,6 +35,12 @@ except ImportError:
 # auquel que (Path('app.py').parent.parent).resolve() → cwd au lieu de la racine.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Ajouter la racine au sys.path pour que `from utils.X import Y` fonctionne
+# quel que soit le répertoire courant au démarrage (cron, Docker, CLI…)
+import sys as _sys
+if str(PROJECT_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(PROJECT_ROOT))
+
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 
@@ -654,6 +660,51 @@ def api_save_flux_sources():
         abort(400, "Format invalide : tableau attendu")
     path = PROJECT_ROOT / "config" / "flux_json_sources.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True})
+
+
+# ─── Quota ────────────────────────────────────────────────────────────────────
+
+@app.route("/api/quota/config", methods=["GET"])
+def api_get_quota_config():
+    """Retourne la configuration des quotas (config/quota.json)."""
+    from utils.quota import get_quota_manager, DEFAULT_CONFIG
+    mgr = get_quota_manager()
+    # Retourner la config avec les valeurs par défaut en fallback
+    cfg = {**DEFAULT_CONFIG, **mgr._config}
+    return jsonify(cfg)
+
+
+@app.route("/api/quota/config", methods=["POST"])
+def api_save_quota_config():
+    """Sauvegarde la configuration des quotas."""
+    from utils.quota import get_quota_manager
+    data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        abort(400, "Format invalide : objet attendu")
+    # Validation basique des types
+    for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit"):
+        if int_key in data:
+            try:
+                data[int_key] = max(1, int(data[int_key]))
+            except (ValueError, TypeError):
+                abort(400, f"Valeur invalide pour {int_key}")
+    get_quota_manager().save_config(data)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/quota/stats", methods=["GET"])
+def api_get_quota_stats():
+    """Retourne les statistiques de consommation du jour."""
+    from utils.quota import get_quota_manager
+    return jsonify(get_quota_manager().get_stats())
+
+
+@app.route("/api/quota/reset", methods=["POST"])
+def api_reset_quota():
+    """Réinitialise les compteurs de quota du jour."""
+    from utils.quota import get_quota_manager
+    get_quota_manager().reset_day()
     return jsonify({"ok": True})
 
 

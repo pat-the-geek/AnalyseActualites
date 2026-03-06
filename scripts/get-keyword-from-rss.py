@@ -31,6 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from utils.api_client import EurIAClient
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
+from utils.quota import get_quota_manager
 
 # Constantes
 
@@ -133,6 +134,15 @@ print_console(f"Fenêtre temporelle : {one_week_ago.date()} à {now.date()}")
 print_console("Initialisation du client IA EurIA...")
 api_client = EurIAClient()
 
+# Initialiser le gestionnaire de quotas
+quota = get_quota_manager()
+if quota.enabled:
+    print_console(f"Quotas activés — global: {quota._config.get('global_daily_limit')}/j, "
+                  f"par mot-clé: {quota._config.get('per_keyword_daily_limit')}/j, "
+                  f"par source: {quota._config.get('per_source_daily_limit')}/source")
+else:
+    print_console("Quotas désactivés.")
+
 # Index par mot-clé
 results = {kw_obj["keyword"]: {} for kw_obj in keywords}
 
@@ -166,7 +176,16 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
         for idx, (title, link, pub_date, pub_dt) in enumerate(parsed_items, 1):
             if pub_dt < one_week_ago:
                 continue
-            for kw_obj in keywords:
+            # Arrêt global si le plafond journalier est atteint
+            if quota.is_global_exhausted():
+                print_console("Plafond global de quota atteint — traitement interrompu.", level="warning")
+                break
+            # Tri adaptatif : traiter en priorité les mots-clés les moins consommés
+            kw_names = [k["keyword"] for k in keywords]
+            sorted_kw_names = quota.sort_by_priority(kw_names)
+            kw_map = {k["keyword"]: k for k in keywords}
+            sorted_keywords = [kw_map[n] for n in sorted_kw_names]
+            for kw_obj in sorted_keywords:
                 kw = kw_obj["keyword"]
                 or_words = kw_obj.get("or", [])
                 and_words = kw_obj.get("and", [])
@@ -197,6 +216,10 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 if link in existing_urls or link in results[kw]:
                     print_console(f"    [Article {idx}] Déjà présent pour '{kw}', ignoré.", level="debug")
                     continue
+                # Vérifier le quota (global + par mot-clé + par source)
+                if not quota.can_process(kw, feed_title):
+                    print_console(f"    [Article {idx}] Quota atteint pour '{kw}' / '{feed_title}', ignoré.", level="debug")
+                    continue
                 print_console(f"    [Article {idx}] Mot-clé '{kw}' trouvé dans le titre.")
                 print_console(f"      Extraction du texte de l'article...")
                 text = fetch_and_extract_text(link)
@@ -221,10 +244,15 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 if entities:
                     article["entities"] = entities
                 results[kw][link] = article
+                quota.record_article(kw, feed_title)
                 _progress["articles_added"] += 1
                 _progress["last_action"] = f"Article ajouté '{kw}' — {feed_title}"
                 _write_progress(_progress)
                 print_console(f"      ✓ Article ajouté pour '{kw}'.")
+                # Vérification après ajout : quota global épuisé → stop ce flux
+                if quota.is_global_exhausted():
+                    print_console("Plafond global atteint après ajout — passage au flux suivant.", level="warning")
+                    break
     except Exception as e:
         print_console(f"Erreur flux {feed_url}: {e}", level="error")
 
