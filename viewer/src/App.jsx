@@ -251,10 +251,16 @@ export default function App() {
         if (id !== fetchIdRef.current) return // réponse périmée ignorée
         if (!Array.isArray(data)) throw new Error('Réponse invalide')
         setFiles(prev => {
-          // Ne jamais remplacer une liste non-vide par une liste vide :
-          // un [] transitoire (volume Docker temporairement inaccessible,
-          // race avec un cron) doit être ignoré silencieusement.
+          // Ne jamais remplacer une liste non-vide par une liste vide
           if (data.length === 0 && prev.length > 0) return prev
+          // Ne pas perdre les fichiers markdown si la nouvelle réponse n'en
+          // contient pas (virtiofs - lecture incomplète de rapports/ transitoire)
+          const prevMd = prev.filter(f => f.type === 'markdown')
+          const newMd  = data.filter(f => f.type === 'markdown')
+          if (prevMd.length > 0 && newMd.length === 0) {
+            const newOther = data.filter(f => f.type !== 'markdown')
+            return [...newOther, ...prevMd].sort((a, b) => b.modified - a.modified)
+          }
           return data
         })
         setIsRefreshing(false)

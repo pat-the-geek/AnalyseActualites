@@ -195,7 +195,15 @@ def latest_mtime(directory: Path) -> datetime.datetime | None:
 
 @app.route("/api/files")
 def api_files():
-    return jsonify(collect_files())
+    files = collect_files()
+    # Retry une fois si des JSON sont trouvés mais aucun markdown :
+    # virtiofs (Docker Desktop / macOS) peut livrer un listing incomplet
+    # de rapports/ quand viewer.log ou cron_*.log sont écrits simultanément.
+    if files and not any(f["type"] == "markdown" for f in files):
+        import time
+        time.sleep(0.15)
+        files = collect_files()
+    return jsonify(files)
 
 
 @app.route("/api/content")
