@@ -250,7 +250,13 @@ export default function App() {
       .then(data => {
         if (id !== fetchIdRef.current) return // réponse périmée ignorée
         if (!Array.isArray(data)) throw new Error('Réponse invalide')
-        setFiles(data)
+        setFiles(prev => {
+          // Ne jamais remplacer une liste non-vide par une liste vide :
+          // un [] transitoire (volume Docker temporairement inaccessible,
+          // race avec un cron) doit être ignoré silencieusement.
+          if (data.length === 0 && prev.length > 0) return prev
+          return data
+        })
         setIsRefreshing(false)
       })
       .catch(err => {

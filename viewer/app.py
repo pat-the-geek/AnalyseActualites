@@ -56,7 +56,13 @@ def collect_files() -> list:
             return
         exts = ["*.json"] if file_type == "json" else ["*.md", "*.markdown"]
         for ext in exts:
-            for f in directory.rglob(ext):
+            # Matérialiser le générateur rglob() pour intercepter les OSError
+            # survenant pendant le parcours (volumes Docker, race avec cron)
+            try:
+                paths = list(directory.rglob(ext))
+            except OSError:
+                paths = []
+            for f in paths:
                 parts = f.relative_to(PROJECT_ROOT).parts
                 if any(p in ("cache", ".git") for p in parts):
                     continue
