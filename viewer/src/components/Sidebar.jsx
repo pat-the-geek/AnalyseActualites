@@ -13,6 +13,12 @@ function formatDate(timestamp) {
   })
 }
 
+function formatTime(timestamp) {
+  return new Date(timestamp * 1000).toLocaleTimeString('fr-FR', {
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 export default function Sidebar({
   files, selectedFile, onSelect,
   typeFilter, onTypeFilterChange,
@@ -154,7 +160,7 @@ export default function Sidebar({
                         {file.type === 'json' ? 'JSON' : 'MD'}
                       </span>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500">{formatSize(file.size)}</span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-600 ml-auto">{formatDate(file.modified)}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-600 ml-auto">{formatDate(file.modified)} {formatTime(file.modified)}</span>
                     </div>
                   </div>
                 </button>
