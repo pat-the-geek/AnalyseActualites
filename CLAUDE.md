@@ -137,10 +137,13 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 
 | Schedule | Script | Purpose |
 |---|---|---|
+| Every 5 min | `flux_watcher.py` | Round-robin RSS watcher — incremental 48h update |
 | Every 2h from 06:00 to 22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
 | Monday 06:00 | `scheduler_articles.py` | Weekly multi-flux article collection |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
 | Daily 23:00 | `generate_48h_report.py` | Daily Top 10 entities report (48h window) |
+| Last day of month 05:00 | `radar_wudd.py` | Monthly thematic radar report |
+| Last day of month 05:30 | `articles_rss_to_markdown.py` | Convert RSS articles to Markdown |
 
 ---
 
@@ -150,14 +153,17 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 |---|---|---|
 | `Get_data_from_JSONFile_AskSummary_v2.py` | Core: fetch → summarize → save JSON | `--flux`, `--date_debut`, `--date_fin` |
 | `scheduler_articles.py` | Orchestrate all fluxes with adaptive scheduling | (none; reads `config/flux_json_sources.json`) |
+| `flux_watcher.py` | Round-robin RSS watcher — fetches one feed per run, updates `48-heures.json` incrementally | `--dry-run` |
 | `get-keyword-from-rss.py` | Keyword extraction from OPML RSS (every 2h, 06:00–22:00) | (none; reads `config/keyword-to-search.json`) |
 | `articles_json_to_markdown.py` | JSON articles → Markdown report | positional path to JSON file |
+| `articles_rss_to_markdown.py` | Convert RSS keyword JSON articles → annotated Markdown (with inline NER) | `--keyword` |
 | `analyse_thematiques.py` | Thematic classification statistics | (none; reads `data/articles/`) |
 | `enrich_entities.py` | Enrich existing articles with named entities (NER) | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
 | `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Keyword-based report generation | (none) |
 | `generate_48h_report.py` | Daily Top 10 named-entity report from last 48h articles | `--dry-run` |
+| `radar_wudd.py` | Monthly thematic radar — generates end-of-month statistics | (none) |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
 
 ---
@@ -192,7 +198,7 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `JsonViewer.jsx` | Syntax-highlighted JSON with inline edit/save |
 | `MarkdownViewer.jsx` | Rendered Markdown with image support |
 | `SearchOverlay.jsx` | Full-text search across all files (⌘K) |
-| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config; RSS tab: manage `data/WUDD.opml` feeds (check availability, add via URL paste with title resolution, delete, save) |
+| `SettingsPanel.jsx` | Flux management, cron scheduling, thematic config; RSS tab: manage `data/WUDD.opml` feeds (check availability, add via URL paste with title resolution, delete, save); Keywords tab: displays keywords sorted alphabetically (fr locale) |
 | `Sidebar.jsx` | File navigation by flux and type |
 | `FileViewer.jsx` | File content viewer; "Supprimer" button with confirmation dialog (restricted to data/ and rapports/) |
 | `ScriptConsolePanel.jsx` | Modal console to launch `get-keyword-from-rss.py` in the background; real-time SSE log streaming; auto-refreshes the file list on success |

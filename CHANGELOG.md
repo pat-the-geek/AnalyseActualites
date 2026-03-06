@@ -1,3 +1,13 @@
+# 06/03/2026 — Améliorations UX viewer
+
+## Réglages — Tri alphabétique des mots-clés
+
+- Onglet **Mots-clés** du panneau Réglages : la liste est maintenant triée par ordre alphabétique (insensible à la casse, locale française) au chargement
+- Facilite la lecture et la navigation dans les listes longues de mots-clés
+- Fichier modifié : `viewer/src/components/SettingsPanel.jsx` (fonction `KeywordsTab`)
+
+---
+
 # 04/03/2026 — Rapport quotidien Top 10 entités (48h)
 
 ## Nouveau script `generate_48h_report.py`

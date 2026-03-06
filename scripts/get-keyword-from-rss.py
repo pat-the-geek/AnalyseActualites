@@ -51,6 +51,58 @@ def _write_progress(data: dict) -> None:
     except Exception:
         pass  # Ne jamais planter le script à cause du tracking
 
+
+def _parse_feed_items(xml_root) -> list:
+    """Extrait et normalise les articles d'un flux RSS 2.0 ou Atom.
+
+    Retourne une liste de tuples (title, link, pub_date_str, pub_dt) où
+    pub_date_str est toujours au format RFC 822 pour cohérence avec le pipeline.
+    """
+    ATOM_NS = "http://www.w3.org/2005/Atom"
+    normalized = []
+
+    # ── RSS 2.0 : balises <item> ──────────────────────────────────────────────
+    for item in xml_root.findall(".//item"):
+        title     = item.findtext("title") or ""
+        link      = item.findtext("link") or ""
+        pub_date  = item.findtext("pubDate") or ""
+        try:
+            pub_dt = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S")
+        except Exception:
+            continue
+        normalized.append((title, link, pub_date, pub_dt))
+
+    # ── Atom : balises <entry> ────────────────────────────────────────────────
+    for entry in xml_root.findall(f".//{{{ATOM_NS}}}entry"):
+        title = entry.findtext(f"{{{ATOM_NS}}}title") or ""
+        # Lien : préfère rel="alternate", sinon premier <link>
+        link = ""
+        for lk in entry.findall(f"{{{ATOM_NS}}}link"):
+            if lk.get("rel", "alternate") in ("alternate", ""):
+                link = lk.get("href", "")
+                break
+        if not link:
+            lk = entry.find(f"{{{ATOM_NS}}}link")
+            if lk is not None:
+                link = lk.get("href", "")
+        # Date : <published> ou <updated>
+        pub_date_iso = (
+            entry.findtext(f"{{{ATOM_NS}}}published") or
+            entry.findtext(f"{{{ATOM_NS}}}updated") or ""
+        )
+        if not pub_date_iso:
+            continue
+        try:
+            pub_dt_aware = datetime.fromisoformat(pub_date_iso.replace("Z", "+00:00"))
+            pub_dt = pub_dt_aware.replace(tzinfo=None)
+            # Convertir en RFC 822 pour cohérence avec le reste du pipeline
+            pub_date_rfc = pub_dt.strftime("%a, %d %b %Y %H:%M:%S")
+        except Exception:
+            continue
+        normalized.append((title, link, pub_date_rfc, pub_dt))
+
+    return normalized
+
 # Fenêtre temporelle : 7 derniers jours
 now = datetime.utcnow()
 one_week_ago = now - timedelta(days=7)
@@ -109,18 +161,9 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
         resp.raise_for_status()
         print_console(f"  ✓ Flux chargé avec succès.")
         rss = ET.fromstring(resp.content)
-        items = rss.findall(".//item")
-        print_console(f"  {len(items)} articles trouvés dans le flux.")
-        for idx, item in enumerate(items, 1):
-            title = item.findtext("title") or ""
-            link = item.findtext("link") or ""
-            pub_date = item.findtext("pubDate") or ""
-            # Parsing date RFC822
-            try:
-                pub_dt = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S")
-            except Exception:
-                print_console(f"    [Article {idx}] Date non reconnue : '{pub_date}'", level="warning")
-                continue
+        parsed_items = _parse_feed_items(rss)
+        print_console(f"  {len(parsed_items)} articles trouvés dans le flux.")
+        for idx, (title, link, pub_date, pub_dt) in enumerate(parsed_items, 1):
             if pub_dt < one_week_ago:
                 continue
             for kw_obj in keywords:

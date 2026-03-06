@@ -181,6 +181,9 @@ function TaskSection({ title, tasks }) {
               <td className="px-5 py-3">
                 <div className="font-medium text-slate-200 text-sm">{task.name}</div>
                 <div className="text-[11px] text-slate-500 font-mono mt-0.5">{task.script}</div>
+                {task.detail && (
+                  <div className="text-[11px] text-blue-400 mt-1">{task.detail}</div>
+                )}
               </td>
               <td className="px-4 py-3">
                 <div className="text-slate-300 text-sm">{task.label}</div>

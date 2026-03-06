@@ -102,6 +102,66 @@ python3 scripts/generate_48h_report.py --dry-run
 
 ---
 
+### 9. flux_watcher.py
+
+**Description** : Surveillance round-robin des flux RSS listés dans `data/WUDD.opml`. Appelé toutes les **5 minutes** par cron, il traite un seul flux à la fois (rotation circulaire) : pour chaque article récent (≤ 7 jours) dont le titre correspond à un mot-clé de `config/keyword-to-search.json`, il génère un résumé IA + entités NER + image principale et l'ajoute sans doublon dans `data/articles-from-rss/<keyword>.json`. Met également à jour `data/articles-from-rss/_WUDD.AI_/48-heures.json` de façon incrémentale. L'état du round-robin est conservé dans `data/flux_watcher_state.json`.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--dry-run` | Affiche le flux sélectionné sans traitement IA ni écriture | désactivé |
+
+**Utilisation** :
+```bash
+# Exécution normale (traitement IA)
+python3 scripts/flux_watcher.py
+
+# Simulation — affiche le prochain flux sans appel API
+python3 scripts/flux_watcher.py --dry-run
+```
+
+**Automatisation (cron)** — toutes les 5 minutes :
+```
+*/5 * * * * root cd /app && python3 scripts/flux_watcher.py 2>&1 | tee -a /app/rapports/cron_flux_watcher.log
+```
+
+**Sorties** :
+- `data/articles-from-rss/<keyword>.json` — mis à jour incrementalement
+- `data/articles-from-rss/_WUDD.AI_/48-heures.json` — fenêtre glissante 48h
+- `data/flux_watcher_state.json` — état du round-robin
+
+---
+
+### 10. articles_rss_to_markdown.py
+
+**Description** : Convertit les fichiers JSON de `data/articles-from-rss/` en rapports Markdown annotés (entités nommées en ligne). Génère un fichier Markdown par mot-clé dans `rapports/markdown/keyword/<mot-clé>/`. Destiné à être exécuté le dernier jour du mois après la collecte.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--keyword MOT` | Traiter uniquement ce mot-clé | tous les mots-clés |
+
+**Utilisation** :
+```bash
+# Convertir tous les fichiers RSS en Markdown
+python3 scripts/articles_rss_to_markdown.py
+
+# Un mot-clé spécifique uniquement
+python3 scripts/articles_rss_to_markdown.py --keyword anthropic
+```
+
+**Automatisation (cron)** — dernier jour du mois à 5h30 :
+```
+30 5 28-31 * * root [ "$(date -d tomorrow +%d)" = "01" ] && cd /app && python3 scripts/articles_rss_to_markdown.py 2>&1 | tee -a /app/rapports/cron_rss_markdown.log
+```
+
+**Sortie** :
+- `rapports/markdown/keyword/<keyword>/<keyword>_YYYY-MM-DD.md`
+
+---
+
 ## Générer les résumés d'un flux
 
 ```bash

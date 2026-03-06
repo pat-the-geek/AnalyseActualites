@@ -1,7 +1,11 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
+# Surveillance round-robin des flux RSS WUDD.opml : 1 flux par exécution, toutes les 5 minutes
+# Maintient 48-heures.json à jour de façon incrémentale (+ élagage articles > 48h)
+*/5 * * * * root cd /app && python3 scripts/flux_watcher.py 2>&1 | tee -a /app/rapports/cron_flux_watcher.log
 # Exécution de get-keyword-from-rss.py toutes les 2h de 6h00 à 22h00 (6,8,10,12,14,16,18,20,22)
+# (reconstruit 48-heures.json intégralement — filet de sécurité + enrichissement sur toute la fenêtre 7j)
 0 6-22/2 * * * root cd /app && python3 scripts/get-keyword-from-rss.py 2>&1 | tee -a /app/rapports/cron_get_keyword.log
 # Vérification automatique du cron toutes les 10 minutes
 */10 * * * * root cd /app && python3 scripts/check_cron_health.py 2>&1 | tee -a /app/rapports/cron_health.log

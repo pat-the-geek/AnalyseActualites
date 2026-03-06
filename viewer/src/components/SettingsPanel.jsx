@@ -110,6 +110,9 @@ function TaskTable({ title, tasks }) {
               <td className="px-5 py-3">
                 <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">{task.name}</div>
                 <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{task.script}</div>
+                {task.detail && (
+                  <div className="text-[11px] text-blue-500 dark:text-blue-400 mt-1">{task.detail}</div>
+                )}
               </td>
               <td className="px-4 py-3">
                 <div className="text-slate-700 dark:text-slate-300 text-sm">{task.label}</div>
@@ -281,7 +284,13 @@ function KeywordsTab() {
   useEffect(() => {
     fetch('/api/keywords')
       .then(r => r.json())
-      .then(d => { setKeywords(d); setLoading(false) })
+      .then(d => {
+        const sorted = [...d].sort((a, b) =>
+          (a.keyword || '').localeCompare(b.keyword || '', 'fr', { sensitivity: 'base' })
+        )
+        setKeywords(sorted)
+        setLoading(false)
+      })
       .catch(() => { setError('Impossible de charger les mots-clés'); setLoading(false) })
   }, [])
 
@@ -420,6 +429,7 @@ function RssTab() {
   const [showPasteInput, setShowPasteInput] = useState(false)
   const [pasteUrl, setPasteUrl]       = useState('')
   const [pasteMsg, setPasteMsg]       = useState(null)  // {state:'checking'|'ok'|'error', text}
+  const [feedStats, setFeedStats]     = useState({})    // domain → {count, lastDate}
   const pasteInputRef                 = useRef(null)
 
   useEffect(() => {
@@ -427,6 +437,14 @@ function RssTab() {
       .then(r => r.json())
       .then(d => { setFeeds(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => { setError('Impossible de charger les flux RSS'); setLoading(false) })
+  }, [])
+
+  // Chargement en tâche de fond : stats articles par domaine
+  useEffect(() => {
+    fetch('/api/rss-feeds/stats')
+      .then(r => r.json())
+      .then(d => { if (d && typeof d === 'object' && !d.error) setFeedStats(d) })
+      .catch(() => {})
   }, [])
 
   const removeFeed = useCallback((xmlUrl) => {
@@ -673,6 +691,8 @@ function RssTab() {
               {grouped[letter].map((f) => {
                 const isChecking = checking.has(f.xmlUrl)
                 const result = results[f.xmlUrl]  // undefined | true | false
+                const fDomain = (() => { try { return new URL(f.htmlUrl || f.xmlUrl).hostname.replace(/^www\./, '') } catch { return '' } })()
+                const stat = feedStats[fDomain]
                 return (
                   <div key={f.xmlUrl} className={`flex items-center gap-2 py-1 group rounded transition-colors ${result === false ? 'bg-red-50/60 dark:bg-red-900/20' : ''}`}>
                     <Rss size={11} className="text-orange-400 dark:text-orange-500 shrink-0" />
@@ -680,6 +700,21 @@ function RssTab() {
                     <span className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[160px] hidden sm:block">
                       {f.htmlUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                     </span>
+                    {/* Stats articles en tâche de fond */}
+                    {stat && (
+                      <span
+                        className="flex items-center gap-1 text-xs text-blue-400/80 dark:text-blue-400/60 shrink-0 tabular-nums"
+                        title={`${stat.count} article${stat.count > 1 ? 's' : ''} stocké${stat.count > 1 ? 's' : ''}${stat.lastDate ? ' · dernière publication : ' + new Date(stat.lastDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}`}
+                      >
+                        <Calendar size={10} className="shrink-0" />
+                        <span>{stat.count}</span>
+                        {stat.lastDate && (
+                          <span className="hidden md:inline text-slate-400 dark:text-slate-500">
+                            · {new Date(stat.lastDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </span>
+                    )}
                     {/* Icône de résultat */}
                     {isChecking && <RefreshCw size={11} className="animate-spin text-blue-400 shrink-0" />}
                     {!isChecking && result === true  && <CheckCircle2 size={11} className="text-green-500 shrink-0" />}

@@ -293,13 +293,54 @@ def api_scheduler():
     now = datetime.datetime.now()
     tasks = []
 
+    # Lire l'état du flux_watcher pour afficher le flux en cours de traitement
+    flux_watcher_state_file = PROJECT_ROOT / "data" / "flux_watcher_state.json"
+    flux_watcher_detail = None
+    flux_watcher_last_run = None
+    if flux_watcher_state_file.exists():
+        try:
+            _fw_state = json.loads(flux_watcher_state_file.read_text(encoding="utf-8"))
+            last_idx   = _fw_state.get("last_feed_idx", 0)
+            feed_count = _fw_state.get("feed_count", 0)
+            last_title = _fw_state.get("last_feed_title", "")
+            added      = _fw_state.get("articles_added", 0)
+            next_idx   = (last_idx + 1) % feed_count if feed_count > 0 else 0
+            flux_watcher_detail = (
+                f"Dernier flux : [{last_idx + 1}/{feed_count}] {last_title}"
+                f" (+{added} articles) — Prochain : #{next_idx + 1}"
+            )
+            _fw_last = _fw_state.get("last_run")
+            if _fw_last:
+                try:
+                    flux_watcher_last_run = datetime.datetime.fromisoformat(_fw_last).replace(tzinfo=None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     # Tâches cron fixes (issues de archives/crontab)
     fixed = [
+        {
+            "name": "Veille RSS temps-réel (round-robin)",
+            "script": "flux_watcher.py",
+            "cron": "*/5 * * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_flux_watcher.log",
+            "extra_last_run": flux_watcher_last_run,
+            "detail": flux_watcher_detail,
+        },
         {
             "name": "Extraction mots-clés RSS",
             "script": "get-keyword-from-rss.py",
             "cron": "0 6-22/2 * * *",
             "data_dir": PROJECT_ROOT / "data" / "articles-from-rss",
+        },
+        {
+            "name": "Rapport Top 10 entités 48h",
+            "script": "generate_48h_report.py",
+            "cron": "0 23 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_48h_report.log",
         },
         {
             "name": "Collecte multi-flux",
@@ -323,7 +364,9 @@ def api_scheduler():
         },
     ]
     for t in fixed:
-        if t.get("data_dir"):
+        if t.get("extra_last_run"):
+            last_run = t["extra_last_run"]
+        elif t.get("data_dir"):
             last_run = latest_mtime(t["data_dir"])
         elif t.get("log_file") and t["log_file"].exists():
             last_run = datetime.datetime.fromtimestamp(t["log_file"].stat().st_mtime)
@@ -338,6 +381,7 @@ def api_scheduler():
             "last_run": last_run.isoformat() if last_run else None,
             "next_run": next_run.isoformat() if next_run else None,
             "flux": None,
+            "detail": t.get("detail"),
         })
 
     # Tâches par flux (flux_json_sources.json)
@@ -504,6 +548,60 @@ def api_save_rss_feeds():
         return jsonify({"ok": True, "count": len(feeds)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rss-feeds/stats", methods=["GET"])
+def api_rss_feeds_stats():
+    """Retourne le nombre d'articles et la date de dernière publication par domaine
+    en scannant tous les fichiers JSON dans data/articles-from-rss/."""
+    from urllib.parse import urlparse
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime
+
+    rss_dir = PROJECT_ROOT / "data" / "articles-from-rss"
+    stats = {}  # domain -> {count, lastDate}
+
+    if not rss_dir.exists():
+        return jsonify({})
+
+    for json_file in rss_dir.glob("*.json"):
+        try:
+            articles = json.loads(json_file.read_text(encoding="utf-8"))
+            if not isinstance(articles, list):
+                continue
+            for article in articles:
+                url = article.get("URL", "")
+                date_str = article.get("Date de publication", "")
+                if not url:
+                    continue
+                try:
+                    hostname = urlparse(url).hostname or ""
+                    domain = hostname.removeprefix("www.")
+                except Exception:
+                    continue
+                if not domain:
+                    continue
+                entry = stats.setdefault(domain, {"count": 0, "lastDate": None})
+                entry["count"] += 1
+                if date_str:
+                    dt = None
+                    try:
+                        dt = parsedate_to_datetime(date_str)
+                    except Exception:
+                        pass
+                    if dt is None:
+                        try:
+                            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+                    if dt is not None:
+                        dt_iso = dt.isoformat()
+                        if entry["lastDate"] is None or dt_iso > entry["lastDate"]:
+                            entry["lastDate"] = dt_iso
+        except Exception:
+            continue
+
+    return jsonify(stats)
 
 
 @app.route("/api/flux-sources", methods=["GET"])
@@ -1448,11 +1546,21 @@ def keyword_rss_status():
         except Exception:
             pass
 
-    # Réconcilier : si le fichier dit "finished" mais le process tourne encore,
-    # on considère quand même running=True
-    if progress and progress.get("finished_at") and not running:
-        last_run = last_run or progress.get("finished_at")
-        last_rc  = last_rc if last_rc is not None else progress.get("returncode")
+    # Réconcilier avec rss_progress.json :
+    # - Si started_at présent, finished_at absent, et fichier modifié < 3 min → script en cours
+    # - Si finished_at présent → terminé, récupère last_run et returncode
+    if progress:
+        if progress.get("started_at") and not progress.get("finished_at") and not running:
+            try:
+                mtime = progress_file.stat().st_mtime
+                age_s = datetime.datetime.now().timestamp() - mtime
+                if age_s < 180:  # fichier modifié il y a moins de 3 minutes
+                    running = True
+            except Exception:
+                pass
+        elif progress.get("finished_at") and not running:
+            last_run = last_run or progress.get("finished_at")
+            last_rc  = last_rc if last_rc is not None else progress.get("returncode")
 
     # ── 4. Comptage des fichiers et articles dans articles-from-rss ──────────
     articles_dir = PROJECT_ROOT / "data" / "articles-from-rss"

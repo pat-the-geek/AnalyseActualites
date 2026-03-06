@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""
+flux_watcher.py — Surveillance round-robin des flux RSS WUDD.opml
+
+Appelé toutes les 5 minutes par cron.
+Traite UN flux à la fois en round-robin depuis data/WUDD.opml :
+  - Sélectionne le prochain flux non encore traité
+  - Pour chaque article récent (≤ 7 jours) du flux :
+      * Si le titre correspond à un mot-clé de keyword-to-search.json
+      * Génère un résumé IA + entités NER + image principale
+      * Sauvegarde dans data/articles-from-rss/<keyword>.json (sans doublon)
+  - Met à jour data/articles-from-rss/_WUDD.AI_/48-heures.json de façon incrémentale
+
+État mémorisé dans data/flux_watcher_state.json pour le round-robin.
+
+Usage:
+    python3 scripts/flux_watcher.py
+    python3 scripts/flux_watcher.py --dry-run   # Affiche le flux sélectionné sans traitement IA
+"""
+
+import argparse
+import json
+import re
+import sys
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utils.api_client import EurIAClient
+from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
+from utils.logging import print_console
+
+# ─── Constantes ──────────────────────────────────────────────────────────────
+
+OPML_PATH     = PROJECT_ROOT / "data" / "WUDD.opml"
+KEYWORDS_PATH = PROJECT_ROOT / "config" / "keyword-to-search.json"
+OUTPUT_DIR    = PROJECT_ROOT / "data" / "articles-from-rss"
+STATE_FILE    = PROJECT_ROOT / "data" / "flux_watcher_state.json"
+WUDD_DIR      = OUTPUT_DIR / "_WUDD.AI_"
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+WUDD_DIR.mkdir(parents=True, exist_ok=True)
+
+DATE_FORMAT_RSS = "%a, %d %b %Y %H:%M:%S"
+
+# ─── Utilitaires ─────────────────────────────────────────────────────────────
+
+def _write_atomic(path: Path, data: list | dict) -> None:
+    """Écriture atomique d'un JSON via fichier temporaire."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _load_state() -> dict:
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"last_feed_idx": -1, "feed_count": 0, "last_feed_title": ""}
+
+
+def _save_state(idx: int, total: int, feed_title: str, articles_added: int) -> None:
+    _write_atomic(STATE_FILE, {
+        "last_feed_idx": idx,
+        "feed_count": total,
+        "last_feed_title": feed_title,
+        "last_run": datetime.now(timezone.utc).isoformat(),
+        "articles_added": articles_added,
+    })
+
+
+def _parse_feed_items(xml_root) -> list:
+    """Extrait et normalise les articles d'un flux RSS 2.0 ou Atom."""
+    ATOM_NS = "http://www.w3.org/2005/Atom"
+    normalized = []
+
+    for item in xml_root.findall(".//item"):
+        title    = item.findtext("title") or ""
+        link     = item.findtext("link") or ""
+        pub_date = item.findtext("pubDate") or ""
+        try:
+            pub_dt = datetime.strptime(pub_date[:25], DATE_FORMAT_RSS)
+        except Exception:
+            continue
+        normalized.append((title, link, pub_date, pub_dt))
+
+    for entry in xml_root.findall(f".//{{{ATOM_NS}}}entry"):
+        title = entry.findtext(f"{{{ATOM_NS}}}title") or ""
+        link = ""
+        for lk in entry.findall(f"{{{ATOM_NS}}}link"):
+            if lk.get("rel", "alternate") in ("alternate", ""):
+                link = lk.get("href", "")
+                break
+        if not link:
+            lk = entry.find(f"{{{ATOM_NS}}}link")
+            if lk is not None:
+                link = lk.get("href", "")
+        pub_date_iso = (
+            entry.findtext(f"{{{ATOM_NS}}}published") or
+            entry.findtext(f"{{{ATOM_NS}}}updated") or ""
+        )
+        if not pub_date_iso:
+            continue
+        try:
+            pub_dt_aware = datetime.fromisoformat(pub_date_iso.replace("Z", "+00:00"))
+            pub_dt = pub_dt_aware.replace(tzinfo=None)
+            pub_date_rfc = pub_dt.strftime(DATE_FORMAT_RSS)
+        except Exception:
+            continue
+        normalized.append((title, link, pub_date_rfc, pub_dt))
+
+    return normalized
+
+
+def _update_48h_incremental(new_articles: list) -> int:
+    """
+    Met à jour 48-heures.json de façon incrémentale :
+    - Ajoute les nouveaux articles (sans doublon)
+    - Élague les articles de plus de 48h
+    Retourne le nombre de nouveaux articles ajoutés.
+    """
+    wudd_path = WUDD_DIR / "48-heures.json"
+    now = datetime.utcnow()
+    two_days_ago = now - timedelta(hours=48)
+
+    existing: list = []
+    if wudd_path.exists():
+        try:
+            existing = json.loads(wudd_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = []
+
+    seen_urls = {a.get("URL", "") for a in existing}
+    added = 0
+    for article in new_articles:
+        url = article.get("URL", "")
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        existing.append(article)
+        added += 1
+
+    def _safe_date(a: dict) -> datetime:
+        try:
+            return datetime.strptime(a.get("Date de publication", "")[:25], DATE_FORMAT_RSS)
+        except Exception:
+            return datetime.min
+
+    fresh = [a for a in existing if _safe_date(a) >= two_days_ago]
+    fresh.sort(key=_safe_date, reverse=True)
+    _write_atomic(wudd_path, fresh)
+    print_console(f"48-heures.json : +{added} nouveaux | {len(fresh)} articles au total dans la fenêtre 48h")
+    return added
+
+
+# ─── Point d'entrée ──────────────────────────────────────────────────────────
+
+def main(dry_run: bool = False) -> None:
+    # Charger les flux depuis OPML
+    if not OPML_PATH.exists():
+        print_console(f"OPML introuvable : {OPML_PATH}", level="error")
+        sys.exit(1)
+
+    with open(OPML_PATH, "r", encoding="utf-8") as f:
+        tree = ET.parse(f)
+        root = tree.getroot()
+        outlines = root.findall(".//outline[@type='rss']")
+        feeds = [(o.attrib["xmlUrl"], o.attrib.get("title", "Unknown")) for o in outlines]
+
+    total = len(feeds)
+    if total == 0:
+        print_console("Aucun flux RSS trouvé dans WUDD.opml.", level="warning")
+        return
+
+    state = _load_state()
+    next_idx = (state.get("last_feed_idx", -1) + 1) % total
+    feed_url, feed_title = feeds[next_idx]
+
+    print_console(f"[flux_watcher] Flux [{next_idx + 1}/{total}] : {feed_title}")
+    print_console(f"  URL : {feed_url}")
+
+    if dry_run:
+        print_console("=== DRY-RUN : aucun traitement IA effectué ===")
+        _save_state(next_idx, total, feed_title, 0)
+        return
+
+    # Charger les mots-clés
+    with open(KEYWORDS_PATH, "r", encoding="utf-8") as f:
+        keywords = json.load(f)
+
+    print_console(f"  {len(keywords)} mots-clés chargés.")
+
+    now = datetime.utcnow()
+    one_week_ago = now - timedelta(days=7)
+    api_client = EurIAClient()
+    new_articles_all: list = []
+
+    # Lire le flux
+    try:
+        resp = requests.get(feed_url, timeout=15)
+        resp.raise_for_status()
+        rss = ET.fromstring(resp.content)
+        parsed_items = _parse_feed_items(rss)
+        print_console(f"  {len(parsed_items)} articles dans le flux.")
+    except Exception as e:
+        print_console(f"Erreur lecture flux {feed_url} : {e}", level="error")
+        _save_state(next_idx, total, feed_title, 0)
+        return
+
+    for title, link, pub_date, pub_dt in parsed_items:
+        if pub_dt < one_week_ago:
+            continue
+
+        for kw_obj in keywords:
+            kw        = kw_obj["keyword"]
+            or_words  = kw_obj.get("or", [])
+            and_words = kw_obj.get("and", [])
+            title_lower = title.lower()
+
+            matched = kw.lower() in title_lower
+
+            if not matched and or_words:
+                matched = any(
+                    re.search(r'\b' + re.escape(w.lower()) + r'\b', title_lower)
+                    for w in or_words
+                )
+            if matched and and_words:
+                matched = any(
+                    re.search(r'\b' + re.escape(w.lower()) + r'\b', title_lower)
+                    for w in and_words
+                )
+            if not matched:
+                continue
+
+            out_path = OUTPUT_DIR / f"{kw.replace(' ', '-').lower()}.json"
+            existing_urls: set = set()
+            if out_path.exists():
+                try:
+                    with open(out_path, "r", encoding="utf-8") as f:
+                        existing_urls = {a["URL"] for a in json.load(f)}
+                except Exception:
+                    pass
+
+            if link in existing_urls:
+                print_console(f"  Déjà présent pour '{kw}' : {link[:60]}...", level="debug")
+                continue
+
+            print_console(f"  Mot-clé '{kw}' — {link[:70]}...")
+            text = fetch_and_extract_text(link)
+            try:
+                resume = api_client.generate_summary(text, max_lines=20)
+            except RuntimeError as e:
+                print_console(f"  Résumé impossible : {e}", level="warning")
+                continue
+
+            entities = api_client.generate_entities(resume)
+            images   = extract_top_n_largest_images(link, n=1, min_width=500)
+
+            article = {
+                "Titre": title,
+                "Date de publication": pub_date,
+                "Sources": feed_title,
+                "URL": link,
+                "Résumé": resume,
+                "Images": images,
+            }
+            if entities:
+                article["entities"] = entities
+
+            # Relire le fichier cible (peut avoir changé entre deux itérations)
+            existing_list: list = []
+            if out_path.exists():
+                try:
+                    with open(out_path, "r", encoding="utf-8") as f:
+                        existing_list = json.load(f)
+                except Exception:
+                    pass
+
+            existing_list.append(article)
+            _write_atomic(out_path, existing_list)
+            print_console(f"  ✓ Ajouté dans {out_path.name}")
+            new_articles_all.append(article)
+
+    # ── Mise à jour incrémentale de 48-heures.json ──────────────────────────
+    _update_48h_incremental(new_articles_all)
+
+    # ── Mémoriser l'état ────────────────────────────────────────────────────
+    _save_state(next_idx, total, feed_title, len(new_articles_all))
+    print_console(
+        f"[flux_watcher] Terminé — flux [{next_idx + 1}/{total}] "
+        f"{feed_title} : {len(new_articles_all)} nouveaux articles."
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Surveillance round-robin des flux RSS WUDD.opml (1 flux par exécution)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Sélectionne et mémorise le flux sans traitement IA"
+    )
+    args = parser.parse_args()
+    main(dry_run=args.dry_run)
