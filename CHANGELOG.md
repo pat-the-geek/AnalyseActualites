@@ -1,4 +1,118 @@
-# 06/03/2026 — Quotas : resync disque + UX header
+# 06/03/2026 — Analyse WUDD : 10 nouvelles fonctions de veille informationnelle
+
+## Analyse et priorisation
+
+Après analyse de l'état de l'art en veille informationnelle, 10 nouvelles fonctions
+ont été conçues et implémentées, triées par priorité décroissante :
+
+| # | Fonction | Priorité | Fichiers créés / modifiés |
+|---|----------|----------|--------------------------|
+| 1 | Déduplication de contenu | 🔴 Critique | `utils/deduplication.py` + `get-keyword-from-rss.py` |
+| 2 | Règles d'alertes configurables | 🔴 Critique | `config/alert_rules.json` + `trend_detector.py` |
+| 3 | Suivi temporel des entités | 🟠 Élevé | `scripts/entity_timeline.py` + endpoint Flask |
+| 4 | Score de crédibilité des sources | 🟠 Élevé | `utils/source_credibility.py` + `config/sources_credibility.json` |
+| 5 | Résumé exécutif automatisé | 🟠 Élevé | `scripts/generate_briefing.py` + endpoint Flask |
+| 6 | Estimation du temps de lecture | 🟡 Moyen | `utils/reading_time.py` + `scripts/enrich_reading_time.py` |
+| 7 | Analyse croisée des flux | 🟡 Moyen | `scripts/cross_flux_analysis.py` + endpoint Flask |
+| 8 | Scoring pondéré par crédibilité | 🟡 Moyen | `utils/scoring.py` (multiplicateur source) |
+| 9 | API endpoints nouvelles fonctions | 🟡 Moyen | `viewer/app.py` (5 nouveaux endpoints) |
+| 10 | Tests unitaires (50 tests) | 🟢 Bas | `tests/test_new_features.py` |
+
+---
+
+## Priorité 1 — `utils/deduplication.py` : Déduplication de contenu
+
+- Nouveau module avec `Deduplicator` (classe) et fonctions utilitaires :
+  - `compute_title_similarity(t1, t2)` : similarité Jaccard sur bigrammes de mots normalisés (insensible accents/casse)
+  - `compute_resume_fingerprint(text)` : empreinte MD5 des 200 premiers caractères normalisés
+  - `compute_url_fingerprint(url)` : empreinte MD5 de l'URL normalisée
+  - `deduplicate(articles)` : déduplication en place, stats (`total/unique/removed`)
+  - `deduplicate_incremental(new, existing)` : filtre les nouveaux articles vs existants
+- **3 signaux combinés** : URL exacte + empreinte résumé MD5 + similarité titre Jaccard ≥ 0.80
+- Intégration dans `get-keyword-from-rss.py` : remplacement de la déduplication par URL seule par la déduplication avancée (titre + URL + résumé)
+
+## Priorité 2 — `config/alert_rules.json` : Règles d'alertes configurables
+
+- Nouveau fichier de configuration pour `trend_detector.py` :
+  - Seuils globaux (`threshold_ratio`, `top_n`, `min_mentions_24h`)
+  - Seuils **par type d'entité** (ex: GPE seuil 2.5, EVENT seuil 1.5)
+  - Types d'entités à activer/désactiver individuellement
+  - Filtres (entités exclues, longueur min/max)
+  - Configuration des notifications (Discord/Slack/Ntfy) avec niveaux
+- `trend_detector.py` entièrement refactorisé :
+  - Chargement dynamique de `alert_rules.json` (CLI surcharge la config)
+  - Seuils par type d'entité respectés dans `detect_trends()`
+  - Niveaux d'alerte (modéré/élevé/critique) configurables avec émojis
+  - Notifications webhook optionnelles pour niveaux sélectionnés
+  - `--no-notify` pour désactiver les notifications à la demande
+
+## Priorité 3 — `scripts/entity_timeline.py` : Suivi temporel des entités
+
+- Nouveau script qui construit la série chronologique des mentions d'entités :
+  - Scanne tous les articles de `data/articles/` et `data/articles-from-rss/`
+  - Produit `data/entity_timeline.json` : dates, top entités, séries complètes
+  - Options : `--days`, `--top`, `--entity`, `--type`, `--dry-run`
+- Endpoint Flask `GET /api/entities/timeline` avec cache 1h
+
+## Priorité 4 — `utils/source_credibility.py` : Score de crédibilité
+
+- `CredibilityEngine` : évalue 41 sources francophones et anglophones :
+  - Scores 0–100, biais éditorial, type de média, pays, niveau de fact-checking
+  - Correspondance exacte + partielle (insensible aux suffixes : "Le Monde diplomatique" → Le Monde)
+  - `get_score()`, `get_multiplier()` (0.60–1.20), `get_metadata()`, `rate_articles()`
+- `config/sources_credibility.json` : base de données initiale de 41 sources
+- Endpoint Flask `GET /api/sources/credibility`
+
+## Priorité 5 — `scripts/generate_briefing.py` : Résumé exécutif
+
+- Génère un briefing Markdown quotidien (`--period daily`) ou hebdomadaire (`--period weekly`) :
+  - Top entités + alertes actives + articles les mieux scorés + statistiques de sentiment
+  - Synthèse narrative via EurIA (désactivable avec `--no-ai`)
+  - Frontmatter YAML + sections structurées
+  - Sortie : `rapports/markdown/_BRIEFING_/briefing_YYYY-MM-DD_{period}.md`
+- Endpoint Flask `POST /api/briefing/generate`
+
+## Priorité 6 — `utils/reading_time.py` : Temps de lecture estimé
+
+- `estimate_reading_time(text, wpm=230)` : estimation basée sur 230 mots/min (adulte francophone, INSERM)
+- `count_words(text)` : nettoyage URLs, HTML, Markdown avant comptage
+- `enrich_reading_time(articles)` : enrichissement en masse avec `overwrite=False` par défaut
+- `scripts/enrich_reading_time.py` : script CLI avec `--flux`, `--keyword`, `--dry-run`, `--force`
+- Champs ajoutés : `temps_lecture_minutes` (float) et `temps_lecture_label` (str)
+
+## Priorité 7 — `scripts/cross_flux_analysis.py` : Analyse croisée
+
+- Détecte les entités présentes dans ≥ N flux distincts (`--min-flux 2`)
+- Produit `data/cross_flux_report.json` et `rapports/markdown/_CROSSFLUX_/cross_flux_YYYY-MM-DD.md`
+- Rapport avec tableau de convergence et détail par entité
+- Endpoint Flask `GET /api/cross-flux`
+
+## Priorité 8 — `utils/scoring.py` : Multiplicateur de crédibilité
+
+- `ScoringEngine` charge maintenant `CredibilityEngine` de façon optionnelle
+- Le score final de chaque article est multiplié par le score de crédibilité de sa source
+  (ex: Reuters → ×1.18, source inconnue → ×0.90, source faible → ×0.72)
+- Rétrocompatible : si `sources_credibility.json` est absent, comportement identique à avant
+
+## Priorité 9 — `viewer/app.py` : 5 nouveaux endpoints API
+
+| Route | Description |
+|---|---|
+| `GET /api/entities/timeline` | Série chronologique des entités |
+| `GET /api/sources/credibility` | Score de crédibilité d'une source ou liste complète |
+| `GET /api/alerts/rules` | Lire les règles d'alertes |
+| `POST /api/alerts/rules` | Sauvegarder les règles d'alertes |
+| `POST /api/briefing/generate` | Générer un briefing exécutif |
+| `GET /api/cross-flux` | Analyse croisée des flux |
+
+## Priorité 10 — `tests/test_new_features.py` : 50 tests unitaires
+
+- Couverture : `utils/deduplication.py`, `utils/source_credibility.py`, `utils/reading_time.py`, `scripts/trend_detector.py`
+- 100% de réussite
+
+---
+
+
 
 ## `utils/quota.py` — resync disque automatique
 

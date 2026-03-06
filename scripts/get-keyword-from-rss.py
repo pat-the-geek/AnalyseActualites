@@ -32,6 +32,7 @@ from utils.api_client import EurIAClient
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
 from utils.quota import get_quota_manager
+from utils.deduplication import Deduplicator
 
 # Constantes
 
@@ -265,14 +266,21 @@ for kw, articles in results.items():
     # Charger existant pour éviter doublons
     if out_path.exists():
         with open(out_path, "r", encoding="utf-8") as f:
-            existing = {a["URL"]: a for a in json.load(f)}
-        print_console(f"{len(existing)} articles déjà présents dans {out_path.name}")
+            existing_list = json.load(f)
+        print_console(f"{len(existing_list)} articles déjà présents dans {out_path.name}")
     else:
-        existing = {}
-    # Fusionner sans doublon
-    merged = {**existing, **articles}
+        existing_list = []
+    # Déduplication avancée (URL + similarité de titre)
+    dedup = Deduplicator(title_threshold=0.85)
+    new_list = list(articles.values())
+    unique_new = dedup.deduplicate_incremental(new_list, existing_list)
+    if dedup.stats["removed"] > 0:
+        print_console(
+            f"  Déduplication : {dedup.stats['removed']} doublon(s) supprimé(s) pour '{kw}'"
+        )
+    merged = existing_list + unique_new
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(list(merged.values()), f, ensure_ascii=False, indent=4)
+        json.dump(merged, f, ensure_ascii=False, indent=4)
     print_console(f"✓ {len(merged)} articles pour le mot-clé '{kw}' dans {out_path}")
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -154,6 +154,7 @@ class ScoringEngine:
             project_root = Path(__file__).parent.parent
         self.project_root = project_root
         self._keywords: list[str] = self._load_keywords()
+        self._credibility = self._load_credibility()
 
     def _load_keywords(self) -> list[str]:
         kw_file = self.project_root / "config" / "keyword-to-search.json"
@@ -166,6 +167,14 @@ class ScoringEngine:
             default_logger.warning(f"Impossible de charger les mots-clés pour scoring : {e}")
             return []
 
+    def _load_credibility(self):
+        """Charge le moteur de crédibilité des sources (optionnel)."""
+        try:
+            from .source_credibility import CredibilityEngine
+            return CredibilityEngine(self.project_root)
+        except Exception:
+            return None
+
     def score_article(
         self,
         article: dict,
@@ -173,6 +182,8 @@ class ScoringEngine:
         weights: Optional[dict] = None,
     ) -> float:
         """Calcule le score de pertinence d'un article (0–100).
+
+        Intègre un multiplicateur de crédibilité de la source si disponible.
 
         Args:
             article : dict article (format interne WUDD.ai)
@@ -194,9 +205,9 @@ class ScoringEngine:
         if weights:
             w.update(weights)
 
-        freshness = _freshness_score(article.get("Date de publication", ""), now)
-        entities = _entity_score(article.get("entities", {}))
-        keywords = _keyword_score(article.get("Résumé", ""), self._keywords)
+        freshness    = _freshness_score(article.get("Date de publication", ""), now)
+        entities     = _entity_score(article.get("entities", {}))
+        keywords     = _keyword_score(article.get("Résumé", ""), self._keywords)
         completeness = _completeness_score(article)
 
         score = (
@@ -205,6 +216,13 @@ class ScoringEngine:
             + keywords * w["keywords"]
             + completeness * w["completeness"]
         )
+
+        # Multiplicateur de crédibilité de la source (optionnel)
+        if self._credibility is not None:
+            source = article.get("Sources") or article.get("source") or ""
+            multiplier = self._credibility.get_multiplier(str(source))
+            score *= multiplier
+
         return round(min(100.0, max(0.0, score)), 1)
 
     def score_and_sort(

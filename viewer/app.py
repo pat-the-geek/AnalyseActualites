@@ -2165,6 +2165,228 @@ def api_webhook_test():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Nouvelles fonctionnalités (v2.3) ─────────────────────────────────────────
+
+@app.route("/api/entities/timeline")
+def api_entities_timeline():
+    """Série chronologique des mentions d'entités.
+
+    Query params :
+      days       : fenêtre temporelle en jours (défaut 30)
+      top        : nombre d'entités (défaut 30)
+      entity     : filtrer sur une valeur d'entité
+      type       : filtrer sur un type d'entité (PERSON, ORG…)
+      regenerate : si "1", force le recalcul (sinon utilise le cache JSON)
+    """
+    try:
+        days       = int(request.args.get("days", 30))
+        top_n      = int(request.args.get("top", 30))
+        entity     = request.args.get("entity") or None
+        etype      = request.args.get("type")   or None
+        regenerate = request.args.get("regenerate") == "1"
+
+        timeline_file = PROJECT_ROOT / "data" / "entity_timeline.json"
+
+        # Utiliser le fichier mis en cache si présent et non périmé (< 1h)
+        if not regenerate and timeline_file.exists() and not entity and not etype:
+            import time as _time
+            age_s = _time.time() - timeline_file.stat().st_mtime
+            if age_s < 3600:
+                data = json.loads(timeline_file.read_text(encoding="utf-8"))
+                return jsonify(data)
+
+        # Import local pour éviter la dépendance circulaire au démarrage
+        import sys as _sys
+        _sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts.entity_timeline import collect_timeline, fill_missing_dates, build_top_entities
+
+        raw = collect_timeline(PROJECT_ROOT, days=days, entity_filter=entity, type_filter=etype)
+        top_entities = build_top_entities(raw, top_n=top_n)
+        top_keys = {e["key"] for e in top_entities}
+        filled = fill_missing_dates({k: v for k, v in raw.items() if k in top_keys}, days=days)
+
+        result = {
+            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "window_days": days,
+            "top_entities": top_entities,
+            "timeline": filled,
+        }
+
+        # Sauvegarder le cache si requête sans filtre
+        if not entity and not etype:
+            timeline_file.parent.mkdir(parents=True, exist_ok=True)
+            timeline_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/sources/credibility")
+def api_sources_credibility():
+    """Score de crédibilité des sources.
+
+    Query params :
+      source : nom de la source à évaluer (retourne une seule entrée)
+               Si absent, retourne toutes les sources de la base
+    """
+    try:
+        from utils.source_credibility import CredibilityEngine
+        engine = CredibilityEngine(PROJECT_ROOT)
+
+        source_query = request.args.get("source") or None
+        if source_query:
+            meta = engine.get_metadata(source_query)
+            meta["source"] = source_query
+            meta["multiplier"] = engine.get_multiplier(source_query)
+            return jsonify(meta)
+
+        # Toutes les sources de la base
+        all_sources = []
+        for name, entry in engine._db.items():
+            all_sources.append({
+                "source":     name,
+                "score":      entry.get("score", 50),
+                "biais":      entry.get("biais", "inconnu"),
+                "type":       entry.get("type", "inconnu"),
+                "pays":       entry.get("pays", "inconnu"),
+                "fiabilite":  entry.get("fiabilite", "non évalué"),
+                "multiplier": engine.get_multiplier(name),
+            })
+        all_sources.sort(key=lambda x: -x["score"])
+        return jsonify({"sources": all_sources, "total": len(all_sources)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/alerts/rules", methods=["GET"])
+def api_get_alert_rules():
+    """Retourne la configuration des règles d'alertes."""
+    rules_file = PROJECT_ROOT / "config" / "alert_rules.json"
+    if not rules_file.exists():
+        return jsonify({"error": "alert_rules.json introuvable"}), 404
+    try:
+        return jsonify(json.loads(rules_file.read_text(encoding="utf-8")))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/alerts/rules", methods=["POST"])
+def api_save_alert_rules():
+    """Sauvegarde la configuration des règles d'alertes."""
+    rules_file = PROJECT_ROOT / "config" / "alert_rules.json"
+    try:
+        data = request.get_json(force=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Données invalides (dict attendu)"}), 400
+        rules_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return jsonify({"status": "ok", "message": "Règles d'alertes sauvegardées"})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/briefing/generate", methods=["POST"])
+def api_generate_briefing():
+    """Génère un briefing exécutif (sans synthèse IA, retourne le Markdown).
+
+    Body JSON :
+      period : "daily" (défaut) ou "weekly"
+    """
+    try:
+        body    = request.get_json(force=True) or {}
+        period  = body.get("period", "daily")
+        if period not in ("daily", "weekly"):
+            return jsonify({"error": "period doit être 'daily' ou 'weekly'"}), 400
+
+        import sys as _sys
+        _sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts.generate_briefing import (
+            collect_articles, compute_top_entities, load_alerts,
+            build_briefing_markdown, _PERIOD_HOURS,
+        )
+        from utils.scoring import ScoringEngine
+        from datetime import timedelta
+
+        hours = _PERIOD_HOURS[period]
+        now   = datetime.datetime.utcnow()
+        date_fin   = now.strftime("%Y-%m-%d")
+        date_debut = (now - timedelta(hours=hours)).strftime("%Y-%m-%d")
+        period_label = "hebdomadaire" if period == "weekly" else "quotidien"
+
+        articles     = collect_articles(PROJECT_ROOT, hours=hours)
+        engine       = ScoringEngine(PROJECT_ROOT)
+        top_articles = engine.score_and_sort(articles, top_n=10)
+        top_entities = compute_top_entities(articles, top_n=10)
+        alerts       = load_alerts(PROJECT_ROOT)
+
+        md = build_briefing_markdown(
+            period_label=period_label,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            articles=articles,
+            top_articles=top_articles,
+            top_entities=top_entities,
+            alerts=alerts,
+        )
+        return jsonify({
+            "period":       period,
+            "date_debut":   date_debut,
+            "date_fin":     date_fin,
+            "articles_count": len(articles),
+            "markdown":     md,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/cross-flux")
+def api_cross_flux():
+    """Analyse croisée des flux — entités communes.
+
+    Query params :
+      days     : fenêtre temporelle en jours (défaut 30)
+      min_flux : nombre minimal de flux (défaut 2)
+      top      : nombre d'entités (défaut 30)
+    """
+    try:
+        days      = int(request.args.get("days", 30))
+        min_flux  = int(request.args.get("min_flux", 2))
+        top_n     = int(request.args.get("top", 30))
+
+        # Essayer d'abord le fichier mis en cache
+        cache_file = PROJECT_ROOT / "data" / "cross_flux_report.json"
+        if cache_file.exists():
+            import time as _time
+            age_s = _time.time() - cache_file.stat().st_mtime
+            if age_s < 3600:
+                data = json.loads(cache_file.read_text(encoding="utf-8"))
+                return jsonify(data)
+
+        import sys as _sys
+        _sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts.cross_flux_analysis import collect_entities_by_flux, compute_cross_flux
+
+        flux_entities   = collect_entities_by_flux(PROJECT_ROOT, days=days)
+        cross_entities  = compute_cross_flux(flux_entities, min_flux=min_flux, top_n=top_n)
+
+        result = {
+            "generated_at":   datetime.datetime.utcnow().isoformat() + "Z",
+            "window_days":    days,
+            "min_flux":       min_flux,
+            "flux_count":     len(flux_entities),
+            "flux_list":      sorted(flux_entities.keys()),
+            "cross_entities": cross_entities,
+        }
+
+        # Mettre en cache
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_app(path):
