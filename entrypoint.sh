@@ -7,7 +7,7 @@ set -e
 # Cron ne propage pas les vars injectées par docker-compose env_file.
 # On les écrit dans /app/.env pour que load_dotenv() les retrouve à chaque job.
 echo "Génération de /app/.env depuis l'environnement Docker..."
-printenv | grep -E '^(URL|bearer|REEDER_JSON_URL|max_attempts|timeout_resume|timeout_rapport|default_error_message|CRON_ALERT_MAIL|CRON_ALERT_FROM|CRON_ALERT_SMTP|CRON_ALERT_PORT|CRON_ALERT_USER|CRON_ALERT_PASS)=' > /app/.env
+printenv | grep -E '^(URL|bearer|REEDER_JSON_URL|max_attempts|timeout_resume|timeout_rapport|MAX_RETRIES|TIMEOUT_RESUME|TIMEOUT_RAPPORT|default_error_message|CRON_ALERT_MAIL|CRON_ALERT_FROM|CRON_ALERT_SMTP|CRON_ALERT_PORT|CRON_ALERT_USER|CRON_ALERT_PASS|SMTP_HOST|SMTP_PORT|SMTP_USER|SMTP_PASSWORD|SMTP_FROM|SMTP_TO|WEBHOOK_DISCORD|WEBHOOK_SLACK|NTFY_URL|NTFY_TOKEN)=' > /app/.env
 echo "/app/.env généré avec $(wc -l < /app/.env) variable(s)."
 
 # ── 2. Installer la crontab personnalisée ────────────────────────────────────

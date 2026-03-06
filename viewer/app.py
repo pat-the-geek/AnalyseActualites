@@ -195,14 +195,18 @@ def latest_mtime(directory: Path) -> datetime.datetime | None:
 
 @app.route("/api/files")
 def api_files():
-    files = collect_files()
-    # Retry une fois si des JSON sont trouvés mais aucun markdown :
-    # virtiofs (Docker Desktop / macOS) peut livrer un listing incomplet
-    # de rapports/ quand viewer.log ou cron_*.log sont écrits simultanément.
-    if files and not any(f["type"] == "markdown" for f in files):
-        import time
-        time.sleep(0.15)
-        files = collect_files()
+    import time
+    # Double scan pour compenser les listings incomplets de virtiofs
+    # (Docker Desktop / macOS) : rglob() peut retourner un résultat partiel
+    # si le cache kernel est rafraîchi entre les deux appels.
+    files1 = collect_files()
+    time.sleep(0.20)
+    files2 = collect_files()
+    # Union des deux passes — chaque chemin vu dans l'une ou l'autre est retenu ;
+    # la seconde passe écrase les métadonnées de la première si les deux la voient.
+    by_path = {f["path"]: f for f in files1}
+    by_path.update({f["path"]: f for f in files2})
+    files = sorted(by_path.values(), key=lambda x: x["modified"], reverse=True)
     return jsonify(files)
 
 
@@ -375,6 +379,13 @@ def api_scheduler():
             "cron": "0 5 28-31 * *",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_radar.log",
+        },
+        {
+            "name": "Détection tendances & alertes",
+            "script": "trend_detector.py",
+            "cron": "0 7 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_trends.log",
         },
     ]
     for t in fixed:
@@ -1676,6 +1687,432 @@ def api_delete_file():
 
 
 # ── Serveur frontend React (production) ──────────────────────────────────────
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NOUVELLES FEATURES (v2.2) — Scoring, Tendances, Sentiment, RAG, Export
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/articles/top")
+def api_articles_top():
+    """Retourne les N articles les mieux scorés sur une fenêtre temporelle.
+
+    Paramètres :
+      n     : nombre d'articles (défaut: 10, max: 50)
+      hours : fenêtre en heures (défaut: 48, 0=sans filtre)
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from utils.scoring import ScoringEngine
+        n = min(int(request.args.get("n", 10)), 50)
+        hours = int(request.args.get("hours", 48))
+        engine = ScoringEngine(PROJECT_ROOT)
+        top = engine.get_top_articles(top_n=n, hours=hours)
+        return jsonify(top)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/alerts")
+def api_get_alerts():
+    """Retourne les alertes de tendance (data/alertes.json).
+
+    Paramètres :
+      niveau : filtre par niveau ("critique", "élevé", "modéré")
+    """
+    alerts_file = PROJECT_ROOT / "data" / "alertes.json"
+    if not alerts_file.exists():
+        return jsonify([])
+    try:
+        alerts = json.loads(alerts_file.read_text(encoding="utf-8"))
+        niveau = request.args.get("niveau", "").strip()
+        if niveau:
+            alerts = [a for a in alerts if a.get("niveau") == niveau]
+        return jsonify(alerts)
+    except (json.JSONDecodeError, OSError) as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/alerts/run", methods=["POST"])
+def api_run_trend_detector():
+    """Lance le détecteur de tendances et retourne les alertes générées."""
+    import sys
+    import subprocess
+    script = PROJECT_ROOT / "scripts" / "trend_detector.py"
+    if not script.exists():
+        return jsonify({"error": "Script trend_detector.py introuvable"}), 404
+
+    data = request.get_json(force=True) or {}
+    threshold = float(data.get("threshold", 2.0))
+    top = int(data.get("top", 20))
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), "--threshold", str(threshold), "--top", str(top)],
+            capture_output=True, text=True, timeout=120, cwd=str(PROJECT_ROOT)
+        )
+        alerts_file = PROJECT_ROOT / "data" / "alertes.json"
+        alerts = []
+        if alerts_file.exists():
+            try:
+                alerts = json.loads(alerts_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return jsonify({
+            "ok": result.returncode == 0,
+            "alerts": alerts,
+            "stdout": result.stdout[-2000:] if result.stdout else "",
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timeout (120s)"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sources/bias")
+def api_sources_bias():
+    """Agrège les données de sentiment par source pour détecter les biais éditoriaux.
+
+    Returns :
+      [{ source, article_count, sentiment_counts: {positif, neutre, négatif},
+         avg_score_sentiment, avg_score_ton, ton_distribution: {...} }]
+    """
+    from collections import defaultdict
+
+    data_dirs = [
+        PROJECT_ROOT / "data" / "articles",
+        PROJECT_ROOT / "data" / "articles-from-rss",
+    ]
+
+    sources: dict[str, dict] = defaultdict(lambda: {
+        "article_count": 0,
+        "sentiment_counts": {"positif": 0, "neutre": 0, "négatif": 0},
+        "score_sentiment_sum": 0,
+        "score_ton_sum": 0,
+        "score_count": 0,
+        "ton_distribution": {},
+    })
+
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        for json_file in data_dir.rglob("*.json"):
+            if "cache" in str(json_file):
+                continue
+            try:
+                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(articles, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+            for article in articles:
+                source = article.get("Sources", "Inconnu").strip()
+                if not source:
+                    continue
+                s = sources[source]
+                s["article_count"] += 1
+                sentiment = article.get("sentiment", "")
+                if sentiment in ("positif", "neutre", "négatif"):
+                    s["sentiment_counts"][sentiment] += 1
+                score_s = article.get("score_sentiment")
+                score_t = article.get("score_ton")
+                if isinstance(score_s, (int, float)) and isinstance(score_t, (int, float)):
+                    s["score_sentiment_sum"] += score_s
+                    s["score_ton_sum"] += score_t
+                    s["score_count"] += 1
+                ton = article.get("ton_editorial", "")
+                if ton:
+                    s["ton_distribution"][ton] = s["ton_distribution"].get(ton, 0) + 1
+
+    result = []
+    for source, data in sources.items():
+        count = data["score_count"]
+        result.append({
+            "source": source,
+            "article_count": data["article_count"],
+            "sentiment_counts": data["sentiment_counts"],
+            "avg_score_sentiment": round(data["score_sentiment_sum"] / count, 2) if count else None,
+            "avg_score_ton": round(data["score_ton_sum"] / count, 2) if count else None,
+            "ton_distribution": data["ton_distribution"],
+        })
+
+    result.sort(key=lambda x: x["article_count"], reverse=True)
+    return jsonify(result)
+
+
+@app.route("/api/synthesize-topic")
+def api_synthesize_topic():
+    """Synthèse comparative multi-sources en streaming SSE.
+
+    Paramètres :
+      entity_type  : type de l'entité (ex: "ORG")
+      entity_value : valeur de l'entité (ex: "OpenAI")
+      topic        : sujet libre (alternatif à entity_type+entity_value)
+      n            : nombre d'articles à consolider (défaut: 15)
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+    entity_type = request.args.get("entity_type", "").strip()
+    entity_value = request.args.get("entity_value", "").strip()
+    topic = request.args.get("topic", "").strip()
+    n = min(int(request.args.get("n", 15)), 30)
+
+    if not topic and not entity_value:
+        return jsonify({"error": "Paramètre topic ou entity_value requis"}), 400
+
+    label = topic or entity_value
+
+    # Collecte des articles pertinents
+    matching_articles = []
+    search_term = (entity_value or topic).lower()
+
+    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in str(json_file):
+                continue
+            try:
+                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(arts, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+            for article in arts:
+                resume = (article.get("Résumé") or "").lower()
+                entities = article.get("entities", {})
+                # Correspondance : entité NER OU présence dans le résumé
+                entity_match = False
+                if entity_type and entity_value:
+                    values = entities.get(entity_type, []) if isinstance(entities, dict) else []
+                    entity_match = entity_value in values
+                text_match = search_term in resume
+                if entity_match or text_match:
+                    matching_articles.append(article)
+
+    # Déduplication par URL
+    seen_urls = set()
+    deduped = []
+    for a in matching_articles:
+        url = a.get("URL", "")
+        if url and url in seen_urls:
+            continue
+        if url:
+            seen_urls.add(url)
+        deduped.append(a)
+
+    # Tri par date décroissante
+    deduped.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+    articles_to_use = deduped[:n]
+
+    api_url = os.environ.get("URL", "")
+    bearer  = os.environ.get("bearer", "")
+    if not api_url or not bearer:
+        return jsonify({"error": "Configuration API EurIA manquante (.env)"}), 503
+
+    if not articles_to_use:
+        def empty_stream():
+            msg = f"Aucun article trouvé pour « {label} »."
+            yield f'data: {json.dumps({"choices":[{"delta":{"content": msg},"finish_reason":None}]})}\n\n'
+            yield "data: [DONE]\n\n"
+        return Response(stream_with_context(empty_stream()), content_type="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # Construire le prompt à partir des articles collectés
+    sources_block = ""
+    for i, a in enumerate(articles_to_use, 1):
+        source = a.get("Sources", "Source inconnue")
+        date   = a.get("Date de publication", "")
+        resume = (a.get("Résumé") or "")[:600]
+        sources_block += f"\n--- Article {i} ({source}, {date}) ---\n{resume}\n"
+
+    prompt = (
+        f"Tu es un analyste de presse. Voici {len(articles_to_use)} articles de sources différentes "
+        f"traitant du sujet : **{label}**.\n\n"
+        "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+        "1. **Résumé de la situation** (2-3 phrases)\n"
+        "2. **Points de convergence** entre les sources\n"
+        "3. **Points de divergence ou contradictions**\n"
+        "4. **Positionnement éditorial** : sources favorables, neutres ou critiques\n"
+        "5. **Éléments clés manquants**\n\n"
+        "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n"
+        "Génère uniquement le contenu Markdown, sans balises <think>.\n\n"
+        f"Articles :\n{sources_block}"
+    )
+
+    import requests as req
+    payload = {
+        "messages": [{"role": "user", "content": prompt}],
+        "model": "qwen3",
+        "stream": True,
+    }
+    api_headers = {
+        "Authorization": f"Bearer {bearer}",
+        "Content-Type": "application/json",
+    }
+
+    def generate_synthesis():
+        try:
+            r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=120)
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if line:
+                    decoded = line.decode("utf-8")
+                    # Normalise le préfixe SSE : certaines versions de l'API
+                    # envoient du JSON brut sans "data: "
+                    if not decoded.startswith("data:"):
+                        decoded = "data: " + decoded
+                    yield decoded + "\n\n"
+        except Exception as exc:
+            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    return Response(
+        stream_with_context(generate_synthesis()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/export/atom")
+def api_export_atom():
+    """Génère et retourne un flux Atom pour un flux ou tous les articles.
+
+    Paramètres :
+      flux        : nom du flux (ex: "Intelligence-artificielle")
+      keyword     : mot-clé (ex: "OpenAI")
+      max_entries : nombre max d'entrées (défaut: 50)
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from utils.exporters.atom_feed import generate_atom_feed, generate_atom_from_flux
+
+        flux = request.args.get("flux", "").strip()
+        keyword = request.args.get("keyword", "").strip()
+        max_entries = min(int(request.args.get("max_entries", 50)), 200)
+
+        if flux:
+            xml = generate_atom_from_flux(PROJECT_ROOT, flux, max_entries)
+            feed_title = f"WUDD.ai · {flux}"
+        elif keyword:
+            kw_file = PROJECT_ROOT / "data" / "articles-from-rss" / f"{keyword}.json"
+            if not kw_file.exists():
+                return jsonify({"error": "Fichier keyword introuvable"}), 404
+            articles = json.loads(kw_file.read_text(encoding="utf-8"))
+            articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+            from utils.exporters.atom_feed import _FEED_ID_BASE
+            xml = generate_atom_feed(
+                articles, feed_title=f"WUDD.ai · {keyword}",
+                feed_id=f"{_FEED_ID_BASE}keyword-{keyword.lower()}",
+                max_entries=max_entries,
+            )
+        else:
+            # Tout agréger
+            all_articles = []
+            for d in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+                if not d.exists():
+                    continue
+                for jf in sorted(d.rglob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)[:10]:
+                    if "cache" in str(jf):
+                        continue
+                    try:
+                        data = json.loads(jf.read_text(encoding="utf-8"))
+                        if isinstance(data, list):
+                            all_articles.extend(data)
+                    except Exception:
+                        continue
+            all_articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+            xml = generate_atom_feed(all_articles, feed_title="WUDD.ai · Veille complète",
+                                     max_entries=max_entries)
+
+        return Response(xml, mimetype="application/atom+xml; charset=utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/export/newsletter", methods=["GET", "POST"])
+def api_export_newsletter():
+    """Génère une newsletter HTML depuis les articles récents.
+
+    GET  → retourne le HTML brut
+    POST → { send: true } pour envoyer par SMTP (si configuré)
+
+    Paramètres GET :
+      hours : fenêtre temporelle (défaut: 48)
+      title : titre de la newsletter
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from utils.exporters.newsletter import generate_newsletter_html, send_newsletter
+        from utils.scoring import ScoringEngine
+
+        hours = int(request.args.get("hours", 48))
+        title = request.args.get("title", "").strip() or \
+            f"Veille WUDD.ai — {datetime.datetime.now().strftime('%d %B %Y')}"
+
+        engine = ScoringEngine(PROJECT_ROOT)
+        articles = engine.get_top_articles(top_n=20, hours=hours)
+        html = generate_newsletter_html(articles, title=title)
+
+        # Sauvegarde locale
+        nl_dir = PROJECT_ROOT / "rapports" / "html"
+        nl_dir.mkdir(parents=True, exist_ok=True)
+        slug = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        nl_file = nl_dir / f"newsletter_{slug}.html"
+        nl_file.write_text(html, encoding="utf-8")
+
+        if request.method == "POST":
+            data = request.get_json(force=True) or {}
+            if data.get("send"):
+                success = send_newsletter(html, subject=title)
+                return jsonify({"ok": success, "path": str(nl_file.relative_to(PROJECT_ROOT))})
+
+        return Response(html, mimetype="text/html; charset=utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/export/webhook-test", methods=["POST"])
+def api_webhook_test():
+    """Teste l'envoi webhook avec les alertes actuelles.
+
+    Body JSON : { platform: "discord"|"slack"|"ntfy"|"all" }
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from utils.exporters.webhook import send_discord, send_slack, send_ntfy, notify_alerts
+
+        platform = (request.get_json(force=True) or {}).get("platform", "all")
+        alerts_file = PROJECT_ROOT / "data" / "alertes.json"
+        alerts = []
+        if alerts_file.exists():
+            try:
+                alerts = json.loads(alerts_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        if not alerts:
+            return jsonify({"ok": False, "message": "Aucune alerte disponible — lancez d'abord trend_detector.py"})
+
+        if platform == "discord":
+            ok = send_discord(alerts)
+            return jsonify({"discord": ok})
+        elif platform == "slack":
+            ok = send_slack(alerts)
+            return jsonify({"slack": ok})
+        elif platform == "ntfy":
+            ok = send_ntfy(alerts)
+            return jsonify({"ntfy": ok})
+        else:
+            results = notify_alerts(alerts)
+            return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")

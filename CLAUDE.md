@@ -142,6 +142,7 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | Monday 06:00 | `scheduler_articles.py` | Weekly multi-flux article collection |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
 | Daily 23:00 | `generate_48h_report.py` | Daily Top 10 entities report (48h window) |
+| Daily 01:00 | `enrich_sentiment.py` | Round-robin sentiment enrichment (1 file/day, articles-from-rss/) |
 | Last day of month 05:00 | `radar_wudd.py` | Monthly thematic radar report |
 | Last day of month 05:30 | `articles_rss_to_markdown.py` | Convert RSS articles to Markdown |
 
@@ -159,6 +160,8 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `articles_rss_to_markdown.py` | Convert RSS keyword JSON articles → annotated Markdown (with inline NER) | `--keyword` |
 | `analyse_thematiques.py` | Thematic classification statistics | (none; reads `data/articles/`) |
 | `enrich_entities.py` | Enrich existing articles with named entities (NER) | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
+| `enrich_sentiment.py` | Round-robin sentiment enrichment — adds `sentiment`, `score_sentiment`, `ton_editorial`, `score_ton` | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
+| `trend_detector.py` | Detect trending entities and generate `data/alertes.json` | `--dry-run` |
 | `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Keyword-based report generation | (none) |
@@ -175,12 +178,16 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | Module | Purpose |
 |---|---|
 | `utils/config.py` | Singleton `Config` class — loads `.env`, validates vars, provides typed paths |
-| `utils/api_client.py` | EurIA API client with retry/backoff logic — `generate_summary()`, `generate_entities()` (NER), `generate_report()` |
+| `utils/api_client.py` | EurIA API client with retry/backoff logic — `generate_summary()`, `generate_entities()` (NER), `generate_sentiment()`, `generate_report()` |
 | `utils/http_utils.py` | HTTP session with `urllib3` retry adapter |
 | `utils/date_utils.py` | Multi-format date parsing and validation |
 | `utils/logging.py` | Centralized timestamped logging (`print_console()`) |
 | `utils/cache.py` | File-based TTL cache (24h default, MD5 keys) |
 | `utils/parallel.py` | `ThreadPoolExecutor` wrapper for I/O-bound parallelism |
+| `utils/scoring.py` | `ScoringEngine` — ranks articles by relevance score for Top articles and newsletter |
+| `utils/exporters/atom_feed.py` | Atom XML feed generation (`generate_atom_feed()`, `generate_atom_from_flux()`) |
+| `utils/exporters/newsletter.py` | Newsletter HTML generation + SMTP send (`generate_newsletter_html()`, `send_newsletter()`) |
+| `utils/exporters/webhook.py` | Webhook notifications — Discord, Slack, Ntfy (`send_discord()`, `send_slack()`, `send_ntfy()`) |
 
 ## Viewer (`viewer/`)
 
@@ -277,7 +284,11 @@ rapports/
       "ORG": ["OpenAI", "Infomaniak"],
       "GPE": ["France", "Paris"],
       "PRODUCT": ["ChatGPT"]
-    }
+    },
+    "sentiment": "positif",
+    "score_sentiment": 4,
+    "ton_editorial": "factuel",
+    "score_ton": 5
   }
 ]
 ```
@@ -285,6 +296,8 @@ rapports/
 Images are filtered to width > 500px (up to 3 per article).
 
 The `entities` field is optional — added by `enrich_entities.py` or `get-keyword-from-rss.py`. It uses 18 NER category types (PERSON, ORG, GPE, LOC, PRODUCT, EVENT, DATE, MONEY, etc.). Absent from older articles until enriched.
+
+The `sentiment` / `score_sentiment` / `ton_editorial` / `score_ton` fields are optional — added by `enrich_sentiment.py` (Round-Robin, 1 file/day on `articles-from-rss/`). Absent from older articles until enriched.
 
 ---
 

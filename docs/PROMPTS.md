@@ -1,19 +1,23 @@
 # Prompts EurIA — WUDD.ai
 
 > Documentation complète des prompts utilisés avec l'API EurIA (Qwen3)
-> Dernière mise à jour : 28 février 2026
+> Dernière mise à jour : 6 mars 2026
 
 ---
 
 ## Vue d'ensemble
 
-Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour trois opérations :
+Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour six opérations :
 
 1. **Résumé d'article** — synthèse d'un texte HTML extrait, max 20 lignes
 2. **Rapport synthétique** — rapport Markdown structuré à partir d'un JSON d'articles
 3. **Extraction d'entités NER** — identification des entités nommées dans un résumé (18 types)
+4. **Sentiment & ton éditorial** — analyse du sentiment et de la posture journalistique d'un article
+5. **Synthèse encyclopédique** — fiche Markdown sur une entité (personne, org, lieu…) avec web search
+6. **Synthèse RAG multi-sources** — analyse comparative de N articles sur un sujet, en streaming
 
-Toutes les opérations passent par `utils/api_client.py` via la méthode centrale `ask()`.
+Les opérations 1–4 passent par `utils/api_client.py` via la méthode centrale `ask()`.
+Les opérations 5–6 sont implémentées directement dans `viewer/app.py` (routes SSE streaming).
 
 ---
 
@@ -384,6 +388,9 @@ except RuntimeError as e:
 | Résumé d'article | 8–12s | 60s |
 | Génération de rapport | 30–90s | 300s |
 | Extraction NER | 5–10s | 60s |
+| Sentiment & ton éditorial | 2–5s | 30s |
+| Synthèse encyclopédique | 10–30s | 90s |
+| Synthèse RAG multi-sources | 15–60s | 120s |
 
 ### Tokens estimés
 
@@ -393,6 +400,9 @@ except RuntimeError as e:
 | Résumé (article 15 000 chars) | ~4 500 | ~300 |
 | Rapport (50 articles) | ~15 000 | ~2 000 |
 | NER (résumé 500 chars) | ~200 | ~150 |
+| Sentiment (résumé 3 000 chars) | ~900 | ~50 |
+| Synthèse encyclopédique | ~100 | ~800 |
+| RAG (15 articles × 600 chars) | ~3 000 | ~1 000 |
 
 ---
 
@@ -415,6 +425,182 @@ except RuntimeError as e:
 
 ---
 
+---
+
+## Prompt 4 : Sentiment & ton éditorial
+
+### Contexte d'utilisation
+
+- **Méthode** : `EurIAClient.generate_sentiment(resume, timeout)`
+- **Fichier** : `utils/api_client.py`
+- **Appelé par** : `scripts/enrich_sentiment.py` (mode Round-Robin, 1 fichier/jour)
+- **Objectif** : Classifier le sentiment et le ton éditorial d'un article pour alimenter le panel *Biais des sources*
+
+### Template du prompt
+
+```python
+prompt = (
+    "Analyse le ton et le sentiment de ce texte journalistique. "
+    "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
+    "Champs attendus :\n"
+    '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
+    '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
+    '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
+    '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)\n\n'
+    f"Texte :\n{resume.strip()[:3000]}"
+)
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 30s | Réponse JSON courte |
+| **Max attempts** | 2 | Quota API préservé |
+| **max_tokens** | 150 | JSON compact attendu |
+| **enable_web_search** | True | Paramètre global |
+| **Troncature** | 3 000 chars | Résumé suffisant pour l'analyse |
+
+### Format de sortie attendu
+
+```json
+{
+  "sentiment": "négatif",
+  "score_sentiment": 2,
+  "ton_editorial": "alarmiste",
+  "score_ton": 2
+}
+```
+
+### Intégration dans le JSON article
+
+Les champs sont ajoutés directement dans chaque article enrichi :
+
+```json
+{
+  "Résumé": "...",
+  "sentiment": "négatif",
+  "score_sentiment": 2,
+  "ton_editorial": "alarmiste",
+  "score_ton": 2
+}
+```
+
+---
+
+## Prompt 5 : Synthèse encyclopédique d'entité
+
+### Contexte d'utilisation
+
+- **Route Flask** : `GET /api/entities/info?type=ORG&value=OpenAI`
+- **Fichier** : `viewer/app.py` — fonction `api_entities_info()`
+- **Déclenché par** : onglet **Info** du composant `EntityArticlePanel.jsx`
+- **Objectif** : Générer une fiche encyclopédique Markdown sur une entité nommée, en streaming SSE
+
+### Template du prompt
+
+```python
+prompt = (
+    f"Fournis une synthèse encyclopédique en français sur « {entity_value} » ({label}).\n\n"
+    "Structure ta réponse en Markdown avec des sections pertinentes "
+    "(présentation, rôle, contexte, actualité récente, chiffres clés, liens avec d'autres acteurs…).\n"
+    "Sois factuel et concis. Génère uniquement le contenu Markdown, sans balises <think>."
+)
+```
+
+Où `label` est le libellé français du type NER (`PERSON` → `"personne physique"`, `ORG` → `"organisation ou entreprise"`, etc.).
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 90s | Synthèse riche avec web search |
+| **enable_web_search** | **True** | Indispensable pour données récentes |
+| **stream** | True | Affichage progressif côté React |
+| **Format sortie** | Markdown libre | Rendu via ReactMarkdown |
+
+### Correspondance type → libellé
+
+| Type NER | Libellé injecté |
+| --- | --- |
+| `PERSON` | personne physique |
+| `ORG` | organisation ou entreprise |
+| `GPE` | lieu géopolitique |
+| `LOC` | lieu géographique |
+| `PRODUCT` | produit ou technologie |
+| `EVENT` | événement |
+| `WORK_OF_ART` | œuvre |
+| `LAW` | loi ou règlement |
+| `NORP` | groupe national, religieux ou politique |
+| `FAC` | site ou bâtiment |
+
+### Remarques
+
+- Le prompt demande explicitement `sans balises <think>` pour éviter que Qwen3 n'expose son raisonnement interne.
+- Le parseur React filtre quand même les blocs `<think>…</think>` résiduels via un flag `inThink`.
+
+---
+
+## Prompt 6 : Synthèse RAG multi-sources
+
+### Contexte d'utilisation
+
+- **Route Flask** : `GET /api/synthesize-topic?entity_type=ORG&entity_value=OpenAI&n=15`
+- **Méthode** : `EurIAClient.synthesize_topic(topic, articles, timeout)` (non-streaming) ou appel direct en streaming dans `viewer/app.py`
+- **Fichier** : `viewer/app.py` — fonction `api_synthesize_topic()` + `utils/api_client.py`
+- **Déclenché par** : onglet **RAG** du composant `EntityArticlePanel.jsx`
+- **Objectif** : Analyse comparative de N articles issus de sources différentes sur un sujet
+
+### Template du prompt
+
+```python
+prompt = (
+    f"Tu es un analyste de presse. Voici {len(articles_to_use)} articles de sources différentes "
+    f"traitant du sujet : **{label}**.\n\n"
+    "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+    "1. **Résumé de la situation** (2-3 phrases)\n"
+    "2. **Points de convergence** entre les sources\n"
+    "3. **Points de divergence ou contradictions**\n"
+    "4. **Positionnement éditorial** : sources favorables, neutres ou critiques\n"
+    "5. **Éléments clés manquants**\n\n"
+    "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n"
+    "Génère uniquement le contenu Markdown, sans balises <think>.\n\n"
+    f"Articles :\n{sources_block}"
+)
+```
+
+Où `sources_block` est construit ainsi pour chaque article (max 600 chars de résumé) :
+
+```
+--- Article N (Sources, Date de publication) ---
+[Résumé tronqué à 600 chars]
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 120s | Prompt long (N articles concaténés) |
+| **Max articles** | 15 (configurable via `?n=`) | Limite de tokens |
+| **Troncature résumé** | 600 chars/article | ~9 000 chars total pour 15 articles |
+| **enable_web_search** | False | Données issues des articles locaux |
+| **stream** | True | Affichage progressif côté React |
+
+### Collecte des articles sources
+
+La route Flask collecte les articles en deux passes :
+1. Correspondance NER exacte : `entity_value` dans `entities[entity_type]`
+2. Correspondance textuelle : `search_term` présent dans le champ `Résumé`
+
+Déduplication par URL, tri par date décroissante, max `n` articles retenus.
+
+### Remarques
+
+- `enable_web_search` est volontairement **désactivé** : la synthèse se base uniquement sur les articles déjà collectés (RAG pur, pas de recherche web externe).
+- Contrairement au prompt 5, le prompt 6 n'utilise pas `EurIAClient.ask()` : l'appel HTTP est fait directement dans `viewer/app.py` pour permettre le streaming SSE natif.
+
+---
+
 ## Références
 
 - [API EurIA Infomaniak](https://euria.infomaniak.com)
@@ -424,4 +610,4 @@ except RuntimeError as e:
 
 **Auteur** : Patrick Ostertag
 **Email** : patrick.ostertag@gmail.com
-**Dernière mise à jour** : 28 février 2026
+**Dernière mise à jour** : 6 mars 2026

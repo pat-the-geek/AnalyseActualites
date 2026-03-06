@@ -6,7 +6,11 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2 } from 'lucide-react'
+import AlertsPanel from './components/AlertsPanel'
+import ExportPanel from './components/ExportPanel'
+import TopArticlesPanel from './components/TopArticlesPanel'
+import SourceBiasPanel from './components/SourceBiasPanel'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 // Heures de passage du cron get-keyword-from-rss.py (Europe/Paris)
@@ -215,6 +219,10 @@ export default function App() {
   const [entitySearch, setEntitySearch] = useState(null) // { value, type } | null
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [consoleOpen, setConsoleOpen]     = useState(false)
+  const [alertsOpen, setAlertsOpen]       = useState(false)
+  const [topOpen, setTopOpen]             = useState(false)
+  const [biasOpen, setBiasOpen]           = useState(false)
+  const [exportOpen, setExportOpen]       = useState(false)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isRefreshing, setIsRefreshing]   = useState(false)
@@ -257,13 +265,14 @@ export default function App() {
         setFiles(prev => {
           // Ne jamais remplacer une liste non-vide par une liste vide
           if (data.length === 0 && prev.length > 0) return prev
-          // Ne pas perdre les fichiers markdown si la nouvelle réponse n'en
-          // contient pas (virtiofs - lecture incomplète de rapports/ transitoire)
-          const prevMd = prev.filter(f => f.type === 'markdown')
-          const newMd  = data.filter(f => f.type === 'markdown')
-          if (prevMd.length > 0 && newMd.length === 0) {
-            const newOther = data.filter(f => f.type !== 'markdown')
-            return [...newOther, ...prevMd].sort((a, b) => b.modified - a.modified)
+          // Conserver les markdown présents dans l'état précédent mais absents
+          // de la nouvelle réponse (virtiofs - listing partiel transitoire).
+          // Ne s'applique pas aux suppressions car deleteFile() retire le fichier
+          // de l'état via setFiles(filter) avant tout appel refreshFiles().
+          const newPaths = new Set(data.map(f => f.path))
+          const missingMd = prev.filter(f => f.type === 'markdown' && !newPaths.has(f.path))
+          if (missingMd.length > 0) {
+            return [...data, ...missingMd].sort((a, b) => b.modified - a.modified)
           }
           return data
         })
@@ -486,6 +495,46 @@ export default function App() {
           )}
         </button>
 
+        {/* Top articles */}
+        <button
+          onClick={() => setTopOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Top articles par score de pertinence"
+        >
+          <Star size={13} />
+          <span className="hidden sm:inline">Top</span>
+        </button>
+
+        {/* Tendances & alertes */}
+        <button
+          onClick={() => setAlertsOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Alertes de tendances"
+        >
+          <TrendingUp size={13} />
+          <span className="hidden sm:inline">Tendances</span>
+        </button>
+
+        {/* Biais éditoriaux */}
+        <button
+          onClick={() => setBiasOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Analyse des biais éditoriaux par source"
+        >
+          <Eye size={13} />
+          <span className="hidden sm:inline">Biais</span>
+        </button>
+
+        {/* Export & Diffusion */}
+        <button
+          onClick={() => setExportOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Export &amp; Diffusion — Atom XML, Newsletter, Webhook"
+        >
+          <Share2 size={13} />
+          <span className="hidden sm:inline">Export</span>
+        </button>
+
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
@@ -596,6 +645,22 @@ export default function App() {
           </span>
           <span className="text-[10px]">RSS</span>
         </button>
+        {/* Top articles */}
+        <button
+          onClick={() => setTopOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Star size={18} />
+          <span className="text-[10px]">Top</span>
+        </button>
+        {/* Alertes */}
+        <button
+          onClick={() => setAlertsOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <TrendingUp size={18} />
+          <span className="text-[10px]">Alertes</span>
+        </button>
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
@@ -603,6 +668,14 @@ export default function App() {
         >
           <BarChart2 size={18} />
           <span className="text-[10px]">Entités</span>
+        </button>
+        {/* Export */}
+        <button
+          onClick={() => setExportOpen(true)}
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Share2 size={18} />
+          <span className="text-[10px]">Export</span>
         </button>
         {/* Réglages */}
         <button
@@ -643,6 +716,21 @@ export default function App() {
             setEntitySearch({ value, type })
           }}
         />
+      )}
+      {alertsOpen && (
+        <AlertsPanel
+          onClose={() => setAlertsOpen(false)}
+          onEntitySearch={(value, type) => { setEntitySearch({ value, type }) }}
+        />
+      )}
+      {topOpen && (
+        <TopArticlesPanel onClose={() => setTopOpen(false)} />
+      )}
+      {biasOpen && (
+        <SourceBiasPanel onClose={() => setBiasOpen(false)} />
+      )}
+      {exportOpen && (
+        <ExportPanel onClose={() => setExportOpen(false)} files={files} />
       )}
       {entitySearch && (
         <EntitySearchModal

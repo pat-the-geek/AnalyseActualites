@@ -1,6 +1,6 @@
 # Architecture — AnalyseActualités
 
-> Document de référence technique · Version 4.1 · 2 mars 2026
+> Document de référence technique · Version 4.2 · 6 mars 2026
 
 ---
 
@@ -701,6 +701,12 @@ L'interface est entièrement adaptée aux appareils mobiles et tablettes :
 | `/api/entities/images` | POST | Images via Wikidata P154 + Wikipedia pageimages | — |
 | `/api/entities/info` | GET | Synthèse encyclopédique en streaming SSE (EurIA) | Token EurIA requis |
 | `/api/scripts/keyword-rss/stream` | GET | Lance `get-keyword-from-rss.py` et stream les logs SSE | Un seul process à la fois |
+| `/api/top-articles` | GET | Top N articles classés par `ScoringEngine` (param `hours`, `top_n`) | — |
+| `/api/source-bias` | GET | Statistiques de biais éditoriaux par source (param `hours`) | — |
+| `/api/alerts` | GET | Alertes de tendances depuis `data/alertes.json` | — |
+| `/api/export/atom` | GET | Génère un flux Atom XML (param `flux`, `keyword`, `max_entries`) | — |
+| `/api/export/newsletter` | GET/POST | Génère newsletter HTML ; POST `{send:true}` → envoi SMTP | — |
+| `/api/export/webhook-test` | POST | Teste l'envoi vers Discord / Slack / Ntfy | Variables `.env` requises |
 
 ### Composants React — détail
 
@@ -719,6 +725,11 @@ L'interface est entièrement adaptée aux appareils mobiles et tablettes :
 | `EntityGraph.jsx` | Réseau de cooccurrence (SVG pur, algorithme FR, zoom/pan) |
 | `EntityWorldMap.jsx` | Carte Leaflet pour entités GPE/LOC (géocodage Wikipedia, redimensionnement dynamique) |
 | `EntityGallery.jsx` | Galerie d'images pour PERSON/ORG/PRODUCT (Wikidata + Wikipedia) |
+| `ArticleListViewer.jsx` | Vues grille et timeline ; composant `SentimentBadge` affichant `sentiment`, `score_sentiment`, `ton_editorial`, `score_ton` sur les articles enrichis |
+| `AlertsPanel.jsx` | Alertes de tendances depuis `data/alertes.json` ; badge de comptage, menu déroulant Tendances |
+| `TopArticlesPanel.jsx` | Top N articles classés par `ScoringEngine` (pertinence + récence) |
+| `SourceBiasPanel.jsx` | Analyse des biais éditoriaux par source : répartition positif/neutre/négatif + breakdown ton éditorial |
+| `ExportPanel.jsx` | Export & Diffusion — 3 onglets : Atom XML (URL copiable, téléchargement), Newsletter HTML (aperçu, téléchargement, envoi SMTP), Webhook (test Discord/Slack/Ntfy) |
 
 ---
 
@@ -745,8 +756,7 @@ content = response.json()["choices"][0]["message"]["content"]
 | Méthode                    | Usage               | Timeout      | Tentatives   |
 | -------------------------- | ------------------- | ------------ | ------------ |
 | `generate_summary(text)`   | Résumé d'article    | 60 s         | 3            |
-| `generate_entities(resume)`| NER sur le résumé   | 30 s         | 3            |
-| `generate_report(json_str)`| Rapport de synthèse | 300 s        | 3            |
+| `generate_entities(resume)`| NER sur le résumé   | 30 s         | 3            || `generate_sentiment(resume)`| Sentiment + ton éditorial | 30 s  | 3            || `generate_report(json_str)`| Rapport de synthèse | 300 s        | 3            |
 | `ask(prompt)`              | Appel générique     | configurable | configurable |
 
 > `generate_entities()` nettoie automatiquement les blocs `<think>...</think>` produits par Qwen3 et normalise le JSON résultant.
@@ -921,6 +931,8 @@ quadrantChart
 | **ADR-010** | Sauvegarde atomique (tmp → rename) | Intégrité fichiers si interruption | Dépend du même filesystem |
 | **ADR-011** | Layout graphe sans D3 (FR pur SVG) | Pas de dépendance JavaScript lourde | Moins de fonctionnalités interactives |
 | **ADR-012** | Cache Wikidata/Wikipedia permanent | Wikipedia évolue peu pour les entités stables | Nécessite invalidation manuelle |
+| **ADR-013** | Enrichissement sentiment Round-Robin (1 fichier/jour) | Évite de surcharger l'API ; progresse automatiquement | Enrichissement progressif (semaines pour 37 fichiers) |
+| **ADR-014** | Double scan virtiofs (200 ms) + union | Compense les listings incomplets de Docker Desktop / macOS | +200 ms de latence sur `/api/files` |
 
 ---
 
@@ -936,6 +948,8 @@ gantt
     Viewer Flask + React             :done, 2026-02, 2026-03
     NER + EntityDashboard            :done, 2026-02, 2026-03
     Radar thématique                 :done, 2026-02, 2026-03
+    Analyse de sentiment             :done, 2026-03, 2026-03
+    Export Atom/Newsletter/Webhook   :done, 2026-03, 2026-03
     section Phase 2 — Performance
     Filtrage anticipé par date       :2026-03, 2026-04
     CI/CD GitHub Actions             :2026-03, 2026-05
@@ -944,9 +958,8 @@ gantt
     Migration PostgreSQL              :2026-06, 2026-09
     Queue Celery + Redis              :2026-07, 2026-09
     section Phase 4 — Features
-    Analyse de sentiment              :2026-09, 2026-12
     Export multi-formats PDF/EPUB     :2026-10, 2026-12
-    API REST exposition données       :2026-10, 2026-12
+    Api REST exposition données       :2026-10, 2026-12
 ```
 
 ---

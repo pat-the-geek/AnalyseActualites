@@ -1,3 +1,39 @@
+# 06/03/2026 — Sentiment, Export & Diffusion, robustesse explorateur
+
+## Analyse de sentiment (`enrich_sentiment.py`)
+
+- Nouveau script `scripts/enrich_sentiment.py` : enrichit chaque article avec 4 champs IA :
+  - `sentiment` : `positif` / `neutre` / `négatif`
+  - `score_sentiment` : 1–5 (1 = très négatif, 5 = très positif)
+  - `ton_editorial` : `factuel` / `alarmiste` / `promotionnel` / `critique` / `analytique`
+  - `score_ton` : 1–5 (1 = très biaisé, 5 = très factuel)
+- Mode Round-Robin sur `data/articles-from-rss/` (37 fichiers, 1 fichier/jour) avec état persistant
+- Sauvegarde incrémentale tous les 50 enrichissements (`SAVE_EVERY = 50`) pour éviter les pertes sur timeout
+- Options CLI : `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force`
+
+## Affichage sentiment dans l'explorateur
+
+- Nouveau composant `SentimentBadge` dans `ArticleListViewer.jsx`
+- Badges colorés affichés dans la **vue grille** et la **vue timeline** pour les articles enrichis :
+  - Sentiment : pastille verte/grise/rouge + label + score (ex. `Positif 4/5`)
+  - Ton éditorial : badge neutre + label + score (ex. `Factuel 5/5`)
+- Les articles non enrichis ne sont pas affectés (champs absents → badges masqués)
+
+## Export & Diffusion (nouveau panel)
+
+- Nouveau composant `ExportPanel.jsx` avec 3 onglets accessibles via le bouton **Export** (icône Share) dans le header :
+  - **Atom XML** : sélection source (tout / flux / mot-clé), curseur max_entries (5–200), URL copiable, téléchargement ou aperçu
+  - **Newsletter HTML** : fenêtre temporelle (24h/48h/72h/7 jours), titre personnalisable, aperçu, téléchargement HTML, envoi SMTP
+  - **Webhook** : test Discord / Slack / Ntfy / Toutes, résultat inline, tableau des variables `.env`
+- Routes backend déjà présentes (`/api/export/atom`, `/api/export/newsletter`, `/api/export/webhook-test`) — panel en expose l'interface
+
+## Robustesse explorateur — fichiers markdown aléatoirement absents
+
+- **Backend** (`viewer/app.py`) : double scan avec 200 ms d'intervalle + union par chemin pour compenser les listings incomplets de virtiofs (Docker Desktop / macOS)
+- **Frontend** (`App.jsx`) : protection étendue — conserve les fichiers markdown présents dans l'état précédent mais absents de la nouvelle réponse (virtiofs, listing partiel transitoire)
+
+---
+
 # 06/03/2026 — Améliorations UX viewer
 
 ## Réglages — Tri alphabétique des mots-clés

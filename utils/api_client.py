@@ -101,6 +101,44 @@ def _parse_entities_response(raw: str) -> dict:
     return result
 
 
+_SENTIMENT_VALUES = {"positif", "neutre", "négatif"}
+_TON_VALUES = {"factuel", "alarmiste", "promotionnel", "critique", "analytique"}
+
+
+def _parse_sentiment_response(raw: str) -> dict:
+    """Extrait un dict sentiment/ton depuis une réponse brute de l'API."""
+    text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE).strip()
+    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if fence:
+        text = fence.group(1).strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        obj = re.search(r"\{[\s\S]*\}", text)
+        if not obj:
+            return {}
+        try:
+            data = json.loads(obj.group(0))
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(data, dict):
+        return {}
+    result = {}
+    sentiment = str(data.get("sentiment", "")).strip().lower()
+    if sentiment in _SENTIMENT_VALUES:
+        result["sentiment"] = sentiment
+    score_s = data.get("score_sentiment")
+    if isinstance(score_s, (int, float)) and 1 <= score_s <= 5:
+        result["score_sentiment"] = int(score_s)
+    ton = str(data.get("ton_editorial", "")).strip().lower()
+    if ton in _TON_VALUES:
+        result["ton_editorial"] = ton
+    score_t = data.get("score_ton")
+    if isinstance(score_t, (int, float)) and 1 <= score_t <= 5:
+        result["score_ton"] = int(score_t)
+    return result
+
+
 class EurIAClient:
     """Client pour l'API EurIA (Qwen3) d'Infomaniak.
     
@@ -318,6 +356,90 @@ class EurIAClient:
         except Exception as e:
             default_logger.warning(f"Extraction NER échouée : {e}")
             return {}
+
+    def generate_sentiment(
+        self,
+        resume: str,
+        timeout: int = 30
+    ) -> dict:
+        """Analyse le sentiment et le ton éditorial d'un article.
+
+        Args:
+            resume  : Résumé ou texte de l'article (champ "Résumé")
+            timeout : Timeout en secondes (défaut: 30)
+
+        Returns:
+            {
+              "sentiment"     : "positif" | "neutre" | "négatif",
+              "score_sentiment": int 1-5  (1=très négatif, 3=neutre, 5=très positif),
+              "ton_editorial" : "factuel" | "alarmiste" | "promotionnel" | "critique" | "analytique",
+              "score_ton"     : int 1-5  (1=très biaisé, 5=très factuel)
+            }
+            Retourne {} silencieusement si l'analyse échoue.
+        """
+        if not resume or not isinstance(resume, str) or not resume.strip():
+            return {}
+
+        prompt = (
+            "Analyse le ton et le sentiment de ce texte journalistique. "
+            "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
+            "Champs attendus :\n"
+            '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
+            '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
+            '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
+            '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)\n\n'
+            f"Texte :\n{resume.strip()[:3000]}"
+        )
+        try:
+            raw = self.ask(prompt, max_attempts=2, timeout=timeout, max_tokens=150)
+            return _parse_sentiment_response(raw)
+        except Exception as e:
+            default_logger.warning(f"Analyse sentiment échouée : {e}")
+            return {}
+
+    def synthesize_topic(
+        self,
+        topic: str,
+        articles: list,
+        timeout: int = 120,
+    ) -> str:
+        """Génère une synthèse comparative multi-sources sur un sujet ou une entité.
+
+        Construit un prompt consolidé depuis N résumés d'articles et demande à
+        Qwen3 une analyse structurée : convergences, divergences, sources favorables/critiques.
+
+        Args:
+            topic    : Sujet ou entité centrale (ex: "OpenAI", "Emmanuel Macron")
+            articles : Liste de dicts article avec au moins "Résumé", "Sources", "Date de publication"
+            timeout  : Timeout en secondes (défaut: 120)
+
+        Returns:
+            Texte Markdown de la synthèse.
+        """
+        if not articles:
+            return "Aucun article disponible pour cette synthèse."
+
+        # Construire le bloc source
+        sources_block = ""
+        for i, a in enumerate(articles[:20], 1):  # Limiter à 20 articles
+            source = a.get("Sources", "Source inconnue")
+            date = a.get("Date de publication", "")
+            resume = (a.get("Résumé") or "")[:800]
+            sources_block += f"\n--- Article {i} ({source}, {date}) ---\n{resume}\n"
+
+        prompt = (
+            f"Tu es un analyste de presse. Voici {len(articles[:20])} articles de sources différentes "
+            f"traitant du sujet : **{topic}**.\n\n"
+            "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+            "1. **Résumé de la situation** (2-3 phrases)\n"
+            "2. **Points de convergence** entre les sources\n"
+            "3. **Points de divergence ou contradictions**\n"
+            "4. **Positionnement éditorial** : quelles sources sont favorables, neutres ou critiques\n"
+            "5. **Éléments clés manquants** (ce que les articles ne couvrent pas)\n\n"
+            "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n\n"
+            f"Articles :\n{sources_block}"
+        )
+        return self.ask(prompt, max_attempts=2, timeout=timeout)
 
     def generate_report(
         self,

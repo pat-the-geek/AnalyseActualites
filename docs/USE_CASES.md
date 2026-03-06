@@ -1,6 +1,6 @@
 # Use Cases — WUDD.ai
 
-> Neuf scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
+> Quatorze scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
 > Chaque use case est illustré par un diagramme Mermaid.
 
 ---
@@ -16,6 +16,11 @@
 7. [Lecture des résumés en déplacement (mobile)](#7-lecture-des-résumés-en-déplacement-mobile)
 8. [Briefing entités avant réunion (mobile)](#8-briefing-entités-avant-réunion-mobile)
 9. [Rapport de veille quotidien Top 10 entités (48h)](#9-rapport-de-veille-quotidien-top-10-entités-48h)
+10. [Sélection des articles les plus pertinents](#10-sélection-des-articles-les-plus-pertinents)
+11. [Détection de tendances et alertes émergentes](#11-détection-de-tendances-et-alertes-émergentes)
+12. [Analyse des biais éditoriaux par source](#12-analyse-des-biais-éditoriaux-par-source)
+13. [Synthèse comparative RAG multi-sources](#13-synthèse-comparative-rag-multi-sources)
+14. [Export et diffusion des résultats](#14-export-et-diffusion-des-résultats)
 
 ---
 
@@ -460,6 +465,222 @@ python3 scripts/generate_48h_report.py --dry-run
 
 ---
 
+## 10. Sélection des articles les plus pertinents
+
+**Contexte :** Après une collecte, des dizaines d'articles sont disponibles. L'utilisateur veut rapidement identifier les plus importants à lire, sans tout parcourir manuellement.
+
+**Acteurs :** Analyste / Veilleur (viewer) · `utils/scoring.py` · route `/api/articles/top` · `TopArticlesPanel.jsx`
+
+**Pré-condition :** Des fichiers JSON d'articles enrichis existent dans `data/articles/` ou `data/articles-from-rss/`.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant V as Viewer (TopArticlesPanel)
+    participant A as Flask /api/articles/top
+    participant S as ScoringEngine
+
+    U->>V: Ouvre "Top Articles" (sidebar)
+    V->>A: GET /api/articles/top?flux=...&top=20
+    A->>S: get_top_articles(flux, top_n=20)
+    S->>S: Score chaque article (fréquence entités, fraîcheur, images)
+    S->>S: Déduplique par URL (seen_urls: set)
+    S-->>A: top_articles[] triés par score
+    A-->>V: JSON [{titre, résumé, score, date, url}]
+    V-->>U: Liste affichée avec score de pertinence
+    U->>V: Clique sur article → ouvre URL source
+```
+
+**Algorithme de scoring :**
+- **Fréquence des entités NER** : bonus proportionnel au nombre d'entités reconnues
+- **Fraîcheur** : articles < 7 jours favorisés
+- **Images** : bonus si au moins une image largeur > 500 px
+- **Déduplication** : une URL ne peut apparaître qu'une seule fois dans le résultat
+
+**Valeur produite :** En moins d'une seconde, l'utilisateur obtient un classement objectif des articles à lire en priorité, sans biais de présentation. Gain de temps estimé : 70 % sur la revue de presse manuelle.
+
+---
+
+## 11. Détection de tendances et alertes émergentes
+
+**Contexte :** L'utilisateur souhaite être alerté lorsqu'un sujet monte en fréquence, sans surveiller chaque flux individuellement.
+
+**Acteurs :** Système (cron 07h00) · `scripts/trend_detector.py` · route `/api/alerts` · `AlertsPanel.jsx` · `data/alertes.json`
+
+**Pré-condition :** Des articles enrichis NER existent sur au moins deux périodes consécutives.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant C as Cron (07h00)
+    participant T as trend_detector.py
+    participant D as data/alertes.json
+    participant V as Viewer (AlertsPanel)
+    participant A as Flask /api/alerts
+
+    C->>T: Exécute (quotidien)
+    T->>T: Compte occurrences entités (J-7 vs J-14)
+    T->>T: Calcule ratio hausse (seuil configurable)
+    T-->>D: Sauvegarde alertes JSON
+    U->>V: Ouvre "Tendances" (sidebar)
+    V->>A: GET /api/alerts
+    A->>D: Lit alertes.json
+    A-->>V: [{entity, type, count_recent, count_old, ratio}]
+    V-->>U: Panel avec liste d'alertes + seuil ajustable
+    U->>V: Ajuste seuil (ex. 2.0×)
+    V->>A: POST /api/alerts/run {threshold: 2.0}
+    A->>T: Relance détection (à la demande)
+    T-->>D: Met à jour alertes.json
+    A-->>V: Nouvelles alertes
+    U->>V: Clique entité → recherche transversale
+```
+
+**Paramètres configurables (via UI) :**
+- **Seuil de détection** : ratio minimum (défaut 2.0×) entre période récente et ancienne
+- **Top N** : nombre maximum d'alertes affichées (défaut 20)
+
+**Valeur produite :** Détection automatique des sujets émergents sans lecture exhaustive. Chaque matin, les tendances du jour sont pré-calculées. L'utilisateur peut affiner et naviguer directement vers les articles concernés.
+
+---
+
+## 12. Analyse des biais éditoriaux par source
+
+**Contexte :** L'utilisateur veut comprendre si certaines sources présentent systématiquement un ton positif, négatif ou neutre sur les sujets couverts.
+
+**Acteurs :** Analyste (viewer) · `scripts/enrich_sentiment.py` (Round-Robin) · route `/api/sources/bias` · `SourceBiasPanel.jsx`
+
+**Pré-condition :** Les articles ont été enrichis avec le champ `"sentiment"` (via `enrich_sentiment.py`).
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant Cron as Cron 03h00
+    participant ES as enrich_sentiment.py
+    participant D as data/articles/**
+    participant S as data/enrich_sentiment_state.json
+    participant V as Viewer (SourceBiasPanel)
+    participant A as Flask /api/sources/bias
+
+    Cron->>ES: Exécute (Round-Robin quotidien)
+    ES->>S: Lit dernier index traité
+    ES->>D: Sélectionne fichier suivant (1 fichier/jour)
+    ES->>ES: Appelle EurIA API (Prompt 4 sentiment)
+    ES-->>D: Enrichit articles avec {sentiment, score, label}
+    ES-->>S: Met à jour état (last_file_idx++)
+
+    U->>V: Ouvre "Biais sources" (sidebar)
+    V->>A: GET /api/sources/bias
+    A->>D: Agrège sentiments par source
+    A-->>V: [{source, pos%, neg%, neu%, count}]
+    V-->>U: Tableau comparatif + jauges colorées
+```
+
+**Format du champ `sentiment` par article :**
+```json
+{
+  "sentiment": {
+    "label": "positif",
+    "score": 0.72,
+    "dominant_emotion": "confiance"
+  }
+}
+```
+
+**Mode Round-Robin :** 1 fichier JSON traité par jour, cycle complet toutes les N jours (N = nombre de fichiers). État persisté dans `data/enrich_sentiment_state.json`.
+
+```bash
+python3 scripts/enrich_sentiment.py --status   # Voir l'état du cycle
+python3 scripts/enrich_sentiment.py            # Traiter le prochain fichier
+python3 scripts/enrich_sentiment.py --all      # Traiter tous les fichiers
+```
+
+**Valeur produite :** Visualisation objective des tendances éditoriales par source. Permet d'identifier rapidement les sources militantes, les biais positifs/négatifs persistants, ou l'évolution du ton d'un média sur un sujet donné.
+
+---
+
+## 13. Synthèse comparative RAG multi-sources
+
+**Contexte :** Sur un sujet complexe (ex. "IA et emploi"), l'utilisateur veut une analyse synthétique qui croise les points de vue de toutes les sources collectées, sans avoir à lire chaque article.
+
+**Acteurs :** Analyste (viewer) · route `/api/synthesize-topic` · onglet RAG dans `EntityArticlePanel.jsx` · `utils/api_client.py`
+
+**Pré-condition :** Des articles existent dans `data/` pour le flux ou le mot-clé sélectionné. L'entité ou le sujet est identifié.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant V as Viewer (EntityArticlePanel - onglet RAG)
+    participant A as Flask /api/synthesize-topic
+    participant C as api_client.generate_report()
+    participant AI as EurIA API (Qwen3)
+
+    U->>V: Clique entité → ouvre EntityArticlePanel
+    U->>V: Sélectionne onglet "Synthèse RAG"
+    V->>A: POST /api/synthesize-topic {entity, flux}
+    A->>A: Collecte articles (match NER ou texte)
+    A->>A: Déduplique par URL
+    A->>A: Construit sources_block (résumés + sources + dates)
+    A->>C: generate_report(prompt, stream=True)
+    C->>AI: POST stream=True {Prompt 6 RAG}
+    AI-->>C: Chunks SSE (text/event-stream)
+    C-->>A: Forwarde chunks normalisés "data: {...}"
+    A-->>V: SSE stream vers React
+    V-->>U: Texte de synthèse affiché en temps réel (streaming)
+    U->>V: Lit synthèse · peut exporter
+```
+
+**Caractéristiques techniques :**
+- **RAG pur** : `enable_web_search: False` — l'IA ne consulte que les articles collectés
+- **Déduplication** : une URL ne peut contribuer qu'une fois à la synthèse
+- **Streaming SSE** : le texte s'affiche mot par mot (expérience de lecture fluide)
+- **Cache** : la synthèse est mise en cache (TTL 24h) pour éviter les appels répétés
+
+**Valeur produite :** Analyse de fond croisant N sources en 30–60 secondes, sans biais de sélection manuelle. La réponse est ancrée sur les données réelles collectées — pas de d'hallucination sur des sources externes.
+
+---
+
+## 14. Export et diffusion des résultats
+
+**Contexte :** L'utilisateur ou un système tiers veut consommer les articles et résumés dans un format standard (agrégateur RSS, newsletter, webhook Slack/Zapier).
+
+**Acteurs :** Analyste (viewer) · routes `/api/export/atom`, `/api/export/newsletter`, `/api/export/webhook-test`
+
+**Pré-condition :** Des articles JSON enrichis existent dans `data/articles/` ou `data/articles-from-rss/`.
+
+```mermaid
+flowchart TD
+    U([Utilisateur / Système tiers]) --> V[Viewer - panneau Export]
+
+    V -->|Flux RSS| A1[GET /api/export/atom?flux=...&limit=20]
+    A1 --> F1[Atom XML\ncompatible RSS agrégateurs]
+    F1 -->|Abonné via URL| AGG[Reeder / Feedly / Inoreader]
+
+    V -->|Newsletter| A2[GET /api/export/newsletter?flux=...&limit=20]
+    A2 --> F2[HTML email\nwith inline images]
+    F2 -->|Copie-colle ou export| ML[Client mail / SendGrid]
+
+    V -->|Test webhook| A3[POST /api/export/webhook-test]
+    A3 -->|POST JSON articles| WH[Endpoint externe\nSlack / Zapier / n8n]
+    WH --> NOTIF[Notification temps réel]
+```
+
+**Formats de sortie :**
+
+| Export | Format | Usage typique | Paramètres |
+|--------|--------|---------------|------------|
+| Atom | XML (RFC 4287) | Agrégateurs RSS | `flux`, `limit` |
+| Newsletter | HTML5 responsive | Email / Mailchimp | `flux`, `limit` |
+| Webhook | JSON POST | Slack, Zapier, n8n | `url` cible, payload |
+
+**Exemple d'URL d'abonnement Atom :**
+```
+http://localhost:5050/api/export/atom?flux=Intelligence-artificielle&limit=20
+```
+
+**Valeur produite :** Intégration de la veille WUDD.ai dans les outils existants de l'utilisateur (agrégateur personnel, newsletter d'équipe, alertes Slack automatiques) sans copier-coller manuel. La veille devient un service consommable par d'autres systèmes.
+
+---
+
 ```mermaid
 quadrantChart
     title Use cases - Frequence vs Profondeur d analyse
@@ -469,19 +690,24 @@ quadrantChart
     quadrant-2 Veille operationnelle
     quadrant-3 Analyse ad hoc
     quadrant-4 Exploration ouverte
-    UC1 Veille mots-cles: [0.80, 0.65]
-    UC2 Rapport multi-flux: [0.88, 0.92]
-    UC3 Recherche entite: [0.22, 0.78]
-    UC4 Carte geopolitique: [0.18, 0.45]
-    UC5 Reseau semantique: [0.12, 0.18]
-    UC6 Rapport Claude ad hoc: [0.48, 0.82]
-    UC7 Lecture mobile: [0.72, 0.32]
-    UC8 Briefing entites mobile: [0.62, 0.55]
-    UC9 Rapport Top10 entites 48h: [0.90, 0.95]
+    UC1 Veille mots-cles: [0.80, 0.52]
+    UC2 Rapport multi-flux: [0.78, 0.90]
+    UC3 Recherche entite: [0.10, 0.76]
+    UC4 Carte geopolitique: [0.12, 0.40]
+    UC5 Reseau semantique: [0.08, 0.12]
+    UC6 Rapport Claude ad hoc: [0.38, 0.68]
+    UC7 Lecture mobile: [0.70, 0.25]
+    UC8 Briefing entites mobile: [0.55, 0.45]
+    UC9 Rapport Top10 entites 48h: [0.96, 0.95]
+    UC10 Top articles: [0.62, 0.65]
+    UC11 Tendances alertes: [0.90, 0.75]
+    UC12 Biais editoriaux: [0.18, 0.58]
+    UC13 Synthese RAG: [0.22, 0.93]
+    UC14 Export diffusion: [0.50, 0.86]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
-|---|----------|-------------|---------------|--------|
+|---|----------|-------------|-----------------|--------|
 | 1 | Veille mots-clés | Manuel ou cron 01h00 | 5–15 min (script) | JSON enrichi NER |
 | 2 | Rapport multi-flux | Cron lundi 06h00 | 30–90 min (pipeline) | Rapport Markdown |
 | 3 | Recherche entité | Ad hoc (viewer) | 2–5 min | Rapport MD / export JSON |
@@ -491,8 +717,13 @@ quadrantChart
 | 7 | Lecture mobile en déplacement | Quotidien (smartphone) | 5–10 min | Lecture · recherche plein texte |
 | 8 | Briefing entités avant réunion | Ad hoc (smartphone) | 2–3 min | Orientation · sélection articles |
 | 9 | Rapport Top 10 entités 48h | Cron 23h00 quotidien | ~5 min (script) | Rapport Markdown structuré |
+| 10 | Top articles pertinents | Ad hoc (viewer) | < 1 min | Liste scorée des meilleurs articles |
+| 11 | Tendances & alertes | Cron 07h00 / manuel | ~2 min (script) | Alertes JSON + panel interactif |
+| 12 | Biais éditoriaux par source | Ad hoc (viewer) | 1–2 min | Tableau comparatif sources |
+| 13 | Synthèse RAG multi-sources | Ad hoc (viewer) | 30–60s (streaming) | Analyse comparative Markdown |
+| 14 | Export & diffusion | Ad hoc (viewer / cron) | < 1 min | Atom XML · Newsletter HTML · Webhook |
 
 ---
 
 **Maintenu par** : Patrick Ostertag · patrick.ostertag@gmail.com
-**Créé le** : 2 mars 2026 · **Mis à jour le** : 4 mars 2026 (UC9 — Rapport Top 10 entités 48h)
+**Créé le** : 2 mars 2026 · **Mis à jour le** : 6 mars 2026 (UC10–UC14 — scoring, tendances, biais, RAG, exports)

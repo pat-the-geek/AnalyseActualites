@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info, Calendar } from 'lucide-react'
+import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info, Calendar, Layers } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import EntityGraph from './EntityGraph'
@@ -131,6 +131,13 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
   const infoCtrlRef  = useRef(null)   // AbortController du fetch en cours
   const infoStarted  = useRef(false)  // true dès que le fetch a été lancé pour l'entité courante
 
+  // ── RAG / Synthèse multi-sources ───────────────────────────────────────────
+  const [ragText, setRagText]       = useState('')
+  const [ragLoading, setRagLoading] = useState(false)
+  const [ragError, setRagError]     = useState(null)
+  const ragCtrlRef  = useRef(null)
+  const ragStarted  = useRef(false)
+
   // ── Position / taille de la fenêtre ────────────────────────────────────────
   const [win, setWin] = useState(initialWin)   // null = fullscreen mobile
   const [isMaximized, setIsMaximized] = useState(false)
@@ -226,7 +233,88 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
     setInfoError(null)
     infoStarted.current = false
     if (infoCtrlRef.current) { infoCtrlRef.current.abort(); infoCtrlRef.current = null }
+    // reset RAG aussi
+    setRagText('')
+    setRagLoading(false)
+    setRagError(null)
+    ragStarted.current = false
+    if (ragCtrlRef.current) { ragCtrlRef.current.abort(); ragCtrlRef.current = null }
   }, [current.type, current.value])
+
+  // ── RAG : lance le fetch au 1er affichage de l'onglet ─────────────────────
+  useEffect(() => {
+    if (viewMode !== 'rag' || ragStarted.current) return
+    ragStarted.current = true
+
+    const ctrl = new AbortController()
+    ragCtrlRef.current = ctrl
+    setRagText('')
+    setRagLoading(true)
+    setRagError(null)
+
+    let inThink = false
+
+    ;(async () => {
+      try {
+        const params = new URLSearchParams({
+          entity_type: current.type,
+          entity_value: current.value,
+          n: 15,
+        })
+        const res = await fetch(`/api/synthesize-topic?${params}`, { signal: ctrl.signal })
+        if (!res.ok) throw new Error(`Erreur serveur ${res.status}`)
+
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop()
+          for (const line of lines) {
+            // Accepte "data: {...}" et également "{...}" (JSON brut sans préfixe SSE)
+            let raw
+            if (line.startsWith('data: ')) raw = line.slice(6).trim()
+            else if (line.startsWith('{')) raw = line.trim()
+            else continue
+            if (!raw) continue
+            if (raw === '[DONE]') { setRagLoading(false); return }
+            let chunk
+            try {
+              const parsed = JSON.parse(raw)
+              if (parsed.error) throw new Error(parsed.error)
+              chunk = parsed.choices?.[0]?.delta?.content ?? ''
+            } catch (e) { if (e.message?.startsWith('Erreur')) throw e; continue }
+            if (!chunk) continue
+
+            // Filtre les blocs <think>…</think>
+            let rem = chunk
+            while (rem.length > 0) {
+              if (!inThink) {
+                const s = rem.indexOf('<think>')
+                if (s === -1) { setRagText(p => p + rem); break }
+                setRagText(p => p + rem.slice(0, s))
+                rem = rem.slice(s + 7)
+                inThink = true
+              } else {
+                const e = rem.indexOf('</think>')
+                if (e === -1) break
+                rem = rem.slice(e + 8)
+                inThink = false
+              }
+            }
+          }
+        }
+        setRagLoading(false)
+      } catch (e) {
+        setRagLoading(false)
+        if (e.name !== 'AbortError') setRagError(e.message)
+      }
+    })()
+  }, [viewMode, current.type, current.value])
 
   // ── Info : lance le fetch uniquement au 1er affichage de l'onglet ──────────
   useEffect(() => {
@@ -302,7 +390,10 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
 
   // ── Nettoyage au démontage ─────────────────────────────────────────────────
   useEffect(() => {
-    return () => { infoCtrlRef.current?.abort() }
+    return () => {
+      infoCtrlRef.current?.abort()
+      ragCtrlRef.current?.abort()
+    }
   }, [])
 
   // ── Navigation interne ─────────────────────────────────────────────────────
@@ -460,6 +551,19 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                 <Calendar size={12} className="hidden md:block" />
                 <span className="hidden sm:inline">Calendrier</span>
               </button>
+              <button
+                onClick={() => setViewMode('rag')}
+                title="Synthèse comparative multi-sources (RAG)"
+                className={`flex-1 md:flex-none inline-flex items-center justify-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                  viewMode === 'rag'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Layers size={18} className="md:hidden" />
+                <Layers size={12} className="hidden md:block" />
+                <span className="hidden sm:inline">RAG</span>
+              </button>
             </div>
 
             <button
@@ -505,6 +609,34 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
         {viewMode === 'info' ? (
           /* Mode informations : synthèse streaming Markdown */
           <EntityInfoView text={infoText} loading={infoLoading} error={infoError} />
+        ) : viewMode === 'rag' ? (
+          /* Mode RAG : synthèse comparative multi-sources */
+          <div className="flex-1 min-h-0 overflow-y-auto p-5">
+            {ragLoading && !ragText && (
+              <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm py-8 justify-center">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Synthèse en cours à partir des articles…</span>
+              </div>
+            )}
+            {ragError && (
+              <div className="text-red-500 dark:text-red-400 text-sm py-4">{ragError}</div>
+            )}
+            {ragText && (
+              <div className="prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
+                  {ragText}
+                </ReactMarkdown>
+                {ragLoading && (
+                  <span className="inline-block w-2 h-4 bg-emerald-500 animate-pulse ml-1 rounded-sm" />
+                )}
+              </div>
+            )}
+            {!ragLoading && !ragText && !ragError && (
+              <div className="text-center text-slate-400 dark:text-slate-500 text-sm py-8">
+                Aucun contenu trouvé pour cette entité.
+              </div>
+            )}
+          </div>
         ) : viewMode === 'calendar' ? (
           /* Mode calendrier */
           <div className="flex-1 min-h-0 overflow-y-auto">

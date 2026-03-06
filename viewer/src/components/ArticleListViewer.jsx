@@ -7,7 +7,36 @@ import {
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
 
-// ── Palette de couleurs pour les chips de type d'entité ──────────────────────
+// ── Badge sentiment ───────────────────────────────────────────────────────────
+const SENTIMENT_CFG = {
+  positif: { label: 'Positif', score: null, dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800' },
+  neutre:  { label: 'Neutre',  score: null, dot: 'bg-slate-400',   text: 'text-slate-600 dark:text-slate-400',     bg: 'bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600' },
+  négatif: { label: 'Négatif', score: null, dot: 'bg-rose-500',    text: 'text-rose-700 dark:text-rose-300',       bg: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800' },
+}
+const TON_LABELS = { factuel: 'Factuel', alarmiste: 'Alarmiste', promotionnel: 'Promo', critique: 'Critique', analytique: 'Analytique' }
+
+function SentimentBadge({ article }) {
+  const sentiment   = article.sentiment
+  const scoreSent   = article.score_sentiment
+  const ton         = article.ton_editorial
+  const scoreTon    = article.score_ton
+  if (!sentiment) return null
+  const cfg = SENTIMENT_CFG[sentiment] ?? SENTIMENT_CFG.neutre
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${cfg.bg} ${cfg.text}`}>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+        {cfg.label}{scoreSent ? ` ${scoreSent}/5` : ''}
+      </span>
+      {ton && (
+        <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400">
+          {TON_LABELS[ton] ?? ton}{scoreTon ? ` ${scoreTon}/5` : ''}
+        </span>
+      )}
+    </div>
+  )
+}
+
 const CHIP_COLORS = {
   PERSON:      { idle: 'bg-violet-100 dark:bg-violet-900/50 text-violet-800 dark:text-violet-200 border-violet-200 dark:border-violet-800',       on: 'bg-violet-500 dark:bg-violet-600 text-white border-violet-600 dark:border-violet-500' },
   ORG:         { idle: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800',                   on: 'bg-blue-500 dark:bg-blue-600 text-white border-blue-600 dark:border-blue-500' },
@@ -185,6 +214,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
                 </span>
               )}
             </div>
+            <SentimentBadge article={article} />
             {titre && (
               <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-3">
                 {titre}
@@ -247,6 +277,7 @@ function TimelineItem({ article }) {
               <Tag size={9} />{count}
             </span>
           )}
+          <SentimentBadge article={article} />
           {article['URL'] && (
             <a href={article['URL']} target="_blank" rel="noopener noreferrer"
               className="ml-auto shrink-0 text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all"
