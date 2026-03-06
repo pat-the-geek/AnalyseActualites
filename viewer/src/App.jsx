@@ -220,6 +220,10 @@ export default function App() {
   const [isRefreshing, setIsRefreshing]   = useState(false)
   // Compteur de requêtes pour ignorer les réponses périmées (race condition)
   const fetchIdRef = useRef(0)
+  // Ref sur le fichier en cours de consultation (accessible dans les callbacks
+  // sans créer de dépendances cycliques)
+  const selectedFileRef = useRef(null)
+  useEffect(() => { selectedFileRef.current = selectedFile }, [selectedFile])
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -263,6 +267,38 @@ export default function App() {
           }
           return data
         })
+        // Si un fichier est en cours de consultation, vérifier s'il a été modifié
+        const current = selectedFileRef.current
+        if (current) {
+          const updated = data.find(f => f.path === current.path)
+          if (updated && updated.modified !== current.modified) {
+            // Le fichier a été modifié : mettre à jour la référence et recharger
+            setSelectedFile(updated)
+            setFileContent(null)
+            setContentLoading(true)
+            setLoadingProgress(0)
+            fetch(`/api/stream-content?path=${encodeURIComponent(current.path)}`)
+              .then(async (response) => {
+                const fileSize = parseInt(response.headers.get('X-File-Size') || '0', 10)
+                const reader = response.body.getReader()
+                const decoder = new TextDecoder()
+                const chunks = []
+                let loaded = 0
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+                  chunks.push(decoder.decode(value, { stream: true }))
+                  loaded += value.length
+                  if (fileSize > 0) setLoadingProgress(Math.min(99, Math.round((loaded / fileSize) * 100)))
+                }
+                chunks.push(decoder.decode())
+                return chunks.join('')
+              })
+              .then(text => { setFileContent(text); setContentLoading(false); setLoadingProgress(0) })
+              .catch(() => { setContentLoading(false); setLoadingProgress(0) })
+          }
+          // Si le fichier n'a pas été modifié, le contenu chargé est conservé
+        }
         setIsRefreshing(false)
       })
       .catch(err => {
