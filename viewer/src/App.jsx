@@ -607,20 +607,20 @@ export default function App() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {/* Sélecteur de thème */}
-        <div className="flex items-center justify-center px-2 border-r border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-center px-3 border-r border-slate-200 dark:border-slate-700">
           <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
             {THEME_OPTIONS.map(({ key, Icon, title }) => (
               <button
                 key={key}
                 onClick={() => setTheme(key)}
                 title={title}
-                className={`px-2 py-1.5 transition-colors ${
+                className={`px-2.5 py-3 transition-colors ${
                   theme === key
                     ? 'bg-blue-600 text-white'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <Icon size={13} />
+                <Icon size={16} />
               </button>
             ))}
           </div>
@@ -628,10 +628,11 @@ export default function App() {
         {/* Console RSS */}
         <button
           onClick={() => setConsoleOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors relative"
+          title="Mots-clés RSS"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors relative"
         >
           <span className="relative inline-block">
-            <Terminal size={18} />
+            <Terminal size={22} />
             {rssStatus?.running ? (
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
@@ -642,55 +643,46 @@ export default function App() {
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-slate-400" />
             ) : null}
           </span>
-          <span className="text-[10px]">RSS</span>
         </button>
         {/* Top articles */}
         <button
           onClick={() => setTopOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          title="Top articles"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
         >
-          <Star size={18} />
-          <span className="text-[10px]">Top</span>
+          <Star size={22} />
         </button>
         {/* Alertes */}
         <button
           onClick={() => setAlertsOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          title="Tendances & alertes"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
         >
-          <TrendingUp size={18} />
-          <span className="text-[10px]">Alertes</span>
+          <TrendingUp size={22} />
         </button>
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          title="Dashboard entités"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
         >
-          <BarChart2 size={18} />
-          <span className="text-[10px]">Entités</span>
-        </button>
-        {/* Export */}
-        <button
-          onClick={() => setExportOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <Share2 size={18} />
-          <span className="text-[10px]">Export</span>
+          <BarChart2 size={22} />
         </button>
         {/* Réglages */}
         <button
           onClick={() => setSettingsOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          title="Réglages"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
         >
-          <Settings size={18} />
-          <span className="text-[10px]">Réglages</span>
+          <Settings size={22} />
         </button>
         {/* Recherche */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+          title="Recherche plein texte"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
         >
-          <Search size={18} />
-          <span className="text-[10px]">Recherche</span>
+          <Search size={22} />
         </button>
       </nav>
 

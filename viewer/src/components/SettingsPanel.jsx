@@ -1271,19 +1271,21 @@ export default function SettingsPanel({ onClose }) {
           <h2 className="hidden md:block text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
 
           {/* Onglets */}
-          <div className="flex items-center gap-1 flex-1">
+          <div className="flex items-center gap-0.5 md:gap-1 flex-1">
             {TABS.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                title={label}
+                className={`flex items-center gap-1.5 px-2.5 py-2 md:px-3 md:py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   activeTab === id
                     ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-400/40 dark:border-blue-500/40'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                <Icon size={12} />
-                {label}
+                <Icon size={14} className="md:hidden" />
+                <Icon size={12} className="hidden md:block" />
+                <span className="hidden md:inline">{label}</span>
               </button>
             ))}
           </div>
