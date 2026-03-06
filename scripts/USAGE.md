@@ -411,7 +411,59 @@ python3 analyse_thematiques.py
 
 ---
 
-## 📂 Structure des chemins
+## � Système de quota adaptatif
+
+> **Module :** `utils/quota.py` | **Config :** `config/quota.json` | **État :** `data/quota_state.json`
+
+Le système de quota régule automatiquement le nombre d'articles importés par jour via l'API EurIA. Il applique trois plafonds indépendants et trie les mots-clés de façon adaptative pour garantir la diversité des sources.
+
+### Paramètres (`config/quota.json`)
+
+```json
+{
+  "enabled": true,
+  "global_daily_limit": 150,
+  "per_keyword_daily_limit": 30,
+  "per_source_daily_limit": 5,
+  "adaptive_sorting": true
+}
+```
+
+| Paramètre | Description | Défaut |
+|---|---|---|
+| `enabled` | Active / désactive complètement le système | `true` |
+| `global_daily_limit` | Plafond journalier global (tous mots-clés confondus) | `150` |
+| `per_keyword_daily_limit` | Max articles par mot-clé par jour | `30` |
+| `per_source_daily_limit` | Max articles d'un même site pour un mot-clé donné | `5` |
+| `adaptive_sorting` | Trie les mots-clés par ratio consommation/plafond croissant | `true` |
+
+### Fonctionnement
+
+1. **Avant chaque import** : `quota.can_process(keyword, source)` vérifie les 3 plafonds.
+2. **Après ajout** : `quota.record_article(keyword, source)` incrémente les compteurs.
+3. **Tri adaptatif** : `quota.sort_by_priority(keywords)` ordonne les mots-clés par ratio consommation/plafond (croissant) — les sujets les moins traités passent en premier.
+4. **Reset automatique** : Les compteurs se réinitialisent à minuit chaque jour.
+
+### Intégration dans les scripts
+
+| Script | Comportement |
+|---|---|
+| `get-keyword-from-rss.py` | Stoppe le traitement dès que le quota global est atteint ; saute les sources saturées |
+| `flux_watcher.py` | Sortie immédiate en début de run si quota global épuisé |
+
+### Interface graphique (Viewer)
+
+L'onglet **Quota** dans les Réglages du Viewer permet de :
+- Activer/désactiver le système
+- Ajuster les trois plafonds via des curseurs
+- Activer/désactiver le tri adaptatif
+- Visualiser la consommation en temps réel (barres de progression par mot-clé)
+- Identifier les sources saturées (badges en rouge)
+- Remettre à zéro les compteurs manuellement
+
+---
+
+## �📂 Structure des chemins
 
 Les scripts utilisent des chemins relatifs depuis le dossier `scripts/` :
 

@@ -538,6 +538,32 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 
 Chaque objet définit un flux indépendant. Le scheduler et tous les scripts multi-flux utilisent ce fichier comme source de vérité unique. Pour ajouter un flux, il suffit d'ajouter un objet au tableau.
 
+### Quota d'import journalier (`config/quota.json`)
+
+Le système de quota régule le volume d'articles importés chaque jour via l'API EurIA, en garantissant la diversité des sources.
+
+```json
+{
+  "enabled": true,
+  "global_daily_limit": 150,
+  "per_keyword_daily_limit": 30,
+  "per_source_daily_limit": 5,
+  "adaptive_sorting": true
+}
+```
+
+| Paramètre | Description | Défaut |
+|---|---|---|
+| `enabled` | Active / désactive le système | `true` |
+| `global_daily_limit` | Plafond journalier global (tous mots-clés) | `150` |
+| `per_keyword_daily_limit` | Max articles par mot-clé par jour | `30` |
+| `per_source_daily_limit` | Max articles d'un même site pour un mot-clé | `5` |
+| `adaptive_sorting` | Tri des mots-clés par ratio consommation/plafond croissant | `true` |
+
+Avec `adaptive_sorting: true`, les mots-clés les moins traités passent en priorité à chaque itération, assurant une couverture équilibrée sur l'ensemble des sujets configurés. Les compteurs se réinitialisent automatiquement à minuit.
+
+La configuration et la supervision en temps réel sont accessibles depuis l'onglet **Quota** du Viewer (Réglages).
+
 ---
 
 ## 7. Fonctionnement technique
