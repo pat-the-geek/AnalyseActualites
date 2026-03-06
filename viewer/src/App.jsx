@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Sidebar from './components/Sidebar'
 import FileViewer from './components/FileViewer'
 import SearchOverlay from './components/SearchOverlay'
@@ -218,6 +218,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isRefreshing, setIsRefreshing]   = useState(false)
+  // Compteur de requêtes pour ignorer les réponses périmées (race condition)
+  const fetchIdRef = useRef(0)
 
   // ── Thème ──────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('wudd_theme') || 'auto')
@@ -239,10 +241,24 @@ export default function App() {
   // ── Données ────────────────────────────────────────────────────────────────
   const refreshFiles = useCallback(() => {
     setIsRefreshing(true)
+    const id = ++fetchIdRef.current
     fetch('/api/files')
-      .then(r => r.json())
-      .then(data => { setFiles(data); setIsRefreshing(false) })
-      .catch(err => { console.error(err); setIsRefreshing(false) })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(data => {
+        if (id !== fetchIdRef.current) return // réponse périmée ignorée
+        if (!Array.isArray(data)) throw new Error('Réponse invalide')
+        setFiles(data)
+        setIsRefreshing(false)
+      })
+      .catch(err => {
+        if (id !== fetchIdRef.current) return // réponse périmée ignorée
+        console.error('Erreur chargement fichiers:', err)
+        setIsRefreshing(false)
+        // L'état précédent est conservé (pas de setFiles)
+      })
   }, [])
 
   useEffect(() => { refreshFiles() }, [refreshFiles])
