@@ -393,6 +393,41 @@ def api_scheduler():
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_trends.log",
         },
+        {
+            "name": "Enrichissement sentiment",
+            "script": "enrich_sentiment.py",
+            "cron": "0 3 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_sentiment.log",
+        },
+        {
+            "name": "Conversion articles RSS → Markdown",
+            "script": "articles_rss_to_markdown.py",
+            "cron": "30 5 28-31 * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_rss_markdown.log",
+        },
+        {
+            "name": "Enrichissement temps de lecture",
+            "script": "enrich_reading_time.py",
+            "cron": "30 4 * * 0",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_reading_time.log",
+        },
+        {
+            "name": "Analyse croisée des flux",
+            "script": "cross_flux_analysis.py",
+            "cron": "30 5 * * 1",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_cross_flux.log",
+        },
+        {
+            "name": "Chronologie des entités",
+            "script": "entity_timeline.py",
+            "cron": "30 7 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_entity_timeline.log",
+        },
     ]
     for t in fixed:
         if t.get("extra_last_run"):
