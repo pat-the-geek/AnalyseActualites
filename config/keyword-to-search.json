@@ -1,21 +1,5 @@
 [
   {
-    "keyword": "Anthropic",
-    "or": [
-      "Claude"
-    ]
-  },
-  {
-    "and": [],
-    "keyword": "Apple",
-    "or": [
-      "iPhone",
-      "iPad",
-      "iOS",
-      "MacBook"
-    ]
-  },
-  {
     "and": [],
     "keyword": "[Art]",
     "or": [
@@ -32,6 +16,22 @@
       "Frida Kahlo",
       "Andy Warhol",
       "Adele d'affry"
+    ]
+  },
+  {
+    "keyword": "Anthropic",
+    "or": [
+      "Claude"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Apple",
+    "or": [
+      "iPhone",
+      "iPad",
+      "iOS",
+      "MacBook"
     ]
   },
   {
@@ -227,5 +227,16 @@
       "Visual Studio Code",
       "Multi-Agent Development"
     ]
+  },
+  {
+    "keyword": "The Beatles",
+    "or": [
+      "Beatles",
+      "John Lennon",
+      "Paul McCartney",
+      "George Harrison",
+      "Ringo Starr"
+    ],
+    "and": []
   }
 ]

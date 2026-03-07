@@ -8,7 +8,7 @@
 
 1. [Vue d'ensemble](#1-vue-densemble)
 2. [Infomaniak EurIA (LLM)](#2-infomaniak-euria-llm)
-3. [Reeder — Agrégateur de flux](#3-reeder--agrégateur-de-flux)
+3. [Flux JSON — Source d'articles](#3-flux-json--source-darticles)
 4. [Sources RSS / Sites d'actualité](#4-sources-rss--sites-dactualité)
 5. [Wikimedia — Géocodage et galerie d'images](#5-wikimedia--géocodage-et-galerie-dimages)
 6. [OpenStreetMap — Tuiles cartographiques](#6-openstreetmap--tuiles-cartographiques)
@@ -24,7 +24,7 @@
 
 WUDD.ai s'appuie sur plusieurs services externes pour collecter, analyser et visualiser des articles d'actualité. Ces dépendances se répartissent en deux catégories :
 
-- **Critiques** — la plateforme ne peut pas fonctionner sans elles (EurIA, Reeder, flux RSS)
+- **Critiques** — la plateforme ne peut pas fonctionner sans elles (EurIA, flux JSON, flux RSS)
 - **Optionnelles** — enrichissent l'expérience mais ont un mode dégradé acceptable (Wikimedia, OpenStreetMap)
 
 Aucune base de données externe n'est utilisée : tout est stocké localement en JSON.
@@ -82,37 +82,37 @@ generate_report(articles, flux)   # Rapport multi-articles
 
 ---
 
-## 3. Reeder — Agrégateur de flux
+## 3. Flux JSON — Source d'articles
 
 **Rôle : source principale d'articles** · Dépendance **critique**
 
-[Reeder](https://reederapp.com) est une application RSS qui expose les articles lus/étoilés via une URL JSON propriétaire.
+WUDD.ai consomme des flux d’actualités au format JSON accessibles par URL HTTP. Chaque flux est une collection d’articles sérialisée en JSON, exposable par n’importe quel service ou application compatible (agrégateur RSS, serveur personnalisé, script d’export, etc.).
 
 | Attribut | Valeur |
 | --- | --- |
-| Format | JSON propriétaire Reeder |
-| Endpoint | `https://reederapp.net/{hash}.json` |
-| Authentification | Aucune (URL avec token intégré) |
+| Format | JSON (tableau d’objets avec `url`, `date_published`, `authors`) |
+| Endpoint | Toute URL HTTP retournant un JSON valide |
+| Authentification | Aucune requise (l’URL peut intégrer un token) |
 | Fréquence de consultation | Hebdomadaire (cron lundi 06:00) |
-| Variable d'env. | `REEDER_JSON_URL` dans `.env` |
+| Variable d’env. | `REEDER_JSON_URL` dans `.env` |
 
 ### Flux configurés (`config/flux_json_sources.json`)
 
-| Flux | URL | Thématique |
-| --- | --- | --- |
-| Intelligence-artificielle | `https://reederapp.net/lOIzwbVDTXO8Q6D_c2Z1ng.json` | IA, tech |
-| Suisse | `https://reederapp.net/e4nRX4ltQQSn_csdE9px9w.json` | Actualité suisse |
-| Trump | `https://reederapp.net/q_vOfNL9Sau58223MwGdKA.json` | Politique US |
+| Flux | Thématique |
+| --- | --- |
+| Intelligence-artificielle | IA, tech |
+| Suisse | Actualité suisse |
+| Trump | Politique US |
 
 ### Ajouter un flux
 
-1. Dans l'application Reeder, créer un flux partagé et copier l'URL `.json`
+1. Obtenir l’URL HTTP du flux JSON source
 2. Ajouter une entrée dans `config/flux_json_sources.json` avec `title` et `url`
 3. Le scheduler le traitera automatiquement au prochain lundi 06:00
 
-### Comportement en cas d'indisponibilité de Reeder
+### Comportement en cas d’indisponibilité du flux
 
-Le script `Get_data_from_JSONFile_AskSummary_v2.py` lève une exception et s'arrête. Le flux concerné est ignoré lors du cycle suivant si la même URL échoue.
+Le script `Get_data_from_JSONFile_AskSummary_v2.py` lève une exception et s’arrête. Le flux concerné est ignoré lors du cycle suivant si la même URL échoue.
 
 ---
 
@@ -265,7 +265,7 @@ Si un article est inaccessible (403, timeout, connexion refusée), le script log
 | Service | Type | Criticité | Auth | Fichiers principaux |
 | --- | --- | --- | --- | --- |
 | **Infomaniak EurIA** | LLM / IA | Critique | Bearer token | `utils/api_client.py` |
-| **Reeder** | Agrégateur RSS | Critique | URL token | `Get_data_from_JSONFile_AskSummary_v2.py` |
+| **Flux JSON (HTTP)** | Source d'articles JSON | Critique | URL (token optionnel) | `Get_data_from_JSONFile_AskSummary_v2.py` |
 | **133+ flux RSS** | Sources d'actualité | Critique | Publique | `get-keyword-from-rss.py` |
 | **Wikipedia API** | Géocodage + images PERSON | Optionnel | User-Agent | `viewer/app.py` |
 | **Wikidata** | Logos ORG/PRODUCT (P154) | Optionnel | User-Agent | `viewer/app.py` |
@@ -283,7 +283,7 @@ Toutes définies dans `.env` (cf. `.env.example`) :
 | --- | --- | --- |
 | `URL` | Infomaniak EurIA — endpoint API | Oui |
 | `bearer` | Infomaniak EurIA — token Bearer | Oui |
-| `REEDER_JSON_URL` | Reeder — URL du flux JSON principal | Oui |
+| `REEDER_JSON_URL` | URL du flux JSON source | Oui |
 | `MAX_RETRIES` | Tous appels HTTP — nombre max de tentatives | Non (défaut : 3) |
 | `TIMEOUT_RESUME` | EurIA — timeout génération résumé | Non (défaut : 60 s) |
 | `TIMEOUT_RAPPORT` | EurIA — timeout génération rapport | Non (défaut : 300 s) |
@@ -298,8 +298,8 @@ Toutes définies dans `.env` (cf. `.env.example`) :
 ┌──────────────────────────────────────────────────────────────┐
 │  SOURCES D'ENTRÉE                                            │
 │                                                              │
-│  Reeder JSON ──────────────────────────────────────────┐     │
-│  (reederapp.net/{hash}.json)                           │     │
+│  Flux JSON (HTTP) ─────────────────────────────────────┐     │
+│  (URL configurée dans flux_json_sources.json)          │     │
 │                                                        │     │
 │  RSS / OPML (133 sources) ─────────────────────────────┤     │
 │  (sites_actualite.json + keyword-to-search.json)       │     │
@@ -360,7 +360,7 @@ Toutes définies dans `.env` (cf. `.env.example`) :
 | **Wikimedia Commons** (URLs logos) | Variable par fichier | Dépend du fichier | ⚠️ Usage éditorial non commercial — voir ci-dessous |
 | **Logos d'entreprises** (via P154) | Droit des marques | Non (usage informatif) | ✅ Usage éditorial acceptable |
 | **Infomaniak EurIA** | API commerciale (CGU Infomaniak) | Non dans l'UI | ✅ Régulé par le contrat de service |
-| **Reeder** | Propriétaire | Non dans l'UI | ✅ Accès via URL partagée par l'utilisateur |
+| **Flux JSON (HTTP)** | Propriété source | Non dans l'UI | ✅ Accès via URL configurée par l'utilisateur |
 
 ---
 

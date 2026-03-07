@@ -30,7 +30,7 @@ Votre projet a été **entièrement sécurisé et préparé** pour un déploieme
 ## 🔐 Données Protégées
 
 ### Fichiers Critiques (Ignorés)
-- ✅ `.env` - Credentials API Infomaniak + URL Reeder
+- ✅ `.env` - Credentials API Infomaniak + URL flux JSON
 - ✅ `data/articles/*.json` - 3 fichiers (151 KB) avec URLs privées
 - ✅ `data/raw/` - Contenu HTML brut
 - ✅ `rapports/` - Rapports générés (25+ MB)

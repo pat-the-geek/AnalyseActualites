@@ -86,7 +86,7 @@ sequenceDiagram
 flowchart TD
     START([Lundi 06h00 — cron déclenche]) --> SCHED[scheduler_articles.py\nlit flux_json_sources.json]
     SCHED --> LOOP{Pour chaque flux}
-    LOOP --> FETCH[Collecte articles\nReeder JSON feed]
+    LOOP --> FETCH[Collecte articles\nFlux JSON (HTTP)]
     FETCH --> FILTER[Filtre par date\n1er du mois → aujourd'hui]
     FILTER --> HTML[Extraction texte\nBeautifulSoup4]
     HTML --> CACHE{Cache API\n24h ?}
@@ -653,7 +653,7 @@ flowchart TD
 
     V -->|Flux RSS| A1[GET /api/export/atom?flux=...&limit=20]
     A1 --> F1[Atom XML\ncompatible RSS agrégateurs]
-    F1 -->|Abonné via URL| AGG[Reeder / Feedly / Inoreader]
+    F1 -->|Abonné via URL| AGG[Feedly / Inoreader / NetNewsWire]
 
     V -->|Newsletter| A2[GET /api/export/newsletter?flux=...&limit=20]
     A2 --> F2[HTML email\nwith inline images]

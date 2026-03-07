@@ -18,7 +18,7 @@
   </a>
 </p>
 
-> **What's up, Doc?** — Plateforme de veille intelligente inspirée de Bugs Bunny : collecte, analyse et synthèse d'actualités via l'API EurIA (Infomaniak / Qwen3), à partir de flux RSS/JSON gérés par Reeder.
+> **What's up, Doc?** — Plateforme de veille intelligente inspirée de Bugs Bunny : collecte, analyse et synthèse d'actualités via l'API EurIA (Infomaniak / Qwen3), à partir de flux JSON accessibles par URL HTTP.
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## 1. Présentation
 
-WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de sources RSS/JSON gérées via Reeder, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
+WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de flux JSON accessibles par URL HTTP, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
 
 Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. Un extracteur d'**entités nommées (NER)** peut enrichir a posteriori l'ensemble des articles existants en identifiant automatiquement personnes, organisations, pays, produits, événements, montants, etc. (18 types au total). L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
 
@@ -72,7 +72,7 @@ mindmap
   root((WUDD.ai))
     Collecte multi-flux
       Sources RSS / JSON
-      Gestion via Reeder
+      Flux JSON par URL HTTP
       Multi-flux cloisonnés
     Résumé IA
       API EurIA · Qwen3
@@ -123,7 +123,7 @@ mindmap
 ### Pipeline de traitement
 
 ```
-Reeder (RSS/JSON) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Enrichissement NER → Markdown annoté / PDF
+Flux JSON (HTTP) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Enrichissement NER → Markdown annoté / PDF
 ```
 
 ### Arborescence du projet
@@ -200,7 +200,7 @@ Le fichier `.env` n'est jamais commité (`.gitignore`). Référez-vous à `.env.
 
 #### 2. Fichier de flux `config/flux_json_sources.json`
 
-> **⚠️ Ce fichier n'est pas dans le dépôt git** (il contient vos URLs privées Reeder).
+> **⚠️ Ce fichier n'est pas dans le dépôt git** (il contient vos URLs de flux JSON).
 > Seul le template `config/flux_json_sources.example.json` est versionné.
 
 Créez votre fichier à partir de l'exemple :
@@ -525,7 +525,7 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 [
   {
     "title": "Intelligence artificielle",
-    "url": "https://reederapp.net/flux1.json",
+    "url": "https://votre-serveur.exemple/flux1.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60
@@ -533,7 +533,7 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
   },
   {
     "title": "Suisse",
-    "url": "https://reederapp.net/flux2.json",
+    "url": "https://votre-serveur.exemple/flux2.json",
     "scheduler": {
       "cron": "0 6 * * *",
       "timeout": 60

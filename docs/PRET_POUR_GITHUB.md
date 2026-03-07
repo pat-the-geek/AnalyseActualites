@@ -72,7 +72,7 @@ Ce guide contient toutes les explications pas à pas avec captures d'écran et r
 
 ### ✅ Ce Qui NE SERA PAS sur GitHub
 
-- ❌ Votre fichier `.env` (tokens API, URL Reeder privée)
+- ❌ Votre fichier `.env` (tokens API, URL de flux JSON privée)
 - ❌ Les articles collectés (3 fichiers JSON, 151 KB)
 - ❌ Les rapports générés (25 MB)
 - ❌ Les anciennes versions de scripts

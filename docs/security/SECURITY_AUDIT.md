@@ -29,7 +29,7 @@ Le projet a été **sécurisé et préparé** pour un dépôt GitHub public ou p
 
 | Fichier | Statut | Contenu Sensible |
 |---------|--------|------------------|
-| `.env` | ✅ Ignoré | Token API Infomaniak, URL Reeder privée |
+| `.env` | ✅ Ignoré | Token API Infomaniak, URL de flux JSON privée |
 | `.venv/`, `venv/` | ✅ Ignoré | Environnement Python |
 
 **Vérification** :
@@ -126,7 +126,7 @@ Les mentions de "bearer" trouvées sont uniquement dans :
 ### URLs Privées
 
 **Fichier** : `.env`  
-**Variable** : `REEDER_JSON_URL=https://reederapp.net/lOIzwbVDTXO8Q6D_c2Z1ng.json`  
+**Variable** : `REEDER_JSON_URL=https://votre-serveur.exemple/flux.json`  
 **Statut** : ✅ Protégé (fichier ignoré)
 
 ### Tokens API

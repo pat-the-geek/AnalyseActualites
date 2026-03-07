@@ -131,7 +131,7 @@ chmod +x .git/hooks/pre-commit
 | Variable | Description | Risque |
 |----------|-------------|--------|
 | `bearer` | Token API Infomaniak EurIA | ⚠️ **CRITIQUE** - Accès complet à l'API payante |
-| `REEDER_JSON_URL` | URL privée du flux Reeder | ⚠️ **ÉLEVÉ** - Exposition de votre liste d'articles |
+| `REEDER_JSON_URL` | URL privée du flux JSON source | ⚠️ **ÉLEVÉ** - Exposition de votre liste d'articles |
 | `URL` | Endpoint API avec Product ID | ⚠️ **MOYEN** - Révèle votre configuration |
 
 ---
@@ -154,7 +154,7 @@ chmod +x .git/hooks/pre-commit
 ### Actions immédiates :
 
 1. **Révoquer tous les tokens** exposés
-2. **Changer l'URL du flux Reeder** (si exposée)
+2. **Changer l'URL du flux JSON source** (si exposée)
 3. **Supprimer le dépôt GitHub** (si historique compromis)
 4. **Nettoyer l'historique Git** (filter-branch)
 5. **Vérifier les logs d'accès API** chez Infomaniak

@@ -97,7 +97,7 @@ Paradoxe ou tension centrale révélée par le corpus]
 ---
 Rapport préparé avec Claude Sonnet 4.6 (https://claude.ai) et produit par 
 [iA Writer](https://ia.net/writer) - La veille a été effectuée grâce à 
-l'outil [Reeder.app](https://reeder.app)
+[WUDD.ai](https://github.com/pat-the-geek/WUDD.ai)
 ---
 
 ## Règles de rédaction

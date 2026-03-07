@@ -4,7 +4,7 @@ This file provides essential context for AI assistants working in this codebase.
 
 ## Project Overview
 
-**WUDD.ai** (also called *AnalyseActualités*) is a French-language intelligent news monitoring platform. It fetches articles from RSS/JSON feeds (via Reeder), summarizes them with an AI API (Infomaniak EurIA / Qwen3), and produces structured JSON outputs and Markdown reports.
+**WUDD.ai** (also called *Analyse Actualités*) is a French-language intelligent news monitoring platform. It fetches articles from JSON feeds accessible via HTTP URL, summarizes them with an AI API (Infomaniak EurIA / Qwen3), and produces structured JSON outputs and Markdown reports.
 
 - **Language:** All configuration keys, prompts, log messages, and output are in **French**
 - **Version:** 2.2.0 (quota adaptatif)
@@ -66,7 +66,7 @@ Required variables:
 |---|---|
 | `URL` | EurIA API endpoint (Infomaniak) |
 | `bearer` | Bearer token for EurIA API |
-| `REEDER_JSON_URL` | Source JSON feed URL (from Reeder app) |
+| `REEDER_JSON_URL` | Source JSON feed URL (accessible via HTTP) |
 | `MAX_RETRIES` | Max API retry attempts (default: 3) |
 | `TIMEOUT_RESUME` | Timeout for summary generation in seconds (default: 60) |
 | `TIMEOUT_RAPPORT` | Timeout for report generation in seconds (default: 300) |
@@ -377,7 +377,7 @@ When analyzing article JSON files with Claude directly (outside the pipeline), u
 |---|---|
 | `docs/ARCHITECTURE.md` | Full technical architecture (v3.0, Feb 2026) with Mermaid diagrams |
 | `docs/DEPLOY.md` | Deployment procedures |
-| `docs/EXTERNAL_SERVICES.md` | External service dependencies (EurIA, Reeder, RSS, Wikipedia, Wikidata, OSM) |
+| `docs/EXTERNAL_SERVICES.md` | External service dependencies (EurIA, JSON feeds via HTTP, RSS, Wikipedia, Wikidata, OSM) |
 | `docs/ENTITIES.md` | NER semantic analysis — Dashboard Liste / Carte / Galerie, pipeline, caches |
 | `docs/security/SECURITY.md` | Security considerations |
 | `docs/security/SECURITY_AUDIT.md` | Security audit report |
