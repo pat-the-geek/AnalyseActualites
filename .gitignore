@@ -1,4 +1,3 @@
-config/flux_json_sources.json
 # Exclure la configuration sensible
 config/flux_json_sources.json
 

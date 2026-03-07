@@ -65,10 +65,6 @@
     "score": 68, "biais": "centre", "type": "chaîne info en continu", "pays": "France",
     "fiabilite": "moyenne", "fact_checking": false
   },
-  "BFMTV": {
-    "score": 68, "biais": "centre", "type": "chaîne info en continu", "pays": "France",
-    "fiabilite": "moyenne", "fact_checking": false
-  },
   "CNews": {
     "score": 55, "biais": "droite", "type": "chaîne info en continu", "pays": "France",
     "fiabilite": "variable", "fact_checking": false
