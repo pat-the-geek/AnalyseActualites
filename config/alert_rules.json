@@ -1,0 +1,32 @@
+{
+  "global": {
+    "threshold_ratio": 2.0,
+    "top": 20,
+    "min_mentions_24h": 2
+  },
+  "types_entites": {
+    "PERSON":  { "enabled": true,  "threshold_ratio": 2.0, "min_mentions": 2 },
+    "ORG":     { "enabled": true,  "threshold_ratio": 2.0, "min_mentions": 2 },
+    "GPE":     { "enabled": true,  "threshold_ratio": 2.5, "min_mentions": 2 },
+    "PRODUCT": { "enabled": true,  "threshold_ratio": 2.0, "min_mentions": 2 },
+    "EVENT":   { "enabled": true,  "threshold_ratio": 1.5, "min_mentions": 2 },
+    "NORP":    { "enabled": true,  "threshold_ratio": 2.0, "min_mentions": 2 },
+    "LOC":     { "enabled": true,  "threshold_ratio": 2.5, "min_mentions": 2 },
+    "FAC":     { "enabled": false, "threshold_ratio": 2.0, "min_mentions": 3 }
+  },
+  "niveaux": {
+    "modere":   { "label": "modéré",  "ratio_min": 2.0, "emoji": "🟡" },
+    "eleve":    { "label": "élevé",   "ratio_min": 3.0, "emoji": "🟠" },
+    "critique": { "label": "critique","ratio_min": 5.0, "emoji": "🔴" }
+  },
+  "filtres": {
+    "min_chars_entity": 3,
+    "exclude_generics": true
+  },
+  "notifications": {
+    "niveaux_notifies": ["élevé", "critique"],
+    "webhook_discord": false,
+    "webhook_slack":   false,
+    "ntfy":            false
+  }
+}

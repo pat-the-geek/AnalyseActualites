@@ -22,4 +22,13 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Enrichissement sentiment Round-Robin : 1 fichier/source par jour à 3h00
 # Tourne sur tous les fichiers data/articles/ et data/articles-from-rss/ de façon cyclique
 0 3 * * * root cd /app && python3 scripts/enrich_sentiment.py 2>&1 | tee -a /app/rapports/cron_sentiment.log
+# Enrichissement du temps de lecture chaque dimanche à 4h30 (calcul local, aucun appel EurIA)
+# Ajoute temps_lecture_minutes/label à tous les articles data/articles/ et data/articles-from-rss/
+30 4 * * 0 root cd /app && python3 scripts/enrich_reading_time.py 2>&1 | tee -a /app/rapports/cron_reading_time.log
+# Analyse croisée des flux chaque lundi à 5h30, avant le scheduler hebdomadaire (6h00)
+# Détecte les entités présentes dans ≥ 2 flux distincts → data/cross_flux_report.json
+30 5 * * 1 root cd /app && python3 scripts/cross_flux_analysis.py 2>&1 | tee -a /app/rapports/cron_cross_flux.log
+# Chronologie des entités : mise à jour quotidienne à 7h30, après trend_detector (7h00)
+# Pré-calcule data/entity_timeline.json pour le tableau de bord (cache 1h via Flask)
+30 7 * * * root cd /app && python3 scripts/entity_timeline.py 2>&1 | tee -a /app/rapports/cron_entity_timeline.log
 
