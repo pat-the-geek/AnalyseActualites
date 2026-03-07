@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict = {
     "global_daily_limit": 150,
     "per_keyword_daily_limit": 30,
     "per_source_daily_limit": 5,
+    "per_entity_daily_limit": 10,
     "adaptive_sorting": True,
 }
 
@@ -133,7 +134,29 @@ class QuotaManager:
                 return False
             return True
 
-    def record_article(self, keyword: str, source: str) -> None:
+    def can_process_entities(self, entities: dict) -> tuple[bool, str]:
+        """
+        Vérifie si un article peut être importé selon le plafond par entité.
+        Retourne (True, '') si autorisé, ou (False, nom_entite) si une entité
+        a atteint son quota journalier.
+        Si quota désactivé, aucune entité détectée ou limite <= 0, retourne toujours (True, '').
+        """
+        if not self.enabled:
+            return True, ""
+        limit = int(self._config.get("per_entity_daily_limit", DEFAULT_CONFIG["per_entity_daily_limit"]))
+        if limit <= 0:
+            return True, ""
+        with self._lock:
+            self._maybe_reset_day()
+            entity_counts = self._state.get("entities", {})
+            for etype_list in entities.values():
+                if isinstance(etype_list, list):
+                    for name in etype_list:
+                        if entity_counts.get(name, 0) >= limit:
+                            return False, name
+        return True, ""
+
+    def record_article(self, keyword: str, source: str, entities: dict | None = None) -> None:
         """Incrémente les compteurs après ajout réel d'un article."""
         with self._lock:
             self._maybe_reset_day()
@@ -144,6 +167,12 @@ class QuotaManager:
             kw_data["total"] += 1
             kw_data["sources"][src_key] = kw_data["sources"].get(src_key, 0) + 1
             self._state["global_count"] += 1
+            if entities:
+                entity_counts = self._state.setdefault("entities", {})
+                for etype_list in entities.values():
+                    if isinstance(etype_list, list):
+                        for name in etype_list:
+                            entity_counts[name] = entity_counts.get(name, 0) + 1
             self._persist()
 
     def sort_by_priority(self, keywords: list[str]) -> list[str]:
@@ -186,6 +215,19 @@ class QuotaManager:
                 },
             }
 
+        entity_limit = int(self._config.get("per_entity_daily_limit", DEFAULT_CONFIG["per_entity_daily_limit"]))
+        entity_counts = self._state.get("entities", {})
+        top_entities = sorted(entity_counts.items(), key=lambda x: -x[1])[:20]
+        entities_stats = {
+            name: {
+                "count": cnt,
+                "limit": entity_limit,
+                "pct": round(cnt / entity_limit * 100) if entity_limit > 0 else 0,
+                "saturated": cnt >= entity_limit,
+            }
+            for name, cnt in top_entities
+        }
+
         return {
             "date": self._state["date"],
             "global": {
@@ -195,6 +237,7 @@ class QuotaManager:
                 "exhausted": self.is_global_exhausted(),
             },
             "keywords": keywords_stats,
+            "entities": entities_stats,
         }
 
     def reset_day(self) -> None:
@@ -211,11 +254,11 @@ class QuotaManager:
         """Sauvegarde une nouvelle configuration (depuis l'UI)."""
         allowed_keys = {
             "enabled", "global_daily_limit", "per_keyword_daily_limit",
-            "per_source_daily_limit", "adaptive_sorting",
+            "per_source_daily_limit", "per_entity_daily_limit", "adaptive_sorting",
         }
         config = {k: v for k, v in new_config.items() if k in allowed_keys}
         # Validation des entiers
-        for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit"):
+        for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit", "per_entity_daily_limit"):
             if int_key in config:
                 config[int_key] = max(1, int(config[int_key]))
         QUOTA_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)

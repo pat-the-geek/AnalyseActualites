@@ -291,6 +291,12 @@ def main(dry_run: bool = False) -> None:
                 continue
 
             entities = api_client.generate_entities(resume)
+            # Vérifier le quota par entité (après détection, avant ajout)
+            if entities:
+                ok, saturated = quota.can_process_entities(entities)
+                if not ok:
+                    print_console(f"  Quota entité atteint pour '{saturated}', article ignoré.", level="debug")
+                    continue
             images   = extract_top_n_largest_images(link, n=1, min_width=500)
 
             article = {
@@ -316,7 +322,7 @@ def main(dry_run: bool = False) -> None:
             existing_list.append(article)
             _write_atomic(out_path, existing_list)
             print_console(f"  ✓ Ajouté dans {out_path.name}")
-            quota.record_article(kw, feed_title)
+            quota.record_article(kw, feed_title, entities if entities else None)
             new_articles_all.append(article)
             # Si quota global atteint après cet ajout, sortir de la boucle mots-clés
             if quota.is_global_exhausted():

@@ -140,7 +140,8 @@ quota = get_quota_manager()
 if quota.enabled:
     print_console(f"Quotas activés — global: {quota._config.get('global_daily_limit')}/j, "
                   f"par mot-clé: {quota._config.get('per_keyword_daily_limit')}/j, "
-                  f"par source: {quota._config.get('per_source_daily_limit')}/source")
+                  f"par source: {quota._config.get('per_source_daily_limit')}/source, "
+                  f"par entité: {quota._config.get('per_entity_daily_limit', 10)}/entité")
 else:
     print_console("Quotas désactivés.")
 
@@ -232,6 +233,12 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                     continue
                 print_console(f"      Extraction des entités nommées...")
                 entities = api_client.generate_entities(resume)
+                # Vérifier le quota par entité (après détection, avant ajout)
+                if entities:
+                    ok, saturated = quota.can_process_entities(entities)
+                    if not ok:
+                        print_console(f"      Quota entité atteint pour '{saturated}', article ignoré.", level="debug")
+                        continue
                 print_console(f"      Extraction de l'image principale...")
                 images = extract_top_n_largest_images(link, n=1, min_width=500)
                 article = {
@@ -245,7 +252,7 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 if entities:
                     article["entities"] = entities
                 results[kw][link] = article
-                quota.record_article(kw, feed_title)
+                quota.record_article(kw, feed_title, entities if entities else None)
                 _progress["articles_added"] += 1
                 _progress["last_action"] = f"Article ajouté '{kw}' — {feed_title}"
                 _write_progress(_progress)

@@ -1151,6 +1151,25 @@ function QuotaTab() {
               </div>
             </div>
 
+            {/* Par entité */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-700 dark:text-slate-300">Par entité</label>
+                <span className="text-xs text-slate-400">articles / entité nommée / jour</span>
+              </div>
+              <input
+                type="range" min="1" max="20" step="1"
+                value={config.per_entity_daily_limit ?? 10}
+                onChange={e => setConfig(c => ({ ...c, per_entity_daily_limit: +e.target.value }))}
+                className="w-full accent-amber-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>1</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">⬦ {config.per_entity_daily_limit ?? 10} articles</span>
+                <span>20</span>
+              </div>
+            </div>
+
             {/* Tri adaptatif */}
             <div className="flex items-center justify-between p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
               <div>
@@ -1229,6 +1248,30 @@ function QuotaTab() {
             </p>
           )}
         </div>
+
+        {/* ── Top entités ── */}
+        {stats && Object.keys(stats.entities ?? {}).length > 0 && (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Entités nommées — top {Object.keys(stats.entities).length}
+            </p>
+            <div className="flex flex-col gap-2">
+              {Object.entries(stats.entities).map(([name, info]) => (
+                <div key={name} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[70%]">{name}</span>
+                    {info.saturated && (
+                      <span className="text-xs font-semibold text-rose-500 dark:text-rose-400 flex items-center gap-1">
+                        <AlertTriangle size={10} /> Saturée
+                      </span>
+                    )}
+                  </div>
+                  <QuotaBar count={info.count} limit={info.limit} color="amber" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

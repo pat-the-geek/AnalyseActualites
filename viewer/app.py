@@ -697,7 +697,7 @@ def api_save_quota_config():
     if not isinstance(data, dict):
         abort(400, "Format invalide : objet attendu")
     # Validation basique des types
-    for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit"):
+    for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit", "per_entity_daily_limit"):
         if int_key in data:
             try:
                 data[int_key] = max(1, int(data[int_key]))
