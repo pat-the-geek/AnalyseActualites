@@ -3,6 +3,8 @@
 **Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de WUDD.opml.
 Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
 
+La **déduplication avancée** (`utils/deduplication.py`) est appliquée automatiquement : trois signaux combinés (empreinte URL, empreinte résumé MD5, similarité Jaccard des titres ≥ 0.85) remplacent la simple comparaison par URL.
+
 **Filtrage avancé (OR / AND)**
 
 Chaque entrée de `keyword-to-search.json` supporte deux collections optionnelles :
@@ -159,6 +161,148 @@ python3 scripts/articles_rss_to_markdown.py --keyword anthropic
 
 **Sortie** :
 - `rapports/markdown/keyword/<keyword>/<keyword>_YYYY-MM-DD.md`
+
+---
+
+### 11. trend_detector.py
+
+**Description** : Détecte les entités nommées en forte progression en comparant leurs mentions sur les **24 dernières heures** avec leur moyenne sur les **7 derniers jours**. Génère `data/alertes.json` consommé par le panneau **Tendances & alertes** du Viewer. Les seuils et types surveillés sont configurables dans `config/alert_rules.json`.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--top N` | Nombre d'alertes à conserver | 20 (config) |
+| `--threshold RATIO` | Seuil global de ratio 24h/7j | 2.0 (config) |
+| `--dry-run` | Calcule les tendances sans écrire `alertes.json` | désactivé |
+| `--no-notify` | Désactive les notifications webhook | désactivé |
+
+**Utilisation** :
+```bash
+# Exécution normale — génère data/alertes.json
+python3 scripts/trend_detector.py
+
+# Simulation sans écriture
+python3 scripts/trend_detector.py --dry-run
+
+# Top 15 avec seuil rehaussé, sans notifications
+python3 scripts/trend_detector.py --top 15 --threshold 3.0 --no-notify
+```
+
+**Automatisation (cron)** — chaque matin à 7h00 :
+```
+0 7 * * * root cd /app && python3 scripts/trend_detector.py 2>&1 | tee -a /app/rapports/cron_trends.log
+```
+
+**Configuration** : `config/alert_rules.json` — seuils par type d'entité, niveaux (modéré / élevé / critique), configuration webhooks Discord / Slack / Ntfy.
+
+**Sortie** :
+- `data/alertes.json` — liste des alertes avec ratio, niveau et entités concernées
+
+---
+
+### 12. enrich_reading_time.py
+
+**Description** : Calcule et ajoute le **temps de lecture estimé** (en minutes) à chaque article de `data/articles/` et `data/articles-from-rss/`. Basé sur 230 mots/minute (référence INSERM, adulte francophone). Traitement 100 % local, aucun appel EurIA. Champs ajoutés : `temps_lecture_minutes` (float) et `temps_lecture_label` (chaîne lisible, ex. `"3 min"`).
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--flux NOM` | Traiter uniquement ce flux | tous |
+| `--keyword MOT` | Traiter uniquement ce mot-clé | tous |
+| `--dry-run` | Simulation sans écriture | désactivé |
+| `--force` | Réenrichir les articles déjà enrichis | désactivé |
+
+**Utilisation** :
+```bash
+# Enrichir tous les articles
+python3 scripts/enrich_reading_time.py
+
+# Un flux spécifique
+python3 scripts/enrich_reading_time.py --flux Intelligence-artificielle
+
+# Simulation
+python3 scripts/enrich_reading_time.py --dry-run
+```
+
+**Automatisation (cron)** — chaque dimanche à 4h30 :
+```
+30 4 * * 0 root cd /app && python3 scripts/enrich_reading_time.py 2>&1 | tee -a /app/rapports/cron_reading_time.log
+```
+
+**Sortie** : Sauvegarde atomique des fichiers JSON modifiés.
+
+---
+
+### 13. entity_timeline.py
+
+**Description** : Construit la **série chronologique** des mentions d'entités nommées en scannant tous les articles de `data/articles/` et `data/articles-from-rss/`. Produit `data/entity_timeline.json` utilisé par le composant **Timeline des entités** dans le Dashboard du Viewer (sparklines SVG).
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--days N` | Fenêtre temporelle en jours | 30 |
+| `--top N` | Nombre d'entités à inclure | 50 |
+| `--entity NOM` | Filtrer sur une entité précise | toutes |
+| `--type TYPE` | Filtrer par type NER (PERSON, ORG, GPE…) | tous |
+| `--dry-run` | Affiche le résultat sans écrire le fichier | désactivé |
+
+**Utilisation** :
+```bash
+# Générer la timeline complète (30j, top 50 entités)
+python3 scripts/entity_timeline.py
+
+# Fenêtre 7 jours, top 20
+python3 scripts/entity_timeline.py --days 7 --top 20
+
+# Une entité spécifique
+python3 scripts/entity_timeline.py --entity "OpenAI" --type ORG
+```
+
+**Automatisation (cron)** — chaque matin à 7h30 (après `trend_detector.py`) :
+```
+30 7 * * * root cd /app && python3 scripts/entity_timeline.py 2>&1 | tee -a /app/rapports/cron_entity_timeline.log
+```
+
+**Sortie** :
+- `data/entity_timeline.json` — séries temporelles par entité, exposées via `GET /api/entities/timeline`
+
+---
+
+### 14. cross_flux_analysis.py
+
+**Description** : Détecte les **entités transversales** présentes dans plusieurs flux distincts. Permet d'identifier les sujets qui dépassent un seul fil de veille et créent des convergences thématiques. Génère un rapport JSON et un rapport Markdown structuré.
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--min-flux N` | Nombre minimum de flux distincts pour inclure une entité | 2 |
+| `--top N` | Nombre d'entités à inclure | 20 |
+| `--dry-run` | Simulation sans écriture | désactivé |
+
+**Utilisation** :
+```bash
+# Analyse complète (entités dans ≥ 2 flux)
+python3 scripts/cross_flux_analysis.py
+
+# Entités présentes dans ≥ 3 flux
+python3 scripts/cross_flux_analysis.py --min-flux 3
+
+# Simulation
+python3 scripts/cross_flux_analysis.py --dry-run
+```
+
+**Automatisation (cron)** — chaque lundi à 5h30 (avant le scheduler hebdomadaire à 6h00) :
+```
+30 5 * * 1 root cd /app && python3 scripts/cross_flux_analysis.py 2>&1 | tee -a /app/rapports/cron_cross_flux.log
+```
+
+**Sortie** :
+- `data/cross_flux_report.json` — entités transversales avec comptages par flux
+- `rapports/markdown/_CROSSFLUX_/cross_flux_YYYY-MM-DD.md` — rapport Markdown avec tableau de convergence
 
 ---
 

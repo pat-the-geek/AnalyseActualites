@@ -2,7 +2,7 @@ import { useMemo, useState, useRef } from 'react'
 import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
-  Download, LayoutGrid, AlignLeft, Maximize2,
+  Download, LayoutGrid, AlignLeft, Maximize2, Clock,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
@@ -14,6 +14,17 @@ const SENTIMENT_CFG = {
   négatif: { label: 'Négatif', score: null, dot: 'bg-rose-500',    text: 'text-rose-700 dark:text-rose-300',       bg: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800' },
 }
 const TON_LABELS = { factuel: 'Factuel', alarmiste: 'Alarmiste', promotionnel: 'Promo', critique: 'Critique', analytique: 'Analytique' }
+
+function ReadingTimeBadge({ article }) {
+  const label = article.temps_lecture_label
+  if (!label) return null
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400">
+      <Clock size={9} className="shrink-0" />
+      {label}
+    </span>
+  )
+}
 
 function SentimentBadge({ article }) {
   const sentiment   = article.sentiment
@@ -213,6 +224,7 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
                   <Tag size={9} />{count} entités
                 </span>
               )}
+              <ReadingTimeBadge article={article} />
             </div>
             <SentimentBadge article={article} />
             {titre && (
@@ -277,6 +289,7 @@ function TimelineItem({ article }) {
               <Tag size={9} />{count}
             </span>
           )}
+          <ReadingTimeBadge article={article} />
           <SentimentBadge article={article} />
           {article['URL'] && (
             <a href={article['URL']} target="_blank" rel="noopener noreferrer"

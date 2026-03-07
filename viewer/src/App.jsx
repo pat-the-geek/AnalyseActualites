@@ -660,6 +660,14 @@ export default function App() {
         >
           <TrendingUp size={22} />
         </button>
+        {/* Biais éditoriaux */}
+        <button
+          onClick={() => setBiasOpen(true)}
+          title="Biais éditoriaux"
+          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
+        >
+          <Eye size={22} />
+        </button>
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}

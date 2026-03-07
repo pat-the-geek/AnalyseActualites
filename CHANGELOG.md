@@ -1,4 +1,43 @@
-# 06/03/2026 — Analyse WUDD : 10 nouvelles fonctions de veille informationnelle
+# 07/03/2026 — v3.0.0 · Interface mobile, déduplication 3 signaux, alertes configurables
+
+## Priorités 1 à 10 — 10 nouvelles fonctions de veille informationnelle
+
+| # | Fonction | Fichiers |
+|---|---|---|
+| 1 | Déduplication 3 signaux | `utils/deduplication.py`, `get-keyword-from-rss.py` |
+| 2 | Règles d'alertes configurables | `config/alert_rules.json`, `scripts/trend_detector.py` |
+| 3 | Suivi temporel des entités (Timeline) | `scripts/entity_timeline.py`, endpoint Flask |
+| 4 | Score de crédibilité des sources | `utils/source_credibility.py`, `config/sources_credibility.json` |
+| 5 | Résumé exécutif automatisé | `scripts/generate_briefing.py`, endpoint Flask |
+| 6 | Estimation du temps de lecture | `utils/reading_time.py`, `scripts/enrich_reading_time.py` |
+| 7 | Analyse croisée des flux | `scripts/cross_flux_analysis.py`, endpoint Flask |
+| 8 | Scoring pondéré par crédibilité | `utils/scoring.py` (multiplicateur source) |
+| 9 | API 5 nouveaux endpoints Flask | `viewer/app.py` |
+| 10 | Tests unitaires (50 tests) | `tests/test_new_features.py` |
+
+## Interface mobile — toolbars bottom sheet
+
+- **TopArticlesPanel** (`viewer/src/components/TopArticlesPanel.jsx`) : rang centré style podium (🥇🥈🥉 + cercles numérotés), toolbar transparente fixée en bas sur mobile (`bg-white/80 backdrop-blur-xl`), bouton `✕` toujours à droite
+- **AlertsPanel** (`viewer/src/components/AlertsPanel.jsx`) : toolbar mobile en bas, contrôles masqués (`hidden md:flex`), fermeture à droite
+- **SourceBiasPanel** (`viewer/src/components/SourceBiasPanel.jsx`) : même pattern que AlertsPanel
+- **ScriptConsolePanel** (`viewer/src/components/ScriptConsolePanel.jsx`) : bottom sheet sur mobile (`items-end md:items-center`, `rounded-t-2xl`), safe-area-inset-bottom, bouton `✕` mobile dans le footer
+- **App.jsx** : bouton **Biais éditoriaux** (icône `Eye`) ajouté dans la navigation bottom mobile entre Alertes et Dashboard
+
+## Déduplication avancée (`utils/deduplication.py`)
+
+- Classe `Deduplicator` — 3 signaux combinés : URL MD5 + résumé MD5 (200 chars) + Jaccard bigrammes (seuil configurable ≥ 0.80)
+- `deduplicate()` et `deduplicate_incremental()` — statistiques `{total, unique, removed}`
+- Intégré dans `scripts/get-keyword-from-rss.py` (seuil 0.85)
+
+## Alertes configurables (`config/alert_rules.json` + `scripts/trend_detector.py`)
+
+- `config/alert_rules.json` : seuils par type d'entité (PERSON, ORG, GPE, EVENT…), 3 niveaux (modéré/élevé/critique), filtres, webhooks Discord/Slack/Ntfy configurables
+- `trend_detector.py` entièrement refactorisé : chargement dynamique des règles, `--threshold`, `--top`, `--dry-run`, `--no-notify`
+- 3 nouvelles tâches cron : `trend_detector.py` (07h00), `entity_timeline.py` (07h30), `enrich_reading_time.py` (04h30 dim), `cross_flux_analysis.py` (05h30 lun)
+
+---
+
+
 
 ## Analyse et priorisation
 

@@ -85,6 +85,7 @@ export default function SourceBiasPanel({ onClose }) {
     })
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="w-full max-w-3xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl mt-8">
         {/* Header */}
@@ -94,7 +95,7 @@ export default function SourceBiasPanel({ onClose }) {
             <h2 className="font-semibold text-slate-900 dark:text-slate-100">Biais éditoriaux par source</h2>
             <span className="text-xs text-slate-400">{enriched.length} sources enrichies / {sources.length} total</span>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+          <button onClick={onClose} className="hidden md:block p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
             <X size={18} />
           </button>
         </div>
@@ -107,8 +108,8 @@ export default function SourceBiasPanel({ onClose }) {
           </div>
         )}
 
-        {/* Controls */}
-        <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+        {/* Controls (masqués sur mobile) */}
+        <div className="hidden md:flex flex-wrap items-center gap-3 px-6 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Filtrer par source…"
@@ -136,7 +137,7 @@ export default function SourceBiasPanel({ onClose }) {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto pb-28 md:pb-0">
           {loading ? (
             <div className="text-center py-12 text-slate-400">
               <RefreshCw size={24} className="animate-spin mx-auto mb-3" />Chargement…
@@ -184,5 +185,43 @@ export default function SourceBiasPanel({ onClose }) {
         </div>
       </div>
     </div>
+
+    {/* ── Toolbar mobile fixée en bas ── */}
+    <div
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 px-4 py-3 flex items-center gap-2"
+      style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+    >
+      <div className="flex flex-wrap items-center gap-2 flex-1">
+        <input
+          type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Filtrer…"
+          className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs w-28"
+        />
+        <div className="flex items-center gap-1.5">
+          <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Min. :</label>
+          <select value={minArticles} onChange={e => setMinArticles(Number(e.target.value))}
+            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+            <option value="1">≥ 1</option>
+            <option value="5">≥ 5</option>
+            <option value="10">≥ 10</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Tri :</label>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs">
+            <option value="article_count">Volume</option>
+            <option value="avg_score_ton">Factuel</option>
+            <option value="avg_score_ton_asc">Biaisé</option>
+            <option value="négatif">Négatif ↓</option>
+          </select>
+        </div>
+      </div>
+      <button onClick={onClose}
+        className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
+        <X size={16} />
+      </button>
+    </div>
+    </>
   )
 }

@@ -421,9 +421,15 @@ bash start-viewer.sh stop      # arrêter le conteneur Docker
 | Visionneuse JSON | Coloration syntaxique, mode édition/sauvegarde intégré |
 | Visionneuse Markdown | Rendu HTML avec images et graphiques Mermaid |
 | Recherche plein texte | Recherche dans tous les fichiers via **⌘K** / **Ctrl+K** |
-| Panneau réglages | Gestion des flux, des planifications et des thématiques |
+| Panneau réglages | Gestion des flux, des planifications et des thématiques ; onglets Quota, RSS, Mots-clés, Alertes |
 | Dashboard entités | Vue agrégée cross-fichiers des entités nommées (NER) : statistiques par type, top entités, barres de proportion |
-| Détail d'une entité | Cliquer sur une entité ouvre la liste des articles la mentionnant, avec boutons **Générer un rapport** (Markdown) et **Exporter JSON** téléchargeables |
+| Détail d'une entité | Cliquer sur une entité ouvre la liste des articles la mentionnant, avec graphe de co-occurrences, synthèse IA en streaming, boutons **Générer un rapport** et **Exporter JSON** |
+| Top articles | Panneau des N articles les mieux scorés (grille 3 colonnes, images, entités cliquables, rang podium 🥇🥈🥉) |
+| Tendances & alertes | Détection des entités en forte hausse (ratio 24h/7j), seuils configurables par type d'entité dans `config/alert_rules.json` |
+| Biais éditoriaux | Analyse et visualisation du sentiment et du ton éditorial par source RSS |
+| Timeline des entités | Sparklines SVG d'évolution temporelle des entités nommées dans le Dashboard |
+| Temps de lecture | Badge ⧗ estimé sur chaque article (basé sur `enrich_reading_time.py`, 230 mots/min) |
+| Interface mobile | Toolbars transparentes fixées en bas (`backdrop-blur`, safe-area iPhone), boutons fermer à droite, bottom sheet pour panneau RSS |
 
 ### Captures d'écran
 
@@ -661,6 +667,70 @@ DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
   cp "script.py" "archives/script_$(date +%Y%m%d_%H%M%S).py"
   ```
 
+### Déduplication avancée (`utils/deduplication.py`)
+
+Les articles provenant de flux RSS multiples peuvent contenir des doublons. Le module `utils/deduplication.py` détecte et filtre automatiquement les doublons selon **trois signaux combinés** :
+
+| Signal | Mécanisme | Module |
+|---|---|---|
+| URL exacte | Empreinte MD5 de l'URL normalisée (sans fragment, sans slash final) | `compute_url_fingerprint()` |
+| Contenu résumé | Empreinte MD5 des 200 premiers caractères normalisés | `compute_resume_fingerprint()` |
+| Titre similaire | Similarité Jaccard sur bigrammes de mots (seuil ≥ 0.80) | `compute_title_similarity()` |
+
+```python
+from utils.deduplication import Deduplicator
+
+dedup = Deduplicator(title_threshold=0.85)
+
+# Déduplication d'un corpus complet
+unique_articles, stats = dedup.deduplicate(articles)
+
+# Déduplication incrémentale (nouveaux articles vs existants)
+filtered = dedup.deduplicate_incremental(new_articles, existing_articles)
+
+print(stats)  # {'total': 150, 'unique': 127, 'removed': 23}
+```
+
+La déduplication avancée remplace la déduplication par URL seule dans `scripts/get-keyword-from-rss.py`.
+
+### Détection de tendances et alertes (`config/alert_rules.json`)
+
+Le script `scripts/trend_detector.py` compare les mentions d'entités sur 24h vs 7j pour détecter les sujets en forte hausse. Les seuils et comportements sont entièrement configurables dans `config/alert_rules.json` :
+
+```json
+{
+  "global": { "threshold_ratio": 2.0, "top": 20, "min_mentions_24h": 2 },
+  "types_entites": {
+    "PERSON": { "enabled": true, "threshold_ratio": 3.0 },
+    "GPE":    { "enabled": true, "threshold_ratio": 2.5 },
+    "EVENT":  { "enabled": true, "threshold_ratio": 1.5 }
+  },
+  "niveaux": {
+    "modere":   { "ratio_min": 2.0 },
+    "eleve":    { "ratio_min": 3.0 },
+    "critique": { "ratio_min": 5.0 }
+  },
+  "notifications": {
+    "niveaux_notifies": ["élevé", "critique"],
+    "webhook_discord": false,
+    "webhook_slack": false,
+    "webhook_ntfy": false
+  }
+}
+```
+
+```bash
+# Détection normale (écrit data/alertes.json + notifications configurées)
+python3 scripts/trend_detector.py
+
+# Options avancées
+python3 scripts/trend_detector.py --top 15 --threshold 3.0
+python3 scripts/trend_detector.py --dry-run    # pas d'écriture
+python3 scripts/trend_detector.py --no-notify  # pas de webhook
+```
+
+Les alertes générées sont visualisées dans le panneau **Tendances & alertes** du Viewer.
+
 ---
 
 ## 8. Orchestration Docker
@@ -687,10 +757,18 @@ docker rm -f wudd-ai-final   # ou wuddai, etc.
 
 | Planification | Tâche |
 |---|---|
-| `0 1 * * *` | Extraction par mot-clé (`get-keyword-from-rss.py`) |
-| `0 6 * * 1` | Scheduler articles chaque lundi (`scheduler_articles.py`) |
+| `*/5 * * * *` | Surveillance round-robin flux RSS — mise à jour incrémentale 48h (`flux_watcher.py`) |
+| `0 6-22/2 * * *` | Extraction par mot-clé toutes les 2h de 6h00 à 22h00 (`get-keyword-from-rss.py`) |
 | `*/10 * * * *` | Vérification santé du cron (`check_cron_health.py`) |
+| `0 6 * * 1` | Scheduler multi-flux chaque lundi (`scheduler_articles.py`) |
+| `0 7 * * *` | Détection de tendances et alertes (`trend_detector.py`) → `data/alertes.json` |
+| `30 7 * * *` | Chronologie des entités (`entity_timeline.py`) → `data/entity_timeline.json` |
+| `0 23 * * *` | Rapport quotidien Top 10 entités — fenêtre 48h (`generate_48h_report.py`) |
+| `0 3 * * *` | Enrichissement sentiment round-robin, 1 fichier/jour (`enrich_sentiment.py`) |
+| `30 4 * * 0` | Enrichissement temps de lecture chaque dimanche (`enrich_reading_time.py`) |
+| `30 5 * * 1` | Analyse croisée des flux chaque lundi (`cross_flux_analysis.py`) |
 | `0 5 28-31 * *` | Radar thématique le dernier jour du mois (`radar_wudd.py`) |
+| `30 5 28-31 * *` | Conversion articles RSS → Markdown le dernier jour du mois (`articles_rss_to_markdown.py`) |
 
 Tous les logs sont disponibles dans `rapports/`.
 

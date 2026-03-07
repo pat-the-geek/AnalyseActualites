@@ -93,9 +93,9 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
         onClick={handleClose}
       />
 
-      {/* Fenêtre console */}
-      <div className="fixed inset-0 z-[71] flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-2xl bg-slate-950 rounded-2xl shadow-2xl flex flex-col border border-slate-700/80"
+      {/* Fenêtre console — centrée desktop, bottom sheet mobile */}
+      <div className="fixed inset-0 z-[71] flex items-end md:items-center justify-center md:p-4 pointer-events-none">
+        <div className="pointer-events-auto w-full md:max-w-2xl bg-slate-950 md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col border border-slate-700/80"
              style={{ maxHeight: '75vh' }}>
 
           {/* En-tête */}
@@ -118,7 +118,7 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
             )}
             <button
               onClick={handleClose}
-              className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors ml-2"
+              className="hidden md:flex w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 items-center justify-center text-slate-400 hover:text-slate-200 transition-colors ml-2"
             >
               <X size={13} />
             </button>
@@ -147,7 +147,10 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
           </div>
 
           {/* Pied de fenêtre */}
-          <div className="px-4 py-3 border-t border-slate-700/50 bg-slate-900/60 backdrop-blur-xl shrink-0 flex items-center gap-3">
+          <div
+            className="px-4 py-3 border-t border-slate-700/50 bg-slate-900/60 backdrop-blur-xl shrink-0 flex items-center gap-3"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
             <button
               onClick={startScript}
               disabled={running}
@@ -156,9 +159,15 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
               <Play size={11} />
               {done ? 'Relancer' : 'Démarrer'}
             </button>
-            <span className="text-xs text-slate-600 font-mono">
+            <span className="text-xs text-slate-600 font-mono hidden sm:inline">
               scripts/get-keyword-from-rss.py
             </span>
+            <button
+              onClick={handleClose}
+              className="md:hidden w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors ml-auto"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       </div>

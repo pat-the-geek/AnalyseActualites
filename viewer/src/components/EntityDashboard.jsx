@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { X, Tag, Loader2, BarChart2, FileText, Newspaper, List, Map, Images, Maximize2, Minimize2 } from 'lucide-react'
+import { X, Tag, Loader2, BarChart2, FileText, Newspaper, List, Map, Images, Maximize2, Minimize2, TrendingUp } from 'lucide-react'
 import EntityArticlePanel from './EntityArticlePanel'
 import EntityWorldMap from './EntityWorldMap'
 import EntityGallery from './EntityGallery'
+import EntityTimeline from './EntityTimeline'
 
 /**
  * Configuration des types NER (cohérente avec EntityPanel).
@@ -202,6 +203,18 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                   <Images size={16} />
                   <span>Galerie</span>
                 </button>
+                <button
+                  onClick={() => setViewMode('timeline')}
+                  title="Évolution temporelle des entités"
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 sm:px-3 py-3 sm:py-1.5 text-sm sm:text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                    viewMode === 'timeline'
+                      ? 'bg-violet-500 text-white'
+                      : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <TrendingUp size={16} />
+                  <span>Timeline</span>
+                </button>
               </div>
             )}
 
@@ -265,6 +278,9 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
                     entities={galleryEntities}
                     onEntityClick={(type, value) => setSelectedEntity({ type, value })}
                   />
+                ) : viewMode === 'timeline' ? (
+                  /* ── Vue Timeline ── */
+                  <EntityTimeline onEntitySearch={(value, type) => setSelectedEntity({ type, value })} />
                 ) : (
                   /* ── Vue Liste ── */
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
