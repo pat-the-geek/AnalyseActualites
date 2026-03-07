@@ -47,9 +47,9 @@ def _collect_json_files(
         if candidate.exists():
             files.append(candidate)
         else:
-            # Recherche approximative
-            for f in _ARTICLES_RSS_DIR.glob("*.json"):
-                if keyword.lower() in f.stem.lower():
+            # Recherche approximative (inclut les sous-dossiers)
+            for f in _ARTICLES_RSS_DIR.rglob("*.json"):
+                if "cache" not in f.parts and keyword.lower() in f.stem.lower():
                     files.append(f)
     elif flux:
         flux_dir = _ARTICLES_DIR / flux
@@ -65,7 +65,10 @@ def _collect_json_files(
                 if "cache" not in f.relative_to(_ARTICLES_DIR).parts
             )
         if _ARTICLES_RSS_DIR.exists():
-            files.extend(_ARTICLES_RSS_DIR.glob("*.json"))
+            files.extend(
+                f for f in _ARTICLES_RSS_DIR.rglob("*.json")
+                if "cache" not in f.relative_to(_ARTICLES_RSS_DIR).parts
+            )
 
     return sorted(set(files))
 

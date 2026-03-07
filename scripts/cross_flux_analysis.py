@@ -91,10 +91,13 @@ def collect_entities_by_flux(
                 _collect_from_file(json_file, flux_name, cutoff, flux_entities)
 
     # articles-from-rss : chaque fichier JSON est un "flux" nommé par son stem
+    # rglob descend dans les sous-dossiers (_WUDD.AI_/, etc.)
     rss_dir = project_root / "data" / "articles-from-rss"
     if rss_dir.exists():
-        for json_file in rss_dir.glob("*.json"):
-            flux_name = f"rss:{json_file.stem}"
+        for json_file in rss_dir.rglob("*.json"):
+            if "cache" in json_file.relative_to(rss_dir).parts:
+                continue
+            flux_name = f"rss:{json_file.parent.name}/{json_file.stem}" if json_file.parent != rss_dir else f"rss:{json_file.stem}"
             _collect_from_file(json_file, flux_name, cutoff, flux_entities)
 
     # Convertir defaultdicts en dicts normaux
