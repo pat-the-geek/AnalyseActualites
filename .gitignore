@@ -1,10 +1,11 @@
-config/
 # Exclure la configuration sensible
-config/
+config/flux_json_sources.json
 
 # Fichiers de configuration Claude Desktop (permissions locales)
 .claude/
 !config/flux_json_sources.example.json
+!config/alert_rules.json
+!config/sources_credibility.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -47,7 +48,6 @@ docs/SCHEDULER_CRON.md
 
 # Unit test / coverage reports
 rapports/
-config/flux_json_sources.json
 htmlcov/
 .tox/
 .nox/
