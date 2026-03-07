@@ -182,6 +182,17 @@
     "keyword": "Suisse"
   },
   {
+    "and": [],
+    "keyword": "The Beatles",
+    "or": [
+      "Beatles",
+      "John Lennon",
+      "Paul McCartney",
+      "George Harrison",
+      "Ringo Starr"
+    ]
+  },
+  {
     "keyword": "Trump"
   },
   {
@@ -229,14 +240,8 @@
     ]
   },
   {
-    "keyword": "The Beatles",
-    "or": [
-      "Beatles",
-      "John Lennon",
-      "Paul McCartney",
-      "George Harrison",
-      "Ringo Starr"
-    ],
+    "keyword": "Dune",
+    "or": [],
     "and": []
   }
 ]

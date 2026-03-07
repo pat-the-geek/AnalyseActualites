@@ -42,6 +42,17 @@
 
 ## 1. Présentation
 
+Votre radar de l'actualité, dopé à l'IA.
+
+📡 Multi-flux — RSS, JSON, OPML : agrégez toutes vos sources en un seul endroit  
+🤖 Résumés IA — chaque article synthétisé en 20 lignes par Qwen3 / EurIA  
+🏷️ Entités nommées — personnes, orgs, lieux, produits détectés automatiquement  
+📈 Tendances — qui monte, qui redescend, quelles organisations dominent le fil  
+💬 Sentiment & ton éditorial — factuel, alarmiste, laudatif ? L'IA le qualifie  
+📊 Dashboard interactif — graphe de co-occurrences, galerie, carte géographique  
+📬 Rapports automatiques — Markdown, newsletter HTML, Atom, webhook Discord/Slack  
+🐳 Self-hostable — Docker Compose, cron intégré, zéro dépendance externe payante  
+
 WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de flux JSON accessibles par URL HTTP, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
 
 Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. Un extracteur d'**entités nommées (NER)** peut enrichir a posteriori l'ensemble des articles existants en identifiant automatiquement personnes, organisations, pays, produits, événements, montants, etc. (18 types au total). L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
