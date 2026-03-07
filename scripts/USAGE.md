@@ -560,7 +560,7 @@ python3 analyse_thematiques.py
 
 > **Module :** `utils/quota.py` | **Config :** `config/quota.json` | **État :** `data/quota_state.json`
 
-Le système de quota régule automatiquement le nombre d'articles importés par jour via l'API EurIA. Il applique trois plafonds indépendants et trie les mots-clés de façon adaptative pour garantir la diversité des sources.
+Le système de quota régule automatiquement le nombre d'articles importés par jour via l'API EurIA. Il applique quatre plafonds indépendants et trie les mots-clés de façon adaptative pour garantir la diversité des sources.
 
 ### Paramètres (`config/quota.json`)
 
@@ -570,6 +570,7 @@ Le système de quota régule automatiquement le nombre d'articles importés par 
   "global_daily_limit": 150,
   "per_keyword_daily_limit": 30,
   "per_source_daily_limit": 5,
+  "per_entity_daily_limit": 10,
   "adaptive_sorting": true
 }
 ```
@@ -580,14 +581,16 @@ Le système de quota régule automatiquement le nombre d'articles importés par 
 | `global_daily_limit` | Plafond journalier global (tous mots-clés confondus) | `150` |
 | `per_keyword_daily_limit` | Max articles par mot-clé par jour | `30` |
 | `per_source_daily_limit` | Max articles d'un même site pour un mot-clé donné | `5` |
+| `per_entity_daily_limit` | Max articles contenant une même entité nommée par jour (max 20 via UI) | `10` |
 | `adaptive_sorting` | Trie les mots-clés par ratio consommation/plafond croissant | `true` |
 
 ### Fonctionnement
 
-1. **Avant chaque import** : `quota.can_process(keyword, source)` vérifie les 3 plafonds.
-2. **Après ajout** : `quota.record_article(keyword, source)` incrémente les compteurs.
-3. **Tri adaptatif** : `quota.sort_by_priority(keywords)` ordonne les mots-clés par ratio consommation/plafond (croissant) — les sujets les moins traités passent en premier.
-4. **Reset automatique** : Les compteurs se réinitialisent à minuit chaque jour.
+1. **Avant chaque import** : `quota.can_process(keyword, source)` vérifie les 3 plafonds (global, mot-clé, source).
+2. **Après détection NER, avant création** : `quota.can_process_entities(entities)` vérifie le plafond par entité — retourne `(True, '')` ou `(False, nom_entité)`. Un article est rejeté si l'une de ses entités est saturée.
+3. **Après ajout** : `quota.record_article(keyword, source, entities)` incrémente tous les compteurs (y compris par entité).
+4. **Tri adaptatif** : `quota.sort_by_priority(keywords)` ordonne les mots-clés par ratio consommation/plafond (croissant) — les sujets les moins traités passent en premier.
+5. **Reset automatique** : Les compteurs (global, mots-clés, entités) se réinitialisent à minuit chaque jour (reset lazy au premier appel après minuit).
 
 ### Intégration dans les scripts
 
@@ -600,10 +603,11 @@ Le système de quota régule automatiquement le nombre d'articles importés par 
 
 L'onglet **Quota** dans les Réglages du Viewer permet de :
 - Activer/désactiver le système
-- Ajuster les trois plafonds via des curseurs
+- Ajuster les quatre plafonds via des curseurs (global, par mot-clé, par source, par entité — max 20)
 - Activer/désactiver le tri adaptatif
 - Visualiser la consommation en temps réel (barres de progression par mot-clé)
 - Identifier les sources saturées (badges en rouge)
+- Consulter le **Top 20 des entités nommées** du jour avec indication de saturation
 - Remettre à zéro les compteurs manuellement
 
 ---

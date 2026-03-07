@@ -554,6 +554,7 @@ Le système de quota régule le volume d'articles importés chaque jour via l'AP
   "global_daily_limit": 150,
   "per_keyword_daily_limit": 30,
   "per_source_daily_limit": 5,
+  "per_entity_daily_limit": 10,
   "adaptive_sorting": true
 }
 ```
@@ -564,11 +565,14 @@ Le système de quota régule le volume d'articles importés chaque jour via l'AP
 | `global_daily_limit` | Plafond journalier global (tous mots-clés) | `150` |
 | `per_keyword_daily_limit` | Max articles par mot-clé par jour | `30` |
 | `per_source_daily_limit` | Max articles d'un même site pour un mot-clé | `5` |
+| `per_entity_daily_limit` | Max articles contenant une même entité nommée par jour | `10` |
 | `adaptive_sorting` | Tri des mots-clés par ratio consommation/plafond croissant | `true` |
 
-Avec `adaptive_sorting: true`, les mots-clés les moins traités passent en priorité à chaque itération, assurant une couverture équilibrée sur l'ensemble des sujets configurés. Les compteurs se réinitialisent automatiquement à minuit.
+Avec `adaptive_sorting: true`, les mots-clés les moins traités passent en priorité à chaque itération, assurant une couverture équilibrée sur l'ensemble des sujets configurés.
 
-La configuration et la supervision en temps réel sont accessibles depuis l'onglet **Quota** du Viewer (Réglages).
+Le plafond `per_entity_daily_limit` est vérifié **après la détection NER** (extraction des entités nommées) et **avant la création de l'article** dans le système. Un article est rejeté si l'une de ses entités a déjà atteint son quota du jour, évitant ainsi la sur-représentation d'un sujet ou d'une personnalité. Les compteurs (global, mots-clés, entités) se réinitialisent automatiquement à minuit.
+
+La configuration et la supervision en temps réel sont accessibles depuis l'onglet **Quota** du Viewer (Réglages), qui affiche désormais un **Top 20 des entités nommées** les plus présentes dans la journée.
 
 ---
 

@@ -1,4 +1,30 @@
-# 07/03/2026 — v3.0.0 · Interface mobile, déduplication 3 signaux, alertes configurables
+# 07/03/2026 — Quota par entité nommée (`per_entity_daily_limit`)
+
+## Nouveau plafond : entités nommées (`utils/quota.py`)
+
+- `DEFAULT_CONFIG` : ajout de `per_entity_daily_limit` (défaut : `10`, max UI : `20`)
+- `can_process_entities(entities)` : vérifie si un article peut être ajouté selon le plafond par entité ; retourne `(True, '')` ou `(False, nom_entité)` si une entité est saturée
+- `record_article(kw, source, entities=None)` : paramètre optionnel `entities` — incrémente le compteur de chaque entité nommée présente dans l'article
+- `get_stats()` : inclut désormais un champ `entities` avec le Top 20 des entités les plus présentes du jour
+- `save_config()` : accepte et valide `per_entity_daily_limit`
+- **Fix reset** : les trois méthodes de réinitialisation (`_reload`, `_maybe_reset_day`, `reset_day`) incluent maintenant explicitement `"entities": {}` pour garantir une remise à zéro complète à minuit
+
+## Intégration dans les scripts
+
+- `scripts/get-keyword-from-rss.py` : après `generate_entities()` et avant la création de l'article, appel `quota.can_process_entities(entities)` ; `record_article()` reçoit `entities` en paramètre ; log de démarrage étendu avec le plafond entité
+- `scripts/flux_watcher.py` : même logique — vérification entité + passage `entities` à `record_article()`
+
+## Onglet Quota du Viewer
+
+- `config/quota.json` : champ `per_entity_daily_limit = 10`
+- `viewer/app.py` : validation du nouveau champ entier dans `api_save_quota_config()`
+- `viewer/src/components/SettingsPanel.jsx` :
+  - Nouveau slider **Par entité** (curseur amber, plage 1–20) dans les plafonds journaliers
+  - Nouvelle section **Entités nommées** dans la consommation du jour : Top 20 avec barres de progression et badge "Saturée" ; affichée en permanence avec état vide explicite (*"Aucune entité enregistrée aujourd'hui."*)
+
+---
+
+# 07/03/2026 · Chaînage entity_timeline + cross_flux + enrich_reading_time après flux_watcher
 
 ## Priorités 1 à 10 — 10 nouvelles fonctions de veille informationnelle
 
