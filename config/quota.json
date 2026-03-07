@@ -1,0 +1,7 @@
+{
+  "adaptive_sorting": true,
+  "enabled": true,
+  "global_daily_limit": 150,
+  "per_keyword_daily_limit": 30,
+  "per_source_daily_limit": 5
+}

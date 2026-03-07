@@ -1,0 +1,231 @@
+[
+  {
+    "keyword": "Anthropic",
+    "or": [
+      "Claude"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Apple",
+    "or": [
+      "iPhone",
+      "iPad",
+      "iOS",
+      "MacBook"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "[Art]",
+    "or": [
+      "Leonard de Vinci",
+      "Michel-Ange",
+      "Raphaël",
+      "Caravage",
+      "Rembrandt",
+      "Claude Monet",
+      "van Gogh",
+      "John Singer Sargent",
+      "Picasso",
+      "Salvador Dalí",
+      "Frida Kahlo",
+      "Andy Warhol",
+      "Adele d'affry"
+    ]
+  },
+  {
+    "keyword": "bactérie"
+  },
+  {
+    "keyword": "David Bowie",
+    "or": [
+      "Ziggy Stardust",
+      "Thin White Duke"
+    ]
+  },
+  {
+    "keyword": "éducation",
+    "or": [
+      "Education",
+      "School",
+      "Pédagogique"
+    ]
+  },
+  {
+    "keyword": "Elon Musk"
+  },
+  {
+    "keyword": "énergie"
+  },
+  {
+    "and": [],
+    "keyword": "Fribourg",
+    "or": [
+      "Freiburg"
+    ]
+  },
+  {
+    "keyword": "GitHub"
+  },
+  {
+    "and": [],
+    "keyword": "Google",
+    "or": [
+      "Gemini",
+      "Android",
+      "Chrome",
+      "Pixel"
+    ]
+  },
+  {
+    "keyword": "Grok"
+  },
+  {
+    "and": [],
+    "keyword": "Infomaniak",
+    "or": [
+      "euria",
+      "ksuite"
+    ]
+  },
+  {
+    "keyword": "Intelligence artificielle",
+    "or": [
+      "AI",
+      "IA"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Iran",
+    "or": []
+  },
+  {
+    "and": [],
+    "keyword": "Israël",
+    "or": [
+      "Netanyahu"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Lego",
+    "or": []
+  },
+  {
+    "keyword": "Meta"
+  },
+  {
+    "keyword": "Microsoft"
+  },
+  {
+    "and": [
+      "AI",
+      "IA"
+    ],
+    "keyword": "Mistral",
+    "or": [
+      "Le Chat"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Musique numérique",
+    "or": [
+      "Apple Music",
+      "Spotify",
+      "Qobuz",
+      "Tidal"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Nasa",
+    "or": []
+  },
+  {
+    "keyword": "nucléaire"
+  },
+  {
+    "keyword": "OpenAI",
+    "or": [
+      "ChatGPT",
+      "GPT-5"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Quantique",
+    "or": []
+  },
+  {
+    "keyword": "robot",
+    "or": [
+      "Robotique"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Smart glasses",
+    "or": []
+  },
+  {
+    "and": [],
+    "keyword": "Sonos",
+    "or": []
+  },
+  {
+    "keyword": "SpaceX"
+  },
+  {
+    "keyword": "Suisse"
+  },
+  {
+    "keyword": "Trump"
+  },
+  {
+    "and": [
+      "banque",
+      "bank"
+    ],
+    "keyword": "UBS"
+  },
+  {
+    "and": [],
+    "keyword": "Ukraine",
+    "or": [
+      "Zelensky"
+    ]
+  },
+  {
+    "keyword": "univers",
+    "or": [
+      "espace"
+    ]
+  },
+  {
+    "and": [],
+    "keyword": "Vidéo à la demande",
+    "or": [
+      "Netflix",
+      "Amazon Prime Video",
+      "Apple TV",
+      "Paramount",
+      "HBO",
+      "Canal+",
+      "Arte"
+    ]
+  },
+  {
+    "keyword": "virus"
+  },
+  {
+    "and": [],
+    "keyword": "VS Code",
+    "or": [
+      "Visual Studio Code",
+      "Multi-Agent Development"
+    ]
+  }
+]

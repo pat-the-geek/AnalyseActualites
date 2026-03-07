@@ -1,0 +1,17 @@
+pour chaque flux stocké dans le fichier Reeder.opml
+    Consulte le flux RSS de l'adresse stocké dans la propriété "xmlUrl"
+    pour chaque URL du flux RSS, consulte les pages dont la date de publication est vieille d'une semaine par rapport à la date du jour
+        si dans le titre de l'article, il y a un des mots clés stockés dans le fichier keyword-to-search.json 
+            enregistre l'url dans un fichier Json qui porte le nom du mot clé (par exemple : "intelligence-artificielle.json" pour le mot clé "Intelligence artificielle")
+            il ne doit pas y avoir de doublon dans le fichier : une URL est stockée une seule fois
+            utilise le même format que le fichier "articles_generated_2026-02-01_2026-02-19.json"
+            avec le même code python pour chaque article. recherche le bon code dans le projet
+
+            "Date de publication": pris dans la date de publication de l'article
+            "Sources": pris dans le flux RSS
+            "URL": lien url de l'article 
+            "Résumé": généré par ia euria selon le code que tu vas rechercher dans le projet
+            "Images": URL de l'image principale de la page selon méthode du code que tu vas rechercher dans le projet
+
+            les fichiers sont créée dans le répertoire "data/articles-from-rss"
+            ils seront utiisés par un autre script python pour générer des rapports concernant le mot-clé
