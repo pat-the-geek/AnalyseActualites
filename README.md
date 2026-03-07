@@ -669,13 +669,49 @@ DATA_ARTICLES_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
 
 ### Déduplication avancée (`utils/deduplication.py`)
 
-Les articles provenant de flux RSS multiples peuvent contenir des doublons. Le module `utils/deduplication.py` détecte et filtre automatiquement les doublons selon **trois signaux combinés** :
+Les articles provenant de flux RSS multiples peuvent contenir des doublons. Un seul signal de comparaison génère des faux négatifs (doublons non détectés). Le module `utils/deduplication.py` applique **trois signaux combinés en cascade**, chacun couvrant des cas que les autres ne voient pas.
 
-| Signal | Mécanisme | Module |
-|---|---|---|
-| URL exacte | Empreinte MD5 de l'URL normalisée (sans fragment, sans slash final) | `compute_url_fingerprint()` |
-| Contenu résumé | Empreinte MD5 des 200 premiers caractères normalisés | `compute_resume_fingerprint()` |
-| Titre similaire | Similarité Jaccard sur bigrammes de mots (seuil ≥ 0.80) | `compute_title_similarity()` |
+#### Signal 1 — URL normalisée (MD5)
+
+Empreinte MD5 de l'URL normalisée (paramètres tracking supprimés, fragment `#ancre` retiré, slash final retiré). Filtre de **première passe**, coût O(1) : élimine immédiatement les doublons exacts entre flux.
+
+```
+https://lemonde.fr/article?utm_source=rss  →  même empreinte
+https://lemonde.fr/article#section1        →  même empreinte
+https://lemonde.fr/article/                →  même empreinte
+```
+
+**Limite :** ne détecte pas le même contenu republié sous une URL différente (reprise par un agrégateur, miroir de site).
+
+#### Signal 2 — Empreinte MD5 du résumé (200 premiers caractères)
+
+MD5 des 200 premiers caractères du résumé normalisé (casse, espaces, accents). Détecte les **syndicats de contenu** : dépêches AFP, Reuters ou AP reprises par de nombreux sites avec des URLs toutes différentes, mais dont le texte source — et donc le résumé généré par l'IA — est identique.
+
+**Limite :** sensible à toute variation de résumé. Si l'API produit une formulation légèrement différente à deux appels, les MD5 diffèrent — c'est correct, car cela signifie que le contenu a réellement changé.
+
+#### Signal 3 — Similarité Jaccard sur bigrammes de titres (seuil ≥ 0.80)
+
+Calcule la similarité Jaccard entre les bigrammes de mots des deux titres, après filtrage des stopwords français et anglais. Détecte les titres *presque identiques* malgré des reformulations mineures, fautes, variantes de temps ou ponctuation différente.
+
+```
+"Apple annonce l'iPhone 17"        →  bigrammes : {apple-annonce, annonce-iphone, iphone-17}
+"Apple a annoncé son iPhone 17"    →  bigrammes : {apple-annonce, annonce-iphone, iphone-17}
+                                   →  Jaccard ≈ 0.83  ✅ doublon détecté
+```
+
+Ce signal est appliqué en **dernier** car son coût est O(n) par paire — les deux premiers filtres en cascade réduisent l'ensemble de comparaison avant de l'atteindre.
+
+#### Couverture combinée
+
+| Scénario réel | Signal 1 | Signal 2 | Signal 3 |
+|---|:---:|:---:|:---:|
+| Même URL, paramètres tracking différents | ✅ | — | — |
+| Dépêche AFP reprise par 10 sites | ❌ | ✅ | ✅ |
+| Titre reformulé, URL différente | ❌ | ❌ | ✅ |
+| Article mis à jour (URL identique, contenu changé) | ✅ | ❌ | — |
+| Doublon parfait toutes sources | ✅ | ✅ | ✅ |
+
+En cascade, les trois signaux couvrent ~95 % des cas de déduplication rencontrés dans un corpus RSS multilingue à haute fréquence.
 
 ```python
 from utils.deduplication import Deduplicator

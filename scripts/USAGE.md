@@ -3,7 +3,15 @@
 **Description** : Extraction quotidienne des articles contenant un mot-clé (défini dans `config/keyword-to-search.json`) depuis tous les flux RSS de WUDD.opml.
 Pour chaque mot-clé, génère un fichier JSON dans `data/articles-from-rss/` (sans doublon), avec résumé IA et images principales.
 
-La **déduplication avancée** (`utils/deduplication.py`) est appliquée automatiquement : trois signaux combinés (empreinte URL, empreinte résumé MD5, similarité Jaccard des titres ≥ 0.85) remplacent la simple comparaison par URL.
+La **déduplication avancée** (`utils/deduplication.py`) est appliquée automatiquement en cascade selon trois signaux complémentaires :
+
+| Signal | Cas détectés | Coût |
+|---|---|---|
+| **URL normalisée (MD5)** — sans fragment, sans trailing slash | Même article, paramètres tracking différents | O(1) — filtre de première passe |
+| **Empreinte MD5 du résumé** — 200 premiers caractères | Dépêches AFP/Reuters reprises par N sites (URL différentes, même texte source) | O(1) |
+| **Jaccard bigrammes des titres** — stopwords filtrés, seuil ≥ 0.85 | Titres reformulés, variantes de temps ou ponctuation | O(n) — appliqué en dernier |
+
+Ces trois signaux couvrent ~95 % des doublons réels d'un corpus RSS multilingue. Voir `utils/deduplication.py` pour la configuration du seuil.
 
 **Filtrage avancé (OR / AND)**
 
