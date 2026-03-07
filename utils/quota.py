@@ -79,6 +79,7 @@ class QuotaManager:
                 "date": today,
                 "global_count": 0,
                 "keywords": {},
+                "entities": {},
             }
             self._persist()
 
@@ -247,6 +248,7 @@ class QuotaManager:
                 "date": str(date.today()),
                 "global_count": 0,
                 "keywords": {},
+                "entities": {},
             }
             self._persist()
 
@@ -275,7 +277,7 @@ class QuotaManager:
         """Réinitialise l'état si on est passé à un nouveau jour."""
         today = str(date.today())
         if self._state.get("date") != today:
-            self._state = {"date": today, "global_count": 0, "keywords": {}}
+            self._state = {"date": today, "global_count": 0, "keywords": {}, "entities": {}}
             self._persist()
 
 
