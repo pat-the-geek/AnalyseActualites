@@ -346,7 +346,7 @@ def api_scheduler():
     fixed = [
         {
             "name": "Veille RSS temps-réel (round-robin)",
-            "script": "flux_watcher.py",
+            "script": "flux_watcher.py → entity_timeline.py → cross_flux_analysis.py → enrich_reading_time.py",
             "cron": "*/5 * * * *",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_flux_watcher.log",
@@ -406,27 +406,6 @@ def api_scheduler():
             "cron": "30 5 28-31 * *",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_rss_markdown.log",
-        },
-        {
-            "name": "Enrichissement temps de lecture",
-            "script": "enrich_reading_time.py",
-            "cron": "30 4 * * 0",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_reading_time.log",
-        },
-        {
-            "name": "Analyse croisée des flux",
-            "script": "cross_flux_analysis.py",
-            "cron": "30 5 * * 1",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_cross_flux.log",
-        },
-        {
-            "name": "Chronologie des entités",
-            "script": "entity_timeline.py",
-            "cron": "30 7 * * *",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_entity_timeline.log",
         },
     ]
     for t in fixed:

@@ -131,10 +131,12 @@ python3 scripts/flux_watcher.py
 python3 scripts/flux_watcher.py --dry-run
 ```
 
-**Automatisation (cron)** — toutes les 5 minutes :
+**Automatisation (cron)** — toutes les 5 minutes, enchaîné avec les scripts de calcul local :
 ```
-*/5 * * * * root cd /app && python3 scripts/flux_watcher.py 2>&1 | tee -a /app/rapports/cron_flux_watcher.log
+*/5 * * * * root cd /app && { python3 scripts/flux_watcher.py 2>&1 | tee -a /app/rapports/cron_flux_watcher.log; python3 scripts/entity_timeline.py >> /app/rapports/cron_flux_watcher.log 2>&1; python3 scripts/cross_flux_analysis.py >> /app/rapports/cron_flux_watcher.log 2>&1; python3 scripts/enrich_reading_time.py >> /app/rapports/cron_flux_watcher.log 2>&1; }
 ```
+
+> `entity_timeline.py`, `cross_flux_analysis.py` et `enrich_reading_time.py` s'exécutent systématiquement après chaque passage du watcher (calculs 100 % locaux, < 1 s). Le Dashboard du Viewer dispose ainsi de données fraîches toutes les 5 minutes.
 
 **Sorties** :
 - `data/articles-from-rss/<keyword>.json` — mis à jour incrementalement
@@ -234,10 +236,7 @@ python3 scripts/enrich_reading_time.py --flux Intelligence-artificielle
 python3 scripts/enrich_reading_time.py --dry-run
 ```
 
-**Automatisation (cron)** — chaque dimanche à 4h30 :
-```
-30 4 * * 0 root cd /app && python3 scripts/enrich_reading_time.py 2>&1 | tee -a /app/rapports/cron_reading_time.log
-```
+**Automatisation (cron)** — enchaîné après `flux_watcher.py` toutes les 5 minutes (voir §9). Ne possède plus d'entrée cron dédiée.
 
 **Sortie** : Sauvegarde atomique des fichiers JSON modifiés.
 
@@ -269,10 +268,7 @@ python3 scripts/entity_timeline.py --days 7 --top 20
 python3 scripts/entity_timeline.py --entity "OpenAI" --type ORG
 ```
 
-**Automatisation (cron)** — chaque matin à 7h30 (après `trend_detector.py`) :
-```
-30 7 * * * root cd /app && python3 scripts/entity_timeline.py 2>&1 | tee -a /app/rapports/cron_entity_timeline.log
-```
+**Automatisation (cron)** — enchaîné après `flux_watcher.py` toutes les 5 minutes (voir §9). Ne possède plus d'entrée cron dédiée.
 
 **Sortie** :
 - `data/entity_timeline.json` — séries temporelles par entité, exposées via `GET /api/entities/timeline`
@@ -303,10 +299,7 @@ python3 scripts/cross_flux_analysis.py --min-flux 3
 python3 scripts/cross_flux_analysis.py --dry-run
 ```
 
-**Automatisation (cron)** — chaque lundi à 5h30 (avant le scheduler hebdomadaire à 6h00) :
-```
-30 5 * * 1 root cd /app && python3 scripts/cross_flux_analysis.py 2>&1 | tee -a /app/rapports/cron_cross_flux.log
-```
+**Automatisation (cron)** — enchaîné après `flux_watcher.py` toutes les 5 minutes (voir §9). Ne possède plus d'entrée cron dédiée.
 
 **Sortie** :
 - `data/cross_flux_report.json` — entités transversales avec comptages par flux
