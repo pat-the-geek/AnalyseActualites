@@ -1250,11 +1250,11 @@ function QuotaTab() {
         </div>
 
         {/* ── Top entités ── */}
-        {stats && Object.keys(stats.entities ?? {}).length > 0 && (
-          <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Entités nommées — top {Object.keys(stats.entities).length}
-            </p>
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Entités nommées — top {Object.keys(stats?.entities ?? {}).length}
+          </p>
+          {stats && Object.keys(stats.entities ?? {}).length > 0 ? (
             <div className="flex flex-col gap-2">
               {Object.entries(stats.entities).map(([name, info]) => (
                 <div key={name} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50">
@@ -1270,8 +1270,12 @@ function QuotaTab() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-slate-400 dark:text-slate-500 italic px-1">
+              Aucune entité enregistrée aujourd'hui.
+            </p>
+          )}
+        </div>
 
       </div>
     </div>
