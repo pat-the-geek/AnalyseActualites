@@ -1,13 +1,13 @@
 # Prompts EurIA — WUDD.ai
 
 > Documentation complète des prompts utilisés avec l'API EurIA (Qwen3)
-> Dernière mise à jour : 6 mars 2026
+> Dernière mise à jour : 7 mars 2026
 
 ---
 
 ## Vue d'ensemble
 
-Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour six opérations :
+Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour sept opérations :
 
 1. **Résumé d'article** — synthèse d'un texte HTML extrait, max 20 lignes
 2. **Rapport synthétique** — rapport Markdown structuré à partir d'un JSON d'articles
@@ -15,9 +15,11 @@ Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour six opérations 
 4. **Sentiment & ton éditorial** — analyse du sentiment et de la posture journalistique d'un article
 5. **Synthèse encyclopédique** — fiche Markdown sur une entité (personne, org, lieu…) avec web search
 6. **Synthèse RAG multi-sources** — analyse comparative de N articles sur un sujet, en streaming
+7. **Rapport d'occurrence d'entité** — document de synthèse complet (articles + graphe L1 + info + RAG) généré via le bouton « Rapport » du panneau entité
 
 Les opérations 1–4 passent par `utils/api_client.py` via la méthode centrale `ask()`.
 Les opérations 5–6 sont implémentées directement dans `viewer/app.py` (routes SSE streaming).
+L'opération 7 est entièrement côté client dans `EntityArticlePanel.jsx` — elle orchestre les appels 5 et 6 puis construit le Markdown localement.
 
 ---
 
@@ -601,6 +603,140 @@ Déduplication par URL, tri par date décroissante, max `n` articles retenus.
 
 ---
 
+## Prompt 7 : Rapport Markdown d'occurrence d'entité (bouton « Rapport »)
+
+### Contexte d'utilisation
+
+- **Composant** : `viewer/src/components/EntityArticlePanel.jsx` — fonction `handleGenerateReport()`
+- **Déclenché par** : bouton **Rapport** dans le panneau flottant d'une entité NER
+- **Objectif** : Générer un document de synthèse complet et téléchargeable (`.md`) combinant les articles collectés, le graphe de co-occurrences L1, la synthèse encyclopédique (prompt 5) et la synthèse RAG (prompt 6)
+
+### Flux de génération
+
+```mermaid
+flowchart TD
+    A([Clic Rapport]) --> B{Info déjà générée ?}
+    B -->|Non| C[Appel /api/entities/info\nSSE streaming prompt 5]
+    B -->|Oui| D{RAG déjà généré ?}
+    C --> D
+    D -->|Non| E[Appel /api/synthesize-topic\nSSE streaming prompt 6]
+    D -->|Oui| F[Appel /api/entities/cooccurrences\ndepth=1 limit=40]
+    E --> F
+    F --> G[Construction du document Markdown\nselon modèle iA Writer]
+    G --> H([Téléchargement .md])
+```
+
+> Si les textes Info et/ou RAG ont déjà été générés dans la session (onglets déjà visités), ils sont réutilisés directement sans appel API supplémentaire.
+
+### Structure du document généré
+
+Le rapport suit le modèle iA Writer documenté dans `docs/instructions-for-claude-report.md` :
+
+```markdown
+---
+Auteur: Patrick Ostertag
+Titre: Rapport — {TYPE} : {Entité}
+AuteurAdresse: patrick.ostertag@gmail.com
+AuteurSite: http://patrickostertag.ch
+Date: YYYY-MM-DD
+IAEngine: WUDD.ai
+---
+
+# Rapport — {Entité}
+
+---
+Synthèse des articles et analyses pour l'entité **{Entité}** ({TYPE})
+— N sources — *date*. Principales co-occurrences L1 : …
+---
+
+{{TOC}}
+
+===
+
+## Cartographie des acteurs — Co-occurrences directes (L1)
+**PERSON** — Nom A, Nom B, …
+**ORG** — Org A, Org B, …
+**GPE** — Pays A, Ville B, …
+**LOC** — …
+**NORP** — …
+**EVENT** — …
+
+## Informations — Synthèse IA
+[Contenu du prompt 5 — Synthèse encyclopédique]
+
+## Analyse comparative — Synthèse RAG
+[Contenu du prompt 6 — Synthèse RAG multi-sources]
+
+## Articles — N sources
+### Date — Source
+[Résumé]
+![alt](image_url)
+*Source : nom*
+[Lire l'article](url)
+---
+
+===
+
+# Tableau des références
+| # | Date | Source | URL |
+|---|---|---|---|
+| 1 | … | … | [↗](url) |
+
+---
+*Rapport préparé avec WUDD.ai — date*
+```
+
+### Cartographie des acteurs — règles de filtrage
+
+Seuls les types NER jugés significatifs pour l'analyse sont retenus :
+
+| Type | Description |
+|---|---|
+| `PERSON` | Personnes physiques |
+| `ORG` | Organisations, entreprises, institutions |
+| `GPE` | Entités géopolitiques (pays, villes, régions) |
+| `LOC` | Lieux géographiques non géopolitiques |
+| `NORP` | Groupes nationaux, religieux ou politiques |
+| `EVENT` | Événements nommés |
+
+Les autres types NER (`PRODUCT`, `DATE`, `MONEY`, `LAW`, etc.) sont exclus de cette section pour des raisons de lisibilité.
+
+### Format d'affichage par type
+
+```
+**TYPE** — Entité A, Entité B, Entité C, …
+```
+
+Les entités sont listées sans leur nombre de co-occurrences (supprimé pour alléger la lecture). L'ordre reste décroissant par fréquence (hérité du classement reçu de `/api/entities/cooccurrences`).
+
+### Paramètres de l'appel co-occurrences
+
+```
+GET /api/entities/cooccurrences?type={TYPE}&value={valeur}&depth=1&limit=40&limit_l2=0
+```
+
+| Paramètre | Valeur | Justification |
+|---|---|---|
+| `depth` | 1 | Seuls les voisins directs (L1) — pas de L2 |
+| `limit` | 40 | Max 40 entités co-occurrentes |
+| `limit_l2` | 0 | L2 désactivé pour ce contexte |
+
+### Nommage du fichier de sortie
+
+```
+rapport_{TYPE}_{entité_sanitisée}_{YYYY-MM-DD}.md
+```
+
+Exemple : `rapport_ORG_OpenAI_2026-03-07.md`
+
+### Remarques
+
+- Les appels Info et RAG utilisent le même parseur SSE que les onglets interactifs (filtrage des blocs `<think>…</think>`).
+- L'état React (`infoText`, `ragText`) est mis à jour après génération : les onglets **Infos** et **RAG** bénéficient du résultat sans re-génération.
+- Le bouton affiche un spinner pendant toute la durée de la génération (Info + RAG + graphe peuvent prendre 30–120s selon le cache API).
+
+---
+
 ## Références
 
 - [API EurIA Infomaniak](https://euria.infomaniak.com)
@@ -610,4 +746,4 @@ Déduplication par URL, tri par date décroissante, max `n` articles retenus.
 
 **Auteur** : Patrick Ostertag
 **Email** : patrick.ostertag@gmail.com
-**Dernière mise à jour** : 6 mars 2026
+**Dernière mise à jour** : 7 mars 2026
