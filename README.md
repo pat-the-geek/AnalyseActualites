@@ -793,16 +793,13 @@ docker rm -f wudd-ai-final   # ou wuddai, etc.
 
 | Planification | Tâche |
 |---|---|
-| `*/5 * * * *` | Surveillance round-robin flux RSS — mise à jour incrémentale 48h (`flux_watcher.py`) |
+| `*/5 * * * *` | Surveillance round-robin flux RSS → `flux_watcher.py`, puis enchaîne immédiatement `entity_timeline.py` + `cross_flux_analysis.py` + `enrich_reading_time.py` (calculs locaux < 1 s) |
 | `0 6-22/2 * * *` | Extraction par mot-clé toutes les 2h de 6h00 à 22h00 (`get-keyword-from-rss.py`) |
 | `*/10 * * * *` | Vérification santé du cron (`check_cron_health.py`) |
 | `0 6 * * 1` | Scheduler multi-flux chaque lundi (`scheduler_articles.py`) |
 | `0 7 * * *` | Détection de tendances et alertes (`trend_detector.py`) → `data/alertes.json` |
-| `30 7 * * *` | Chronologie des entités (`entity_timeline.py`) → `data/entity_timeline.json` |
 | `0 23 * * *` | Rapport quotidien Top 10 entités — fenêtre 48h (`generate_48h_report.py`) |
 | `0 3 * * *` | Enrichissement sentiment round-robin, 1 fichier/jour (`enrich_sentiment.py`) |
-| `30 4 * * 0` | Enrichissement temps de lecture chaque dimanche (`enrich_reading_time.py`) |
-| `30 5 * * 1` | Analyse croisée des flux chaque lundi (`cross_flux_analysis.py`) |
 | `0 5 28-31 * *` | Radar thématique le dernier jour du mois (`radar_wudd.py`) |
 | `30 5 28-31 * *` | Conversion articles RSS → Markdown le dernier jour du mois (`articles_rss_to_markdown.py`) |
 
