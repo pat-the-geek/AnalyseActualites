@@ -845,6 +845,7 @@ pytest tests/
 - Certains scripts écrivent dans des fichiers prédéfinis — à adapter selon les besoins
 - Langue française requise pour les clés et messages (non configurable)
 - `README.md` et fichiers critiques doivent rester à la racine du projet
+- **Usage individuel ou en petit groupe** — Dans son état actuel, WUDD.ai est conçu pour un usage personnel ou par un petit groupe d'utilisateurs. Le système ne gère pas encore la notion d'utilisateur : il n'existe pas de mécanisme d'authentification, et tous les utilisateurs partagent le même espace de stockage basé sur le système de fichiers.
 
 ---
 
