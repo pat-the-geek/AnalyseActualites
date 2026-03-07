@@ -2401,6 +2401,102 @@ def api_cross_flux():
         return jsonify({"error": str(exc)}), 500
 
 
+# ── Annotations manuelles ─────────────────────────────────────────────────────
+# Stockées dans data/annotations.json (dict keyed par URL d'article)
+# Jamais dans les fichiers articles — données sources préservées.
+
+_ANNOTATIONS_FILE = PROJECT_ROOT / "data" / "annotations.json"
+_annotations_lock = threading.Lock()
+
+def _load_annotations() -> dict:
+    """Charge le fichier annotations.json (crée s'il n'existe pas)."""
+    if not _ANNOTATIONS_FILE.exists():
+        return {}
+    try:
+        return json.loads(_ANNOTATIONS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+def _save_annotations(data: dict) -> None:
+    """Sauvegarde atomique du fichier annotations.json."""
+    _ANNOTATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _ANNOTATIONS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_ANNOTATIONS_FILE)
+
+
+@app.route("/api/annotations", methods=["GET"])
+def api_annotations_get():
+    """Retourne toutes les annotations (dict keyed par URL)."""
+    with _annotations_lock:
+        return jsonify(_load_annotations())
+
+
+@app.route("/api/annotations", methods=["POST"])
+def api_annotations_post():
+    """Crée ou met à jour l'annotation d'un article.
+
+    Body JSON attendu :
+        url         (str, obligatoire) — URL de l'article
+        is_important (bool, optionnel)
+        is_read      (bool, optionnel)
+        tags         (list[str], optionnel, max 20 items)
+        notes        (str, optionnel, max 5000 chars)
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    url = (body.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "Le champ 'url' est obligatoire"}), 400
+
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    with _annotations_lock:
+        data = _load_annotations()
+        existing = data.get(url, {})
+
+        # Merge : on ne remplace que les champs explicitement fournis
+        updated = dict(existing)
+        if "is_important" in body:
+            updated["is_important"] = bool(body["is_important"])
+        if "is_read" in body:
+            updated["is_read"] = bool(body["is_read"])
+        if "tags" in body:
+            tags = body["tags"]
+            if not isinstance(tags, list):
+                return jsonify({"error": "'tags' doit être une liste"}), 400
+            tags = [str(t).strip() for t in tags if str(t).strip()][:20]
+            updated["tags"] = tags
+        if "notes" in body:
+            notes = str(body["notes"])[:5000]
+            updated["notes"] = notes
+
+        updated["updated_at"] = now_iso
+        if "created_at" not in updated:
+            updated["created_at"] = now_iso
+
+        data[url] = updated
+        _save_annotations(data)
+
+    return jsonify({"ok": True, "url": url, "annotation": updated})
+
+
+@app.route("/api/annotations", methods=["DELETE"])
+def api_annotations_delete():
+    """Supprime l'annotation d'un article (paramètre ?url=...)."""
+    url = (request.args.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "Paramètre 'url' obligatoire"}), 400
+
+    with _annotations_lock:
+        data = _load_annotations()
+        if url not in data:
+            return jsonify({"ok": True, "removed": False})
+        del data[url]
+        _save_annotations(data)
+
+    return jsonify({"ok": True, "removed": True, "url": url})
+
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_app(path):

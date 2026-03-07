@@ -1,8 +1,9 @@
-import { useMemo, useState, useRef } from 'react'
+import { useMemo, useState, useRef, useCallback } from 'react'
 import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
   Download, LayoutGrid, AlignLeft, Maximize2, Clock,
+  Star, Eye, Pencil, Check,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
@@ -179,10 +180,70 @@ function ImageLightbox({ url, alt, onClose }) {
   )
 }
 
+/** Panneau d'annotation inline (notes + tags). */
+function AnnotationPanel({ annotation, onSave, onClose }) {
+  const [notes, setNotes]   = useState(annotation?.notes ?? '')
+  const [tagInput, setTagInput] = useState('')
+  const [tags, setTags]     = useState(annotation?.tags ?? [])
+
+  const addTag = () => {
+    const t = tagInput.trim()
+    if (t && !tags.includes(t) && tags.length < 20) {
+      setTags(prev => [...prev, t])
+      setTagInput('')
+    }
+  }
+  const removeTag = t => setTags(prev => prev.filter(x => x !== t))
+
+  return (
+    <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60">
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.map(t => (
+          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 dark:bg-amber-800/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+            {t}
+            <button onClick={() => removeTag(t)} className="hover:text-red-500 transition-colors"><X size={9} /></button>
+          </span>
+        ))}
+        <div className="flex items-center gap-1">
+          <input
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+            placeholder="+ tag"
+            className="text-[11px] px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400 w-16"
+          />
+        </div>
+      </div>
+      {/* Notes */}
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        placeholder="Notes personnelles…"
+        maxLength={5000}
+        rows={2}
+        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
+      />
+      <div className="flex items-center justify-end gap-2 mt-1.5">
+        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+          Annuler
+        </button>
+        <button
+          onClick={() => { onSave({ notes, tags }); onClose() }}
+          className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
+        >
+          <Check size={10} /> Enregistrer
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** Carte article complète (vue grille). */
-function ArticleCard({ article, index, highlight, onEntityClick }) {
+function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate }) {
   const [expanded, setExpanded] = useState(index < 3)
   const [lightbox, setLightbox] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
   const titre = article['Titre']?.trim() || ''
   const resume = article['Résumé'] ?? ''
   const entities = article.entities ?? null
@@ -191,9 +252,19 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
   const date = formatDate(article['Date de publication'])
   const time = formatTime(article['Date de publication'])
   const count = useMemo(() => entityCount(article), [article])
+  const url = article['URL'] ?? ''
+
+  const isImportant = annotation?.is_important ?? false
+  const isRead      = annotation?.is_read ?? false
+  const tags        = annotation?.tags ?? []
+  const hasNote     = !!(annotation?.notes?.trim())
+
+  const toggle = useCallback((field) => {
+    if (onAnnotate && url) onAnnotate(url, { [field]: !(annotation?.[field] ?? false) })
+  }, [onAnnotate, url, annotation])
 
   return (
-    <article className="bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-white/50 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
+    <article className={`bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-white/50 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow ${isRead ? 'opacity-60' : ''}`}>
       {imgUrl && (
         <button
           type="button"
@@ -233,13 +304,53 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
               </h3>
             )}
           </div>
-          {article['URL'] && (
-            <a href={article['URL']} target="_blank" rel="noopener noreferrer"
-              className="shrink-0 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5" title="Ouvrir l'article">
-              <ExternalLink size={14} />
-            </a>
-          )}
+          {/* Boutons d'action : annotation + lien externe */}
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            {onAnnotate && url && (
+              <>
+                <button
+                  onClick={() => toggle('is_important')}
+                  title={isImportant ? 'Retirer des importants' : 'Marquer comme important'}
+                  className={`p-1.5 rounded-lg transition-colors ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400'}`}
+                >
+                  <Star size={13} fill={isImportant ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  onClick={() => toggle('is_read')}
+                  title={isRead ? 'Marquer comme non lu' : 'Marquer comme lu'}
+                  className={`p-1.5 rounded-lg transition-colors ${isRead ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'}`}
+                >
+                  <Eye size={13} />
+                </button>
+                <button
+                  onClick={() => setNoteOpen(v => !v)}
+                  title="Notes et tags"
+                  className={`p-1.5 rounded-lg transition-colors ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400'}`}
+                >
+                  <Pencil size={13} />
+                </button>
+              </>
+            )}
+            {article['URL'] && (
+              <a href={article['URL']} target="_blank" rel="noopener noreferrer"
+                className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="Ouvrir l'article">
+                <ExternalLink size={13} />
+              </a>
+            )}
+          </div>
         </div>
+
+        {/* Tags affichés inline */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {tags.map(t => (
+              <span key={t} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className={`text-base overflow-hidden transition-all ${expanded ? '' : 'max-h-28'}`}>
           {hasEntities
             ? <EntityHighlighter text={resume} entities={entities} onEntityClick={onEntityClick} />
@@ -251,6 +362,24 @@ function ArticleCard({ article, index, highlight, onEntityClick }) {
             className="mt-2 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors justify-end w-full">
             {expanded ? <><ChevronUp size={12} /> Réduire</> : <><ChevronDown size={12} /> Lire la suite</>}
           </button>
+        )}
+
+        {/* Panneau notes/tags (dépliable) */}
+        {noteOpen && onAnnotate && url && (
+          <AnnotationPanel
+            annotation={annotation}
+            onSave={changes => onAnnotate(url, changes)}
+            onClose={() => setNoteOpen(false)}
+          />
+        )}
+
+        {/* Affichage note si fermé */}
+        {!noteOpen && hasNote && (
+          <div className="mt-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60">
+            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed line-clamp-2">
+              {annotation.notes}
+            </p>
+          </div>
         )}
       </div>
     </article>
@@ -314,7 +443,7 @@ function TimelineItem({ article }) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function ArticleListViewer({ content }) {
+export default function ArticleListViewer({ content, annotations, onAnnotate }) {
   const [searchQuery, setSearchQuery]         = useState('')
   const [sortBy, setSortBy]                   = useState('date-desc')
   const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'timeline'
@@ -323,6 +452,7 @@ export default function ArticleListViewer({ content }) {
   const [selectedEntity, setSelectedEntity]   = useState(null) // { type, value }
   const [typesOpen, setTypesOpen]             = useState(false)
   const [sourcesOpen, setSourcesOpen]         = useState(false)
+  const [annotFilter, setAnnotFilter]         = useState('tous') // 'tous' | 'importants' | 'non-lus'
   const searchRef = useRef(null)
 
   // Parse JSON
@@ -359,7 +489,7 @@ export default function ArticleListViewer({ content }) {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [articles])
 
-  // Pipeline : search → entity filter → source filter → sort
+  // Pipeline : search → entity filter → source filter → annotation filter → sort
   const displayedArticles = useMemo(() => {
     if (!articles) return []
     const q = searchQuery.trim().toLowerCase()
@@ -381,6 +511,13 @@ export default function ArticleListViewer({ content }) {
       result = result.filter(a => selectedSources.has(a['Sources'] ?? '—'))
     }
 
+    // Filtre annotation
+    if (annotFilter === 'importants') {
+      result = result.filter(a => annotations?.[a['URL']]?.is_important)
+    } else if (annotFilter === 'non-lus') {
+      result = result.filter(a => !annotations?.[a['URL']]?.is_read)
+    }
+
     result = [...result].sort((a, b) => {
       if (sortBy === 'date-desc') return toTimestamp(b['Date de publication']) - toTimestamp(a['Date de publication'])
       if (sortBy === 'date-asc')  return toTimestamp(a['Date de publication']) - toTimestamp(b['Date de publication'])
@@ -390,7 +527,7 @@ export default function ArticleListViewer({ content }) {
     })
 
     return result
-  }, [articles, searchQuery, selectedTypes, selectedSources, sortBy])
+  }, [articles, searchQuery, selectedTypes, selectedSources, sortBy, annotFilter, annotations])
 
   // Groupes timeline (toujours triés date-desc)
   const timelineGroups = useMemo(() => {
@@ -410,14 +547,21 @@ export default function ArticleListViewer({ content }) {
   const toggleType   = type => setSelectedTypes(prev => { const s = new Set(prev); s.has(type) ? s.delete(type) : s.add(type); return s })
   const toggleSource = src  => setSelectedSources(prev => { const s = new Set(prev); s.has(src)  ? s.delete(src)  : s.add(src);  return s })
 
-  const hasActiveFilters = searchQuery.trim() || selectedTypes.size > 0 || selectedSources.size > 0
+  const hasActiveFilters = searchQuery.trim() || selectedTypes.size > 0 || selectedSources.size > 0 || annotFilter !== 'tous'
 
   const clearAll = () => {
     setSearchQuery('')
     setSelectedTypes(new Set())
     setSelectedSources(new Set())
+    setAnnotFilter('tous')
     searchRef.current?.focus()
   }
+
+  // Comptage pour les chips annotation
+  const importantCount = useMemo(() => {
+    if (!articles || !annotations) return 0
+    return articles.filter(a => annotations[a['URL']]?.is_important).length
+  }, [articles, annotations])
 
   const handleExport = () => {
     const filename = `articles_${new Date().toISOString().slice(0, 10)}_${displayedArticles.length}.json`
@@ -481,6 +625,29 @@ export default function ArticleListViewer({ content }) {
             </button>
           )}
         </div>
+
+        {/* Chips filtre annotation (si annotations disponibles) */}
+        {onAnnotate && (
+          <div className="flex items-center gap-1 shrink-0">
+            {[
+              { key: 'tous',       label: 'Tous' },
+              { key: 'importants', label: `⭐ ${importantCount > 0 ? importantCount : ''}` },
+              { key: 'non-lus',    label: '👁 Non lus' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setAnnotFilter(key)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  annotFilter === key
+                    ? 'bg-amber-500 text-white border-amber-600'
+                    : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-600 hover:text-amber-600 dark:hover:text-amber-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Tri + vue + export — sur une seule ligne (2e ligne sur mobile) */}
         <div className="flex items-center gap-2 shrink-0">
@@ -639,7 +806,10 @@ export default function ArticleListViewer({ content }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {displayedArticles.map((article, i) => (
             <ArticleCard key={article['URL'] ?? i} article={article} index={i} highlight={searchQuery.trim()}
-              onEntityClick={(type, value) => setSelectedEntity({ type, value })} />
+              onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+              annotation={annotations?.[article['URL']] ?? null}
+              onAnnotate={onAnnotate}
+            />
           ))}
         </div>
       )}

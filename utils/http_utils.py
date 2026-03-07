@@ -128,17 +128,18 @@ def extract_top_n_largest_images(
     timeout: int = 10
 ) -> list[dict] | dict:
     """Extrait les N plus grandes images d'une page web.
-    
-    Parse le HTML de l'URL fournie, identifie toutes les images avec une largeur
-    supérieure à min_width pixels, calcule leur surface, et retourne les N plus 
-    grandes triées par taille décroissante.
-    
+
+    Utilise une cascade de sources par ordre de fiabilité :
+    1. Métadonnées Open Graph (og:image) — choisies explicitement par l'éditeur
+    2. Twitter Card (twitter:image) — fallback secondaire
+    3. Balises <img> avec attributs width/height explicites
+
     Args:
         url: L'adresse de la page web à analyser
         n: Nombre d'images à retourner (défaut: 3)
         min_width: Largeur minimale en pixels (défaut: 500)
         timeout: Délai d'attente maximal en secondes (défaut: 10)
-    
+
     Returns:
         Une liste de N dictionnaires maximum, chacun contenant:
             - url: URL de l'image
@@ -152,27 +153,70 @@ def extract_top_n_largest_images(
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
-        
+
         soup = BeautifulSoup(response.content, 'html.parser')
-        
+
+        seen_urls: set = set()
         images = []
+
+        # ── 1. Open Graph ──────────────────────────────────────────────────────
+        og_image = soup.find('meta', property='og:image')
+        if og_image:
+            og_url = og_image.get('content', '').strip()
+            if og_url.startswith(('http://', 'https://')):
+                try:
+                    og_w = int(soup.find('meta', property='og:image:width', content=True)
+                               and soup.find('meta', property='og:image:width').get('content', 0) or 1200)
+                    og_h = int(soup.find('meta', property='og:image:height', content=True)
+                               and soup.find('meta', property='og:image:height').get('content', 0) or 630)
+                except (ValueError, TypeError, AttributeError):
+                    og_w, og_h = 1200, 630
+                og_w = og_w or 1200
+                og_h = og_h or 630
+                og_alt = ''
+                og_title_tag = soup.find('meta', property='og:title')
+                if og_title_tag:
+                    og_alt = og_title_tag.get('content', '').strip()
+                images.append({
+                    'url': og_url,
+                    'title': og_alt,
+                    'alt': og_alt,
+                    'width': og_w,
+                    'height': og_h,
+                    'area': og_w * og_h,
+                })
+                seen_urls.add(og_url)
+
+        # ── 2. Twitter Card ────────────────────────────────────────────────────
+        for twitter_attr in ({'name': 'twitter:image'}, {'property': 'twitter:image'}):
+            tc_tag = soup.find('meta', attrs=twitter_attr)
+            if tc_tag:
+                tc_url = tc_tag.get('content', '').strip()
+                if tc_url.startswith(('http://', 'https://')) and tc_url not in seen_urls:
+                    images.append({
+                        'url': tc_url,
+                        'title': '',
+                        'alt': '',
+                        'width': 1200,
+                        'height': 630,
+                        'area': 1200 * 630,
+                    })
+                    seen_urls.add(tc_url)
+                break
+
+        # ── 3. Balises <img> avec dimensions explicites ────────────────────────
         for img in soup.find_all('img'):
             src = img.get('src', '').strip()
+            if not src.startswith(('http://', 'https://')) or src in seen_urls:
+                continue
             title = img.get('title', '').strip()
             alt = img.get('alt', '').strip()
-            width = img.get('width', '0')
-            height = img.get('height', '0')
-            
-            # Convertir en entiers avec validation
             try:
-                width = int(width) if width else 0
-                height = int(height) if height else 0
+                width = int(img.get('width') or 0)
+                height = int(img.get('height') or 0)
             except (ValueError, TypeError):
-                width = 0
-                height = 0
-            
-            # Filtrer : width > min_width ET src commence par http:// ou https://
-            if width > min_width and src.startswith(('http://', 'https://')):
+                width = height = 0
+            if width > min_width:
                 area = width * height
                 images.append({
                     'url': src,
@@ -180,13 +224,14 @@ def extract_top_n_largest_images(
                     'alt': alt,
                     'width': width,
                     'height': height,
-                    'area': area
+                    'area': area,
                 })
-        
+                seen_urls.add(src)
+
         # Trier par surface décroissante et retourner les N premières
         images.sort(key=lambda x: x['area'], reverse=True)
         return images[:n]
-    
+
     except requests.exceptions.Timeout:
         default_logger.error(f"Timeout lors de l'extraction d'images de {url}")
         return {"error": f"Timeout après {timeout}s"}

@@ -226,6 +226,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isRefreshing, setIsRefreshing]   = useState(false)
+  // Annotations manuelles (dict keyed par URL article)
+  const [annotations, setAnnotations]     = useState({})
   // Compteur de requêtes pour ignorer les réponses périmées (race condition)
   const fetchIdRef = useRef(0)
   // Ref sur le fichier en cours de consultation (accessible dans les callbacks
@@ -319,6 +321,40 @@ export default function App() {
   }, [])
 
   useEffect(() => { refreshFiles() }, [refreshFiles])
+
+  // ── Annotations ─────────────────────────────────────────────────────────────
+  // Chargement initial depuis /api/annotations
+  useEffect(() => {
+    fetch('/api/annotations')
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setAnnotations(data || {}))
+      .catch(() => {})
+  }, [])
+
+  // Callback : crée ou met à jour l'annotation d'un article (optimistic update)
+  const handleAnnotate = useCallback(async (url, changes) => {
+    if (!url) return
+    // Mise à jour optimiste immédiate
+    setAnnotations(prev => {
+      const existing = prev[url] || {}
+      return { ...prev, [url]: { ...existing, ...changes } }
+    })
+    try {
+      const r = await fetch('/api/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, ...changes }),
+      })
+      if (r.ok) {
+        const data = await r.json()
+        if (data.annotation) {
+          setAnnotations(prev => ({ ...prev, [url]: data.annotation }))
+        }
+      }
+    } catch {
+      // L'optimistic update reste en place — non critique
+    }
+  }, [])
 
   // Recharge la liste au retour de l'application (mobile : mise en arrière-plan)
   useEffect(() => {
@@ -598,6 +634,8 @@ export default function App() {
           onContentSaved={saveContent}
           onEntitySearch={(value, type) => setEntitySearch({ value, type })}
           onDelete={deleteFile}
+          annotations={annotations}
+          onAnnotate={handleAnnotate}
         />
       </div>
 
