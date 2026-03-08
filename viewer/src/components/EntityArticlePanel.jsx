@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import EntityGraph from './EntityGraph'
 import EntityCalendar from './EntityCalendar'
+import TTSButton from './TTSButton'
 
 // ── Composants Markdown ────────────────────────────────────────────────────────
 const MD = {
@@ -37,9 +38,16 @@ function EntityInfoView({ text, loading, error }) {
         </div>
       )}
       {text.length > 0 && (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
-          {text}
-        </ReactMarkdown>
+        <>
+          {!loading && (
+            <div className="flex justify-end mb-2">
+              <TTSButton text={text} size={13} />
+            </div>
+          )}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
+            {text}
+          </ReactMarkdown>
+        </>
       )}
       {loading && text.length > 0 && (
         <span className="inline-block w-1.5 h-4 bg-violet-400 dark:bg-violet-500 animate-pulse rounded-sm ml-0.5 align-middle" />
@@ -793,6 +801,11 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
             )}
             {ragText && (
               <div className="prose-sm dark:prose-invert max-w-none">
+                {!ragLoading && (
+                  <div className="flex justify-end mb-2">
+                    <TTSButton text={ragText} size={13} />
+                  </div>
+                )}
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
                   {ragText}
                 </ReactMarkdown>
@@ -847,14 +860,17 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
                       <><span>·</span><span className="font-medium text-slate-700 dark:text-slate-300">{art['Sources']}</span></>
                     )}
                   </div>
-                  {art['URL'] && (
-                    <a
-                      href={art['URL']} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                    >
-                      Lire <ExternalLink size={11} />
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {art['Résumé'] && <TTSButton text={art['Résumé']} size={12} />}
+                    {art['URL'] && (
+                      <a
+                        href={art['URL']} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Lire <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
                 </div>
                 {art['Résumé'] && (
                   <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-4">

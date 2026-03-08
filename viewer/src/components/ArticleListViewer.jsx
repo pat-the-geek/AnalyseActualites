@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
+import TTSButton from './TTSButton'
 
 // ── Badge sentiment ───────────────────────────────────────────────────────────
 const SENTIMENT_CFG = {
@@ -336,6 +337,7 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
                 </button>
               </>
             )}
+            {resume && <TTSButton text={resume} size={13} />}
             {article['URL'] && (
               <a href={article['URL']} target="_blank" rel="noopener noreferrer"
                 className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="Ouvrir l'article">
