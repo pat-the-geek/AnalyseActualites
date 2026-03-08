@@ -4,6 +4,7 @@ import {
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
   Maximize2, Minimize2, ExternalLink, Database, Clipboard, BarChart2,
   ToggleLeft, ToggleRight, RotateCcw,
+  Sun, Moon, Monitor, Terminal, TrendingUp, Eye,
 } from 'lucide-react'
 
 // ─── Helpers partagés ────────────────────────────────────────────────────────
@@ -1292,7 +1293,13 @@ const TABS = [
   { id: 'quota',     label: 'Quota',         Icon: BarChart2 },
 ]
 
-export default function SettingsPanel({ onClose }) {
+const THEME_OPTIONS_SETTINGS = [
+  { key: 'jour', Icon: Sun,     label: 'Jour' },
+  { key: 'auto', Icon: Monitor, label: 'Auto' },
+  { key: 'nuit', Icon: Moon,    label: 'Nuit' },
+]
+
+export default function SettingsPanel({ onClose, theme, onThemeChange, rssStatus, onOpenConsole, onOpenTendances, onOpenBiais }) {
   const [activeTab, setActiveTab] = useState('rss')
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -1352,6 +1359,74 @@ export default function SettingsPanel({ onClose }) {
           >
             <X size={14} />
           </button>
+        </div>
+
+        {/* ── Accès rapide — mobile uniquement (actions retirées de la tab bar) ── */}
+        <div className="md:hidden shrink-0 border-b border-slate-200/70 dark:border-slate-700/50 bg-slate-50/60 dark:bg-slate-800/40 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5">Accès rapide</p>
+          <div className="flex items-center gap-2">
+            {/* Sélecteur de thème compact */}
+            <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-600/70 overflow-hidden bg-white/70 dark:bg-slate-700/50 backdrop-blur-sm">
+              {THEME_OPTIONS_SETTINGS.map(({ key, Icon, label }) => (
+                <button
+                  key={key}
+                  onClick={() => onThemeChange?.(key)}
+                  title={label}
+                  className={`flex flex-col items-center gap-[3px] px-3 py-2 transition-colors ${
+                    theme === key
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-500 dark:text-slate-400 active:opacity-60'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span className="text-[9px] font-medium leading-none">{label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1 ml-auto">
+              {/* Console RSS */}
+              {onOpenConsole && (
+                <button
+                  onClick={onOpenConsole}
+                  title="Mots-clés RSS"
+                  className="flex flex-col items-center gap-[3px] px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-700/50 backdrop-blur-sm border border-slate-200 dark:border-slate-600/70 text-slate-500 dark:text-slate-400 active:opacity-60 relative"
+                >
+                  <span className="relative">
+                    <Terminal size={18} />
+                    {rssStatus?.running && (
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    )}
+                  </span>
+                  <span className="text-[9px] font-medium leading-none">RSS</span>
+                </button>
+              )}
+
+              {/* Tendances */}
+              {onOpenTendances && (
+                <button
+                  onClick={onOpenTendances}
+                  title="Tendances & alertes"
+                  className="flex flex-col items-center gap-[3px] px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-700/50 backdrop-blur-sm border border-slate-200 dark:border-slate-600/70 text-slate-500 dark:text-slate-400 active:opacity-60"
+                >
+                  <TrendingUp size={18} />
+                  <span className="text-[9px] font-medium leading-none">Tendances</span>
+                </button>
+              )}
+
+              {/* Biais éditoriaux */}
+              {onOpenBiais && (
+                <button
+                  onClick={onOpenBiais}
+                  title="Biais éditoriaux"
+                  className="flex flex-col items-center gap-[3px] px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-700/50 backdrop-blur-sm border border-slate-200 dark:border-slate-600/70 text-slate-500 dark:text-slate-400 active:opacity-60"
+                >
+                  <Eye size={18} />
+                  <span className="text-[9px] font-medium leading-none">Biais</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Contenu de l'onglet actif ── */}

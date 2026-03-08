@@ -639,97 +639,84 @@ export default function App() {
         />
       </div>
 
-      {/* ── Barre de navigation bas — mobile uniquement ── */}
+      {/* ── Barre de navigation bas — mobile uniquement (Apple HIG: 5 tabs max, labels, verre dépoli) ── */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-50 flex items-stretch"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl backdrop-saturate-150 border-t border-white/40 dark:border-slate-700/40"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {/* Sélecteur de thème */}
-        <div className="flex items-center justify-center px-3 border-r border-slate-200 dark:border-slate-700">
-          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
-            {THEME_OPTIONS.map(({ key, Icon, title }) => (
-              <button
-                key={key}
-                onClick={() => setTheme(key)}
-                title={title}
-                className={`px-2.5 py-3 transition-colors ${
-                  theme === key
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}
-              >
-                <Icon size={16} />
-              </button>
-            ))}
-          </div>
+        <div className="flex items-stretch h-[49px]">
+
+          {/* 1 — Fichiers : ouvre le drawer latéral */}
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            title="Fichiers"
+            className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
+              sidebarOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            <Menu size={24} strokeWidth={sidebarOpen ? 2.2 : 1.8} />
+            <span className="text-[10px] font-medium leading-none">Fichiers</span>
+          </button>
+
+          {/* 2 — Top articles */}
+          <button
+            onClick={() => setTopOpen(true)}
+            title="Top articles"
+            className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
+              topOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            <Star size={24} strokeWidth={topOpen ? 2.2 : 1.8} />
+            <span className="text-[10px] font-medium leading-none">Top</span>
+          </button>
+
+          {/* 3 — Recherche : centre = zone pouce prioritaire */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            title="Recherche plein texte"
+            className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
+              searchOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            <Search size={24} strokeWidth={searchOpen ? 2.2 : 1.8} />
+            <span className="text-[10px] font-medium leading-none">Recherche</span>
+          </button>
+
+          {/* 4 — Entités */}
+          <button
+            onClick={() => setDashboardOpen(true)}
+            title="Dashboard entités"
+            className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
+              dashboardOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            <BarChart2 size={24} strokeWidth={dashboardOpen ? 2.2 : 1.8} />
+            <span className="text-[10px] font-medium leading-none">Entités</span>
+          </button>
+
+          {/* 5 — Réglages (inclut : thème, RSS, tendances, biais) */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Réglages"
+            className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
+              settingsOpen
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            <Settings size={24} strokeWidth={settingsOpen ? 2.2 : 1.8} />
+            <span className="text-[10px] font-medium leading-none">Réglages</span>
+          </button>
+
         </div>
-        {/* Console RSS */}
-        <button
-          onClick={() => setConsoleOpen(true)}
-          title="Mots-clés RSS"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors relative"
-        >
-          <span className="relative inline-block">
-            <Terminal size={22} />
-            {rssStatus?.running ? (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500" />
-            ) : rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null ? (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
-            ) : rssStatus?.file_count > 0 ? (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-slate-400" />
-            ) : null}
-          </span>
-        </button>
-        {/* Top articles */}
-        <button
-          onClick={() => setTopOpen(true)}
-          title="Top articles"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <Star size={22} />
-        </button>
-        {/* Alertes */}
-        <button
-          onClick={() => setAlertsOpen(true)}
-          title="Tendances & alertes"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <TrendingUp size={22} />
-        </button>
-        {/* Biais éditoriaux */}
-        <button
-          onClick={() => setBiasOpen(true)}
-          title="Biais éditoriaux"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <Eye size={22} />
-        </button>
-        {/* Dashboard entités */}
-        <button
-          onClick={() => setDashboardOpen(true)}
-          title="Dashboard entités"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <BarChart2 size={22} />
-        </button>
-        {/* Réglages */}
-        <button
-          onClick={() => setSettingsOpen(true)}
-          title="Réglages"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <Settings size={22} />
-        </button>
-        {/* Recherche */}
-        <button
-          onClick={() => setSearchOpen(true)}
-          title="Recherche plein texte"
-          className="flex flex-1 items-center justify-center py-3 text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-700 transition-colors"
-        >
-          <Search size={22} />
-        </button>
       </nav>
 
       {/* ── Overlays ── */}
@@ -743,7 +730,15 @@ export default function App() {
         />
       )}
       {settingsOpen && (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} />
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          theme={theme}
+          onThemeChange={setTheme}
+          rssStatus={rssStatus}
+          onOpenConsole={() => { setSettingsOpen(false); setConsoleOpen(true) }}
+          onOpenTendances={() => { setSettingsOpen(false); setAlertsOpen(true) }}
+          onOpenBiais={() => { setSettingsOpen(false); setBiasOpen(true) }}
+        />
       )}
       {dashboardOpen && (
         <EntityDashboard
