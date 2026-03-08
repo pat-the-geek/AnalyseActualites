@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import {
   X, Settings, Clock, Tag, Rss, Plus, Trash2, RefreshCw,
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
@@ -1344,6 +1344,68 @@ function EnvTab() {
 
   const vars = entries.filter(e => e.type === 'var')
 
+  // Groupes visuels : { label, keys }
+  const ENV_GROUPS = [
+    { label: 'IA Euria', keys: ['URL', 'bearer'] },
+  ]
+  const groupedKeys = ENV_GROUPS.flatMap(g => g.keys)
+
+  // Rendu d'une ligne de variable
+  const renderVarRow = ({ key, value, masked }) => (
+    <tr key={key} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+      <td className="px-5 py-2.5">
+        <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{key}</span>
+        {masked && <Lock size={10} className="inline ml-1.5 text-amber-500" />}
+      </td>
+      <td className="px-4 py-2.5">
+        {editKey === key ? (
+          <div className="flex items-center gap-2">
+            <input
+              type={masked && !showMasked[key] ? 'password' : 'text'}
+              value={editVal}
+              onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveVar(key, editVal); if (e.key === 'Escape') setEditKey(null) }}
+              className="flex-1 bg-white dark:bg-slate-900 border border-blue-400 rounded px-2 py-1 text-xs font-mono focus:outline-none"
+              autoFocus
+            />
+            <button onClick={() => saveVar(key, editVal)} disabled={saving}
+              className="p-1 text-green-600 hover:text-green-500 disabled:opacity-50">
+              <Check size={14} />
+            </button>
+            <button onClick={() => setEditKey(null)} className="p-1 text-slate-400 hover:text-slate-600">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <span className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">
+            {masked && !showMasked[key] ? '•••••••••••' : (value || <em className="text-slate-400">vide</em>)}
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+          {masked && (
+            <button onClick={() => setShowMasked(s => ({ ...s, [key]: !s[key] }))}
+              title={showMasked[key] ? 'Masquer' : 'Afficher'}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded">
+              {showMasked[key] ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          )}
+          <button onClick={() => { setEditKey(key); setEditVal(masked ? '' : value) }}
+            title="Modifier"
+            className="p-1 text-slate-400 hover:text-blue-500 rounded">
+            <Pencil size={13} />
+          </button>
+          <button onClick={() => deleteVar(key)}
+            title="Supprimer"
+            className="p-1 text-slate-400 hover:text-red-500 rounded">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <ErrorBanner message={error} />
@@ -1365,60 +1427,24 @@ function EnvTab() {
               </tr>
             </thead>
             <tbody>
-              {vars.map(({ key, value, masked }) => (
-                <tr key={key} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
-                  <td className="px-5 py-2.5">
-                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{key}</span>
-                    {masked && <Lock size={10} className="inline ml-1.5 text-amber-500" />}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    {editKey === key ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type={masked && !showMasked[key] ? 'password' : 'text'}
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveVar(key, editVal); if (e.key === 'Escape') setEditKey(null) }}
-                          className="flex-1 bg-white dark:bg-slate-900 border border-blue-400 rounded px-2 py-1 text-xs font-mono focus:outline-none"
-                          autoFocus
-                        />
-                        <button onClick={() => saveVar(key, editVal)} disabled={saving}
-                          className="p-1 text-green-600 hover:text-green-500 disabled:opacity-50">
-                          <Check size={14} />
-                        </button>
-                        <button onClick={() => setEditKey(null)} className="p-1 text-slate-400 hover:text-slate-600">
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">
-                        {masked && !showMasked[key] ? '•••••••••••' : (value || <em className="text-slate-400">vide</em>)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                      {masked && (
-                        <button onClick={() => setShowMasked(s => ({ ...s, [key]: !s[key] }))}
-                          title={showMasked[key] ? 'Masquer' : 'Afficher'}
-                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded">
-                          {showMasked[key] ? <EyeOff size={13} /> : <Eye size={13} />}
-                        </button>
-                      )}
-                      <button onClick={() => { setEditKey(key); setEditVal(masked ? '' : value) }}
-                        title="Modifier"
-                        className="p-1 text-slate-400 hover:text-blue-500 rounded">
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => deleteVar(key)}
-                        title="Supprimer"
-                        className="p-1 text-slate-400 hover:text-red-500 rounded">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {/* Groupes visuels */}
+              {ENV_GROUPS.map(group => {
+                const groupVars = group.keys.map(k => vars.find(v => v.key === k)).filter(Boolean)
+                if (groupVars.length === 0) return null
+                return (
+                  <Fragment key={group.label}>
+                    <tr className="bg-slate-100/60 dark:bg-slate-800/60">
+                      <td colSpan={3} className="px-5 py-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{group.label}</span>
+                      </td>
+                    </tr>
+                    {groupVars.map(v => renderVarRow(v))}
+                  </Fragment>
+                )
+              })}
+
+              {/* Variables hors groupes */}
+              {vars.filter(v => !groupedKeys.includes(v.key)).map(v => renderVarRow(v))}
 
               {/* Ligne d'ajout */}
               <tr className="border-t-2 border-slate-200 dark:border-slate-700">

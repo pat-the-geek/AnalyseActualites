@@ -21,7 +21,6 @@ class Config:
         project_root: Chemin racine du projet
         url: URL de l'API EurIA
         bearer: Token d'authentification API
-        reeder_json_url: URL du flux JSON d'articles
         max_attempts: Nombre maximal de tentatives pour les requêtes
         timeout_resume: Timeout pour génération de résumés (secondes)
         timeout_rapport: Timeout pour génération de rapports (secondes)
