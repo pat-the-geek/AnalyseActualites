@@ -2,10 +2,11 @@
  * TopArticlesPanel — Affiche les N articles les mieux scorés (Feature 1)
  * Style : cartes article identiques à la vue JSON, grille 2 colonnes, modal large.
  */
-import { useState, useEffect, useMemo } from 'react'
-import { X, Star, ExternalLink, RefreshCw, Clock, Tag, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { X, Star, ExternalLink, RefreshCw, Clock, Tag, ChevronDown, ChevronUp, Maximize2, PlayCircle, Pause, Volume2 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
+import TTSButton, { stripMarkdown, stopAll } from './TTSButton'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,9 +109,77 @@ function ImageLightbox({ url, alt, onClose }) {
   )
 }
 
+// ── Hook lecture podcast ───────────────────────────────────────────────────────
+
+/**
+ * Lit tous les articles en séquence comme un podcast.
+ * Annonce "Article N sur M — Source — Titre — Résumé" pour chaque article.
+ */
+function usePodcast(articles) {
+  const [playing, setPlaying]     = useState(false)
+  const [currentIdx, setCurrentIdx] = useState(-1)
+  const playingRef = useRef(false)
+
+  // Construit le texte announcé pour un article donné
+  const buildText = (article, idx, total) => {
+    const titre  = article['Titre']?.trim() || ''
+    const resume = article['Résumé'] || ''
+    const source = article['Sources'] || ''
+    let text = `Article ${idx + 1} sur ${total}. `
+    if (source) text += `${source}. `
+    if (titre)  text += `${titre}. `
+    if (resume) text += resume
+    return text.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  }
+
+  const speakAt = useCallback((idx) => {
+    if (!playingRef.current || idx >= articles.length) {
+      setPlaying(false)
+      setCurrentIdx(-1)
+      playingRef.current = false
+      return
+    }
+    const text = buildText(articles[idx], idx, articles.length)
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.lang = 'fr-FR'
+    utt.rate = 0.92
+    utt.onend  = () => speakAt(idx + 1)
+    utt.onerror = () => {
+      setPlaying(false)
+      setCurrentIdx(-1)
+      playingRef.current = false
+    }
+    setCurrentIdx(idx)
+    window.speechSynthesis.speak(utt)
+  }, [articles]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const start = useCallback(() => {
+    if (!window.speechSynthesis || articles.length === 0) return
+    stopAll() // arrête tout TTS en cours (boutons individuels)
+    playingRef.current = true
+    setPlaying(true)
+    speakAt(0)
+  }, [speakAt, articles.length])
+
+  const stop = useCallback(() => {
+    playingRef.current = false
+    window.speechSynthesis?.cancel()
+    setPlaying(false)
+    setCurrentIdx(-1)
+  }, [])
+
+  // Nettoyage au démontage
+  useEffect(() => () => {
+    playingRef.current = false
+    window.speechSynthesis?.cancel()
+  }, [])
+
+  return { playing, currentIdx, start, stop }
+}
+
 // ── Carte article ─────────────────────────────────────────────────────────────
 
-function ArticleCard({ article, rank, onEntityClick }) {
+function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
   const [expanded, setExpanded] = useState(rank <= 3)
   const [lightbox, setLightbox] = useState(false)
 
@@ -125,7 +194,11 @@ function ArticleCard({ article, rank, onEntityClick }) {
   const titre   = article['Titre']?.trim() || ''
 
   return (
-    <article className="bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-white/50 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow flex flex-col">
+    <article className={`bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col ${
+      isCurrentPodcast
+        ? 'border-violet-400 dark:border-violet-500 ring-2 ring-violet-300 dark:ring-violet-700'
+        : 'border-white/50 dark:border-slate-700/60'
+    }`}>
 
       {/* Image */}
       {imgUrl && (
@@ -190,13 +263,17 @@ function ArticleCard({ article, rank, onEntityClick }) {
               </h3>
             )}
           </div>
-          {url && url !== '#' && (
-            <a href={url} target="_blank" rel="noopener noreferrer"
-              className="shrink-0 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5"
-              title="Ouvrir l'article">
-              <ExternalLink size={14} />
-            </a>
-          )}
+          {/* Boutons action : TTS + lien externe */}
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            {resume && <TTSButton text={resume} size={14} />}
+            {url && url !== '#' && (
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                title="Ouvrir l'article">
+                <ExternalLink size={14} />
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Résumé */}
@@ -215,6 +292,14 @@ function ArticleCard({ article, rank, onEntityClick }) {
 
         {/* Score */}
         <ScoreBar score={article.score_pertinence ?? 0} />
+
+        {/* Indicateur podcast en cours */}
+        {isCurrentPodcast && (
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-violet-600 dark:text-violet-400 font-medium">
+            <Volume2 size={11} className="animate-pulse" />
+            Lecture en cours…
+          </div>
+        )}
       </div>
     </article>
   )
@@ -231,7 +316,10 @@ export default function TopArticlesPanel({ onClose }) {
   const [isMaximized, setIsMaximized] = useState(false)
   const [selectedEntity, setSelectedEntity] = useState(null) // { type, value }
 
+  const { playing, currentIdx, start: podcastStart, stop: podcastStop } = usePodcast(articles)
+
   const load = () => {
+    podcastStop()
     setLoading(true)
     setError(null)
     fetch(`/api/articles/top?n=${topN}&hours=${hours}`)
@@ -247,6 +335,26 @@ export default function TopArticlesPanel({ onClose }) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
+
+  // Bouton podcast (mutualisé desktop + mobile)
+  const PodcastButton = ({ mobile = false }) => (
+    window.speechSynthesis && articles.length > 0 ? (
+      <button
+        onClick={playing ? podcastStop : podcastStart}
+        title={playing ? 'Arrêter le podcast' : 'Écouter tous les articles en podcast'}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+          playing
+            ? 'bg-violet-600 hover:bg-violet-700 text-white'
+            : 'bg-violet-100 dark:bg-violet-900/40 hover:bg-violet-200 dark:hover:bg-violet-800/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800'
+        } ${mobile ? 'flex-1 justify-center' : ''}`}
+      >
+        {playing
+          ? <><Pause size={12} /> Article {currentIdx + 1}/{articles.length}</>
+          : <><PlayCircle size={12} /> Écouter</>
+        }
+      </button>
+    ) : null
+  )
 
   return (
     <>
@@ -266,6 +374,7 @@ export default function TopArticlesPanel({ onClose }) {
 
           {/* Contrôles desktop (masqués sur mobile) */}
           <div className="hidden md:flex flex-wrap items-center gap-3 ml-auto">
+            <PodcastButton />
             <div className="flex items-center gap-2 text-sm">
               <label className="text-slate-500 dark:text-slate-400 text-xs">Fenêtre :</label>
               <select value={hours} onChange={e => setHours(Number(e.target.value))}
@@ -338,6 +447,7 @@ export default function TopArticlesPanel({ onClose }) {
                   key={article['URL'] ?? article['url'] ?? i}
                   article={article}
                   rank={i + 1}
+                  isCurrentPodcast={playing && currentIdx === i}
                   onEntityClick={(type, value) => setSelectedEntity({ type, value })}
                 />
               ))}
@@ -361,6 +471,7 @@ export default function TopArticlesPanel({ onClose }) {
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
     >
       <div className="flex items-center gap-2 flex-1">
+        <PodcastButton mobile />
         <div className="flex items-center gap-1.5">
           <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Fenêtre :</label>
           <select value={hours} onChange={e => setHours(Number(e.target.value))}
