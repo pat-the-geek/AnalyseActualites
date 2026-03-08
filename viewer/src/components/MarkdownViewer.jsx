@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import { useMemo, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
+import TTSButton from './TTSButton'
 
 mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
 
@@ -53,6 +54,11 @@ export default function MarkdownViewer({ content }) {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Bouton lecture à voix haute */}
+      <div className="flex justify-end mb-2">
+        <TTSButton text={body} size={14} />
+      </div>
+
       {/* Métadonnées frontmatter */}
       {meta && (
         <div className="mb-6 p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-sm">
