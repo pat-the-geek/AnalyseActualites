@@ -1286,11 +1286,11 @@ function QuotaTab() {
 // ─── Panneau principal Réglages ───────────────────────────────────────────────
 
 const TABS = [
-  { id: 'rss',       label: 'RSS',          Icon: Rss       },
-  { id: 'scheduler', label: 'Planification', Icon: Clock     },
-  { id: 'keywords',  label: 'Mots-clés',     Icon: Tag       },
-  { id: 'flux',      label: 'Flux Reeder',   Icon: Database  },
-  { id: 'quota',     label: 'Quota',         Icon: BarChart2 },
+  { id: 'rss',       label: 'RSS',          short: 'RSS',      Icon: Rss       },
+  { id: 'scheduler', label: 'Planification', short: 'Cron',     Icon: Clock     },
+  { id: 'keywords',  label: 'Mots-clés',     short: 'Mots-cl.', Icon: Tag       },
+  { id: 'flux',      label: 'Flux Reeder',   short: 'Flux',     Icon: Database  },
+  { id: 'quota',     label: 'Quota',         short: 'Quota',    Icon: BarChart2 },
 ]
 
 const THEME_OPTIONS_SETTINGS = [
@@ -1316,49 +1316,74 @@ export default function SettingsPanel({ onClose, theme, onThemeChange, rssStatus
     >
       <div className={`bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl shadow-2xl w-full border border-white/40 dark:border-slate-700/50 flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
 
-        {/* ── En-tête / toolbar ── */}
+        {/* ── Navigation tabs — desktop : header / mobile : tab bar bas harmonisé ── */}
         <div
-          className="flex items-center gap-2 px-5 py-3 border-t border-white/30 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl md:border-t-0 md:border-b shrink-0 order-last md:order-first"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          className="shrink-0 order-last md:order-first border-t border-white/40 dark:border-slate-700/40 bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl backdrop-saturate-150 md:border-t-0 md:border-b md:bg-white/60 md:dark:bg-slate-800/60"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <Settings size={15} className="hidden md:block text-slate-400 dark:text-slate-400" />
-          <h2 className="hidden md:block text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
+          {/* Desktop : barre d'en-tête avec titre + onglets pill + boutons */}
+          <div className="hidden md:flex items-center gap-2 px-5 py-3">
+            <Settings size={15} className="text-slate-400 dark:text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mr-3">Réglages</h2>
+            <div className="flex items-center gap-1 flex-1">
+              {TABS.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  title={label}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    activeTab === id
+                      ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-400/40 dark:border-blue-500/40'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Icon size={12} /><span>{label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setIsMaximized(m => !m)}
+              title={isMaximized ? 'Réduire la fenêtre' : "Agrandir à la taille de l'écran"}
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              aria-label={isMaximized ? 'Réduire' : 'Agrandir'}
+            >
+              {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              aria-label="Fermer"
+            >
+              <X size={14} />
+            </button>
+          </div>
 
-          {/* Onglets */}
-          <div className="flex items-center gap-0.5 md:gap-1 flex-1">
-            {TABS.map(({ id, label, Icon }) => (
+          {/* Mobile : tab bar identique à la nav principale (icon + label + h-[49px]) */}
+          <div className="md:hidden flex items-stretch h-[49px]">
+            {TABS.map(({ id, short, Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                title={label}
-                className={`flex items-center gap-1.5 px-2.5 py-2 md:px-3 md:py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                title={short}
+                className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
                   activeTab === id
-                    ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 border border-blue-400/40 dark:border-blue-500/40'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-slate-400 dark:text-slate-500'
                 }`}
               >
-                <Icon size={14} className="md:hidden" />
-                <Icon size={12} className="hidden md:block" />
-                <span className="hidden md:inline">{label}</span>
+                <Icon size={22} strokeWidth={activeTab === id ? 2.2 : 1.8} />
+                <span className="text-[10px] font-medium leading-none">{short}</span>
               </button>
             ))}
+            {/* Bouton fermer — bord droit, séparé des onglets */}
+            <button
+              onClick={onClose}
+              aria-label="Fermer"
+              className="flex items-center justify-center px-4 text-slate-400 dark:text-slate-500 border-l border-slate-200/60 dark:border-slate-700/50 active:opacity-60 transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
-
-          <button
-            onClick={() => setIsMaximized(m => !m)}
-            title={isMaximized ? 'Réduire la fenêtre' : 'Agrandir à la taille de l\'écran'}
-            className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            aria-label={isMaximized ? 'Réduire' : 'Agrandir'}
-          >
-            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            aria-label="Fermer"
-          >
-            <X size={14} />
-          </button>
         </div>
 
         {/* ── Accès rapide — mobile uniquement (actions retirées de la tab bar) ── */}
