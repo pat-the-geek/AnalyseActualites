@@ -117,6 +117,37 @@ def compute_top_entities(articles: list, top_n: int = 10) -> list:
     return top
 
 
+def compute_cooccurrences(articles: list, entity_value: str, top_n: int = 5) -> list:
+    """Retourne les entités co-occurentes (L1) avec entity_value dans les mêmes articles."""
+    entity_lower = entity_value.lower()
+    counter: Counter = Counter()
+
+    for article in articles:
+        entities = article.get("entities", {})
+        if not isinstance(entities, dict):
+            continue
+        # Vérifie si l'article mentionne l'entité cible
+        found = any(
+            str(name).lower() == entity_lower
+            for names in entities.values()
+            if isinstance(names, list)
+            for name in names
+        )
+        if not found:
+            continue
+        # Collecte toutes les autres entités du même article
+        for etype, names in entities.items():
+            if etype not in ENTITY_TYPES_PERTINENTS or not isinstance(names, list):
+                continue
+            for name in names:
+                name_clean = str(name).strip()
+                if name_clean.lower() == entity_lower or len(name_clean) < 3:
+                    continue
+                counter[name_clean] += 1
+
+    return [name for name, _ in counter.most_common(top_n)]
+
+
 def compute_sentiment_stats(articles: list) -> dict:
     """Calcule la répartition des sentiments en pourcentages."""
     counts = Counter(
@@ -258,6 +289,9 @@ def build_digest_markdown(
                 ligne += f" · {nb} mentions/24h"
             if desc:
                 ligne += f" — {desc}"
+            cooc = compute_cooccurrences(articles_48h, entite, top_n=5)
+            if cooc:
+                ligne += f" [{', '.join(cooc)}]"
             lines.append(ligne)
     else:
         lines.append("*Aucune alerte de tendance détectée — `trend_detector.py` n'a pas encore tourné ou aucun seuil n'est dépassé.*")
