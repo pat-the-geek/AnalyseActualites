@@ -24,7 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.logging import print_console
 from utils.config import get_config
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ def format_corpus(articles, limit=35):
 
 # ─── APPEL API ────────────────────────────────────────────────────────────────
 
-def call_api(client: EurIAClient, corpus_t0, corpus_t1, t0_label, t1_label, t0_count, t1_count):
+def call_api(client, corpus_t0, corpus_t1, t0_label, t1_label, t0_count, t1_count):
     """Envoie le corpus à l'API EurIA et retourne la liste de scores thématiques."""
     prompt = (
         "Tu es un analyste média expert. Évalue la présence de chaque thème dans deux corpus d'articles.\n\n"
@@ -601,11 +601,10 @@ def main():
     # Initialisation de la config EurIA (lit .env automatiquement)
     try:
         config = get_config()
-        # web_search désactivé : tâche analytique pure sur corpus local
-        client = EurIAClient(enable_web_search=False)
+        client = get_ai_client()
     except ValueError as e:
-        print_console(f"ERREUR de configuration EurIA : {e}", level="error")
-        print_console("Vérifiez que les variables URL et bearer sont définies dans le fichier .env", level="error")
+        print_console(f"ERREUR de configuration IA : {e}", level="error")
+        print_console("Vérifiez la configuration IA dans le fichier .env (AI_PROVIDER, URL/bearer ou ANTHROPIC_API_KEY)", level="error")
         sys.exit(1)
 
     data_dir = Path(args.data)

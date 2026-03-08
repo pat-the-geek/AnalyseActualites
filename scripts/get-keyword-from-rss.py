@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
 from utils.quota import get_quota_manager
@@ -132,8 +132,8 @@ one_week_ago = now - timedelta(days=7)
 print_console(f"Fenêtre temporelle : {one_week_ago.date()} à {now.date()}")
 
 # Initialiser le client IA
-print_console("Initialisation du client IA EurIA...")
-api_client = EurIAClient()
+print_console("Initialisation du client IA...")
+api_client = get_ai_client()
 
 # Initialiser le gestionnaire de quotas
 quota = get_quota_manager()

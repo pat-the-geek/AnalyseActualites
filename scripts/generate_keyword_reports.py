@@ -29,7 +29,7 @@ RAPPORTS_BASE_DIR.mkdir(parents=True, exist_ok=True)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.logging import print_console
 
 def get_month_period():
@@ -43,7 +43,7 @@ def get_month_period():
 
 def main():
     date_debut, date_fin = get_month_period()
-    api_client = EurIAClient()
+    api_client = get_ai_client()
     json_files = list(ARTICLES_DIR.glob("*.json"))
     total_files = len(json_files)
     print_console(f"Début génération des rapports par mot-clé ({total_files} fichiers à traiter)")

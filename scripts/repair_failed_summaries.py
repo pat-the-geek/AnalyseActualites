@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.http_utils import fetch_and_extract_text
 from utils.logging import print_console
 
@@ -33,7 +33,7 @@ def is_error_summary(resume: str) -> bool:
     return isinstance(resume, str) and resume.startswith(ERROR_PREFIX)
 
 
-def repair_file(path: Path, client: EurIAClient, dry_run: bool, delay: float) -> tuple[int, int]:
+def repair_file(path: Path, client, dry_run: bool, delay: float) -> tuple[int, int]:
     """Répare les résumés en erreur dans un fichier JSON.
 
     Returns:
@@ -164,7 +164,7 @@ def main():
         return
 
     # Initialiser le client
-    client = EurIAClient()
+    client = get_ai_client()
 
     total_repaired = 0
     total_failed = 0

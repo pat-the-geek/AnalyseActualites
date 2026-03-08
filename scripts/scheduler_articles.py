@@ -28,7 +28,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from utils.logging import print_console, setup_logger, default_logger
 
 from utils.config import get_config
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 
 def charger_flux_config(flux_config_path: Path) -> list:
     with open(flux_config_path, 'r', encoding='utf-8') as f:
@@ -73,7 +73,7 @@ def ask_euria_for_schedule(nb_new_articles: int, freq_history: list) -> dict:
         "en tenant compte du volume d'actualités. Si le volume est faible, recommande 1 fois par mois. "
         "Si le volume est élevé, propose plusieurs exécutions par mois. Donne la fréquence en jours et justifie brièvement."
     )
-    client = EurIAClient()
+    client = get_ai_client()
     try:
         result = client.generate_summary(prompt, max_lines=5, timeout=60)
         return {"recommendation": result}

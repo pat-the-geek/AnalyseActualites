@@ -21,7 +21,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.config import get_config
 from utils.logging import print_console
 
@@ -290,8 +290,8 @@ def generate_48h_report(dry_run: bool = False) -> None:
         return
 
     # Appel API avec timeout étendu (rapport complexe)
-    api_client = EurIAClient()
-    print_console("Génération du rapport via EurIA (timeout 300s)...")
+    api_client = get_ai_client()
+    print_console("Génération du rapport IA (timeout 300s)...")
 
     try:
         report_content = api_client.ask(prompt, max_attempts=3, timeout=300)

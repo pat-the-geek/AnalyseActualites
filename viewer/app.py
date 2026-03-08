@@ -1647,9 +1647,41 @@ def api_entities_images():
     return jsonify({e["name"]: cache.get(e["name"]) for e in entities})
 
 
+def _normalize_claude_sse_line(decoded: str):
+    """Convertit un événement SSE Claude au format OpenAI attendu par le frontend.
+
+    Claude envoie : data: {"type": "content_block_delta", "delta": {"text": "..."}}
+    Le frontend lit : data: {"choices": [{"delta": {"content": "..."}, "finish_reason": null}]}
+
+    Retourne la ligne normalisée (str) ou None si la ligne doit être ignorée.
+    """
+    if decoded.startswith("event:"):
+        return None
+    if not decoded.startswith("data:"):
+        return None
+    raw = decoded[5:].strip()
+    if not raw:
+        return None
+    try:
+        evt = json.loads(raw)
+        evt_type = evt.get("type", "")
+        if evt_type == "content_block_delta":
+            text = evt.get("delta", {}).get("text", "")
+            if text:
+                normalized = json.dumps({
+                    "choices": [{"delta": {"content": text}, "finish_reason": None}]
+                })
+                return f"data: {normalized}\n\n"
+        elif evt_type == "message_stop":
+            return "data: [DONE]\n\n"
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return None
+
+
 @app.route("/api/entities/info")
 def api_entities_info():
-    """Génère en streaming une synthèse encyclopédique sur une entité via EurIA."""
+    """Génère en streaming une synthèse encyclopédique sur une entité (EurIA ou Claude)."""
     import requests as req
 
     entity_type  = request.args.get("type",  "").strip()
@@ -1657,10 +1689,7 @@ def api_entities_info():
     if not entity_type or not entity_value:
         return jsonify({"error": "Paramètres type et value requis"}), 400
 
-    api_url = os.environ.get("URL", "")
-    bearer  = os.environ.get("bearer", "")
-    if not api_url or not bearer:
-        return jsonify({"error": "Configuration API EurIA manquante (.env)"}), 503
+    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
 
     type_labels = {
         "PERSON":      "personne physique",
@@ -1683,26 +1712,61 @@ def api_entities_info():
         "Sois factuel et concis. Génère uniquement le contenu Markdown, sans balises <think>."
     )
 
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "model": "qwen3",
-        "stream": True,
-        "enable_web_search": True,
-    }
-    api_headers = {
-        "Authorization": f"Bearer {bearer}",
-        "Content-Type": "application/json",
-    }
+    if provider == "claude":
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        api_url = "https://api.anthropic.com/v1/messages"
+        payload = {
+            "model": model,
+            "max_tokens": 2048,
+            "stream": True,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        api_headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
 
-    def generate():
-        try:
-            r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=90)
-            r.raise_for_status()
-            for line in r.iter_lines():
-                if line:
-                    yield line.decode("utf-8") + "\n\n"
-        except Exception as exc:
-            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+        def generate():
+            try:
+                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=90)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
+                        if normalized:
+                            yield normalized
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    else:
+        api_url = os.environ.get("URL", "")
+        bearer  = os.environ.get("bearer", "")
+        if not api_url or not bearer:
+            return jsonify({"error": "URL ou bearer manquant dans .env (AI_PROVIDER=euria)"}), 503
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "model": "qwen3",
+            "stream": True,
+            "enable_web_search": True,
+        }
+        api_headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+        }
+
+        def generate():
+            try:
+                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=90)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        yield line.decode("utf-8") + "\n\n"
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
     return Response(
         stream_with_context(generate()),
@@ -2095,10 +2159,17 @@ def api_synthesize_topic():
     deduped.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
     articles_to_use = deduped[:n]
 
-    api_url = os.environ.get("URL", "")
-    bearer  = os.environ.get("bearer", "")
-    if not api_url or not bearer:
-        return jsonify({"error": "Configuration API EurIA manquante (.env)"}), 503
+    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+
+    if provider == "claude":
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
+    else:
+        api_url = os.environ.get("URL", "")
+        bearer  = os.environ.get("bearer", "")
+        if not api_url or not bearer:
+            return jsonify({"error": "URL ou bearer manquant dans .env (AI_PROVIDER=euria)"}), 503
 
     if not articles_to_use:
         def empty_stream():
@@ -2131,30 +2202,59 @@ def api_synthesize_topic():
     )
 
     import requests as req
-    payload = {
-        "messages": [{"role": "user", "content": prompt}],
-        "model": "qwen3",
-        "stream": True,
-    }
-    api_headers = {
-        "Authorization": f"Bearer {bearer}",
-        "Content-Type": "application/json",
-    }
 
-    def generate_synthesis():
-        try:
-            r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=120)
-            r.raise_for_status()
-            for line in r.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8")
-                    # Normalise le préfixe SSE : certaines versions de l'API
-                    # envoient du JSON brut sans "data: "
-                    if not decoded.startswith("data:"):
-                        decoded = "data: " + decoded
-                    yield decoded + "\n\n"
-        except Exception as exc:
-            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+    if provider == "claude":
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        sse_url = "https://api.anthropic.com/v1/messages"
+        payload = {
+            "model": model,
+            "max_tokens": 2048,
+            "stream": True,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        api_headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        def generate_synthesis():
+            try:
+                r = req.post(sse_url, json=payload, headers=api_headers, stream=True, timeout=120)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
+                        if normalized:
+                            yield normalized
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    else:
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "model": "qwen3",
+            "stream": True,
+        }
+        api_headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+        }
+
+        def generate_synthesis():
+            try:
+                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=120)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8")
+                        # Normalise le préfixe SSE : certaines versions de l'API
+                        # envoient du JSON brut sans "data: "
+                        if not decoded.startswith("data:"):
+                            decoded = "data: " + decoded
+                        yield decoded + "\n\n"
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
     return Response(
         stream_with_context(generate_synthesis()),
@@ -2990,7 +3090,7 @@ def api_export_xlsx():
 # Les valeurs des variables sensibles (bearer, PASSWORD…) sont masquées en lecture.
 
 _ENV_FILE = PROJECT_ROOT / ".env"
-_SENSITIVE_KEYS = {"bearer", "SMTP_PASSWORD", "NTFY_TOKEN"}
+_SENSITIVE_KEYS = {"bearer", "SMTP_PASSWORD", "NTFY_TOKEN", "ANTHROPIC_API_KEY"}
 _READONLY_KEYS = set()  # clés qu'on refuse de modifier
 
 

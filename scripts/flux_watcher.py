@@ -31,7 +31,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
 from utils.quota import get_quota_manager
@@ -213,7 +213,7 @@ def main(dry_run: bool = False) -> None:
 
     now = datetime.utcnow()
     one_week_ago = now - timedelta(days=7)
-    api_client = EurIAClient()
+    api_client = get_ai_client()
     new_articles_all: list = []
 
     # Lire le flux

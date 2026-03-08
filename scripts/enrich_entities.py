@@ -37,7 +37,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.logging import print_console, setup_logger
 from utils.config import get_config
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 
 logger = setup_logger(__name__)
 
@@ -128,7 +128,7 @@ def collect_rss_files(rss_dir: Path, keyword_filter: str | None) -> list[tuple[P
 
 def enrich_file(
     json_file: Path,
-    api_client: EurIAClient,
+    api_client,
     dry_run: bool,
     delay: float,
     force: bool,
@@ -253,7 +253,7 @@ def main():
         print_console("[MODE DRY-RUN — aucun appel API, aucune sauvegarde]", level="info")
     print_console("", level="info")
 
-    api_client = None if args.dry_run else EurIAClient(enable_web_search=False)
+    api_client = None if args.dry_run else get_ai_client()
 
     totaux = {"total": 0, "enrichis": 0, "deja_presents": 0, "erreurs": 0, "ignores": 0}
 

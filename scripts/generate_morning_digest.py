@@ -31,7 +31,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.config import get_config
 from utils.logging import print_console
 from utils.scoring import ScoringEngine
@@ -389,7 +389,7 @@ def generate_ai_synthesis(top_articles: list) -> str:
 Synthèse (150-200 mots, français, ton journalistique) :"""
 
     try:
-        client = EurIAClient()
+        client = get_ai_client()
         return client.ask(prompt, max_attempts=2, timeout=90)
     except Exception as e:
         print_console(f"Synthèse IA échouée : {e}", level="warning")

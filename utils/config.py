@@ -55,7 +55,13 @@ class Config:
         """Charge les variables d'environnement."""
         self.url = os.getenv("URL")
         self.bearer = os.getenv("bearer")
-        
+
+        # Fournisseur IA actif et configuration Claude
+        self.ai_provider = os.getenv("AI_PROVIDER", "euria").strip().lower()
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        self.claude_model_batch = os.getenv("CLAUDE_MODEL_BATCH", "claude-haiku-4-5-20251001")
+        self.claude_model_synthesis = os.getenv("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+
         # Paramètres avec valeurs par défaut (clés identiques à celles du .env)
         self.max_attempts = int(os.getenv("max_attempts", "3"))
         self.timeout_resume = int(os.getenv("timeout_resume", "60"))
@@ -75,11 +81,19 @@ class Config:
     def _validate_config(self):
         """Valide que les variables obligatoires sont présentes."""
         errors = []
-        
-        if not self.url:
-            errors.append("Variable d'environnement manquante: URL")
-        if not self.bearer:
-            errors.append("Variable d'environnement manquante: bearer")
+
+        if self.ai_provider == "euria":
+            if not self.url:
+                errors.append("Variable d'environnement manquante: URL (requis pour AI_PROVIDER=euria)")
+            if not self.bearer:
+                errors.append("Variable d'environnement manquante: bearer (requis pour AI_PROVIDER=euria)")
+        elif self.ai_provider == "claude":
+            if not self.anthropic_api_key:
+                errors.append("Variable d'environnement manquante: ANTHROPIC_API_KEY (requis pour AI_PROVIDER=claude)")
+        else:
+            errors.append(
+                f"AI_PROVIDER invalide: '{self.ai_provider}'. Valeurs acceptées: 'euria', 'claude'"
+            )
         
         # Validation des timeouts
         if self.timeout_resume < 10 or self.timeout_resume > 600:

@@ -32,7 +32,7 @@ from datetime import datetime
 # Import des modules utilitaires
 from utils.logging import print_console, setup_logger, default_logger
 from utils.config import get_config
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.date_utils import (
     parse_iso_date,
@@ -123,7 +123,7 @@ def fetch_json_feed(url: str, timeout: int = 10) -> dict:
         sys.exit(1)
 
 
-def create_report(file_output: Path, api_client: EurIAClient) -> None:
+def create_report(file_output: Path, api_client) -> None:
     """Génère un rapport synthétique Markdown à partir des articles.
     
     Args:
@@ -264,7 +264,7 @@ def main():
     )
     
     # Initialiser le client API
-    api_client = EurIAClient()
+    api_client = get_ai_client()
     
     # Traitement de chaque article : résumé IA et extraction d'images
     print_console("Génération des résumés...", level="info")

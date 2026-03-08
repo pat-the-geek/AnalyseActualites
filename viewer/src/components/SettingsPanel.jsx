@@ -1344,11 +1344,28 @@ function EnvTab() {
 
   const vars = entries.filter(e => e.type === 'var')
 
-  // Groupes visuels : { label, keys }
+  // Fournisseur IA actif
+  const currentProvider = vars.find(v => v.key === 'AI_PROVIDER')?.value || 'euria'
+
+  // Alerte si configuration incomplète
+  const missingConfig = (() => {
+    if (currentProvider === 'claude') {
+      const apiKeyEntry = vars.find(v => v.key === 'ANTHROPIC_API_KEY')
+      return !apiKeyEntry || (!apiKeyEntry.masked && !apiKeyEntry.value?.trim())
+    } else {
+      const urlEntry = vars.find(v => v.key === 'URL')
+      const bearerEntry = vars.find(v => v.key === 'bearer')
+      return !urlEntry?.value?.trim() || !bearerEntry
+    }
+  })()
+
+  // Groupes visuels : { label, keys, provider }
   const ENV_GROUPS = [
-    { label: 'IA Euria', keys: ['URL', 'bearer'] },
+    { label: 'IA EurIA (Infomaniak)', keys: ['URL', 'bearer'], provider: 'euria' },
+    { label: 'IA Claude (Anthropic)', keys: ['ANTHROPIC_API_KEY', 'CLAUDE_MODEL_BATCH', 'CLAUDE_MODEL_SYNTHESIS'], provider: 'claude' },
   ]
-  const groupedKeys = ENV_GROUPS.flatMap(g => g.keys)
+  // AI_PROVIDER est géré par le sélecteur — exclure de la table générique
+  const groupedKeys = [...ENV_GROUPS.flatMap(g => g.keys), 'AI_PROVIDER']
 
   // Rendu d'une ligne de variable
   const renderVarRow = ({ key, value, masked }) => (
@@ -1409,6 +1426,46 @@ function EnvTab() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <ErrorBanner message={error} />
+
+      {/* Sélecteur de fournisseur IA */}
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/30 shrink-0">
+        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">
+          Fournisseur IA actif
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { value: 'euria',  label: 'EurIA · Infomaniak/Qwen3' },
+            { value: 'claude', label: 'Claude · Anthropic' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => saveVar('AI_PROVIDER', opt.value)}
+              disabled={saving}
+              className={`px-4 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                currentProvider === opt.value
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+            >
+              {currentProvider === opt.value && <span className="mr-1">●</span>}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Alerte configuration incomplète */}
+      {!loading && missingConfig && (
+        <div className="px-5 py-2.5 border-b border-orange-200 dark:border-orange-800/50 bg-orange-50/70 dark:bg-orange-900/10 shrink-0">
+          <p className="text-xs text-orange-700 dark:text-orange-400 flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            {currentProvider === 'claude'
+              ? 'Claude est sélectionné mais ANTHROPIC_API_KEY est vide. Les traitements IA échoueront jusqu\'à ce que la clé soit renseignée.'
+              : 'EurIA est sélectionné mais URL ou bearer est vide. Les traitements IA échoueront jusqu\'à ce que les champs soient renseignés.'}
+          </p>
+        </div>
+      )}
+
       <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-amber-50/50 dark:bg-amber-900/10 shrink-0">
         <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
           <Lock size={12} className="mt-0.5 shrink-0" />
@@ -1427,18 +1484,33 @@ function EnvTab() {
               </tr>
             </thead>
             <tbody>
-              {/* Groupes visuels */}
+              {/* Groupes visuels — groupe actif mis en évidence, groupe inactif grisé */}
               {ENV_GROUPS.map(group => {
                 const groupVars = group.keys.map(k => vars.find(v => v.key === k)).filter(Boolean)
-                if (groupVars.length === 0) return null
+                const isActive = group.provider === currentProvider
                 return (
                   <Fragment key={group.label}>
-                    <tr className="bg-slate-100/60 dark:bg-slate-800/60">
+                    <tr className={isActive
+                      ? 'bg-blue-50/60 dark:bg-blue-900/15 border-l-2 border-blue-400'
+                      : 'bg-slate-100/40 dark:bg-slate-800/40 opacity-50'}>
                       <td colSpan={3} className="px-5 py-1.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{group.label}</span>
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                          isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'
+                        }`}>
+                          {group.label}{isActive && ' ✓'}
+                        </span>
                       </td>
                     </tr>
-                    {groupVars.map(v => renderVarRow(v))}
+                    {groupVars.length > 0
+                      ? groupVars.map(v => renderVarRow(v))
+                      : (
+                        <tr className={isActive ? '' : 'opacity-50'}>
+                          <td colSpan={3} className="px-5 py-2 text-xs text-slate-400 italic">
+                            Aucune variable configurée — ajoutez-les ci-dessous
+                          </td>
+                        </tr>
+                      )
+                    }
                   </Fragment>
                 )
               })}

@@ -338,10 +338,8 @@ def generate_ai_synthesis(
 ) -> str:
     """Génère la synthèse narrative via l'API EurIA. Retourne '' en cas d'échec."""
     try:
-        from utils.api_client import EurIAClient
-        from utils.config import get_config
-        config = get_config()
-        client = EurIAClient(config)
+        from utils.api_client import get_ai_client
+        client = get_ai_client()
         prompt = _build_ai_prompt(period_label, articles, top_entities, alerts)
         return client.ask(prompt, timeout=120) or ""
     except Exception as exc:

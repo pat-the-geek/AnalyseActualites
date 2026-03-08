@@ -34,7 +34,7 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from utils.config import get_config
-from utils.api_client import EurIAClient
+from utils.api_client import get_ai_client
 from utils.logging import default_logger
 
 _STATE_FILE = _PROJECT_ROOT / "data" / "enrich_sentiment_state.json"
@@ -115,7 +115,7 @@ def collect_json_files(config, flux: str = None, keyword: str = None) -> list[Pa
 
 SAVE_EVERY = 50  # Sauvegarde intermédiaire toutes les N enrichissements
 
-def enrich_file(json_file: Path, client: EurIAClient, dry_run: bool, force: bool, delay: float) -> tuple[int, int]:
+def enrich_file(json_file: Path, client, dry_run: bool, force: bool, delay: float) -> tuple[int, int]:
     """Enrichit les articles d'un fichier JSON. Retourne (enrichis, ignorés)."""
     try:
         articles = json.loads(json_file.read_text(encoding="utf-8"))
@@ -208,7 +208,7 @@ def main():
         print(f"  Cycle complet estimé  : {total} jour(s)")
         return
 
-    client = EurIAClient()
+    client = get_ai_client()
 
     default_logger.info("=== Enrichissement sentiment WUDD.ai ===")
     if args.dry_run:

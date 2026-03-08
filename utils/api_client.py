@@ -448,19 +448,19 @@ class EurIAClient:
         timeout: int = 300
     ) -> str:
         """Génère un rapport synthétique à partir de données JSON.
-        
+
         Args:
             json_content: Contenu JSON des articles
             filename: Nom du fichier source
             timeout: Timeout en secondes (défaut: 300)
-        
+
         Returns:
             Rapport formaté en Markdown
         """
         prompt = f"""
-Analyse le fichier ce fichier JSON et fait une synthèse des actualités. 
-Affiche la date de publication et les sources lorsque tu cites un article. 
-Groupe les articles par catégories que tu auras identifiées. 
+Analyse le fichier ce fichier JSON et fait une synthèse des actualités.
+Affiche la date de publication et les sources lorsque tu cites un article.
+Groupe les articles par catégories que tu auras identifiées.
 En fin de synthèse fait un tableau avec les références (date de publication, sources et URL)
 pour chaque article dans la rubrique "Images" il y a des liens d'images.
 Lorsque cela est possible, publie le lien de l'image sous la forme <img src='{{URL}}' /> sur une nouvelle ligne en fin de paragraphe de catégorie. N'utilise qu'une image par paragraphe et assure-toi qu'une même URL d'image n'apparaisse qu'une seule fois dans tout le rapport.
@@ -472,3 +472,230 @@ File contents:
 ----- END FILE CONTENTS -----
 """
         return self.ask(prompt, max_attempts=3, timeout=timeout)
+
+
+# ── Client Anthropic Claude ───────────────────────────────────────────────────
+
+CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+
+
+class ClaudeClient:
+    """Client pour l'API Anthropic Claude.
+
+    Utilise deux modèles distincts selon le type de tâche :
+    - model_batch     (Haiku) : tâches volumineuses — résumé, NER, sentiment
+    - model_synthesis (Sonnet): synthèses user-facing — rapport, RAG, encyclopédique
+
+    Fournit les mêmes méthodes publiques qu'EurIAClient pour une substituabilité totale.
+    """
+
+    def __init__(self, api_key: Optional[str] = None):
+        config = get_config()
+        self.api_key = api_key or config.anthropic_api_key
+        self.model_batch = config.claude_model_batch
+        self.model_synthesis = config.claude_model_synthesis
+        self.headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY requis pour le client Claude")
+
+    def ask(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        max_attempts: int = 3,
+        timeout: int = 60,
+        backoff_factor: float = 2.0,
+        max_tokens: int = 2048,
+    ) -> str:
+        """Envoie un prompt à l'API Claude et retourne la réponse texte.
+
+        Args:
+            prompt      : Texte du prompt
+            model       : Modèle à utiliser (None = model_synthesis par défaut)
+            max_attempts: Nombre maximal de tentatives
+            timeout     : Timeout en secondes
+            backoff_factor: Facteur de backoff exponentiel
+            max_tokens  : Nombre maximal de tokens en sortie (obligatoire pour Claude)
+
+        Returns:
+            Réponse texte nettoyée.
+
+        Raises:
+            RuntimeError: Après épuisement de toutes les tentatives.
+        """
+        if not prompt or not isinstance(prompt, str):
+            default_logger.error("Prompt invalide ou vide")
+            return "Erreur: Prompt invalide"
+
+        active_model = model or self.model_synthesis
+        data = {
+            "model": active_model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        last_error = None
+
+        for attempt in range(max_attempts):
+            try:
+                default_logger.info(
+                    f"[Claude/{active_model}] Envoi prompt (tentative {attempt + 1}/{max_attempts}, "
+                    f"timeout={timeout}s)"
+                )
+                response = requests.post(
+                    CLAUDE_API_URL, json=data, headers=self.headers, timeout=timeout
+                )
+                response.raise_for_status()
+                json_data = response.json()
+
+                content_blocks = json_data.get("content", [])
+                if not content_blocks:
+                    raise ValueError("Réponse Claude vide (aucun bloc content)")
+                content = content_blocks[0].get("text", "")
+                if not content:
+                    raise ValueError("Texte Claude vide")
+
+                default_logger.info(f"[Claude] Réponse reçue : {len(content)} caractères")
+                return content.strip()
+
+            except requests.exceptions.Timeout:
+                last_error = f"Timeout après {timeout}s"
+                default_logger.warning(f"[Claude] Timeout tentative {attempt + 1}/{max_attempts}")
+
+            except requests.exceptions.HTTPError as e:
+                status_code = e.response.status_code if e.response is not None else "inconnu"
+                last_error = f"Erreur HTTP {status_code}"
+                default_logger.error(f"[Claude] Erreur HTTP {status_code}")
+                if status_code in [400, 401, 403]:
+                    break
+
+            except requests.exceptions.ConnectionError as e:
+                last_error = "Erreur de connexion"
+                default_logger.error(f"[Claude] Erreur de connexion : {e}")
+
+            except (ValueError, KeyError, TypeError) as e:
+                last_error = f"Erreur de format de réponse: {e}"
+                default_logger.error(f"[Claude] Erreur parsing : {e}")
+
+            except Exception as e:
+                last_error = f"Erreur inattendue: {type(e).__name__}: {e}"
+                default_logger.error(f"[Claude] Erreur inattendue : {e}")
+
+            if attempt < max_attempts - 1:
+                wait_time = backoff_factor ** attempt
+                default_logger.info(f"[Claude] Attente {wait_time:.1f}s avant prochaine tentative…")
+                time.sleep(wait_time)
+
+        raise RuntimeError(f"Échec Claude après {max_attempts} tentatives. {last_error}")
+
+    def generate_summary(
+        self,
+        text: str,
+        max_lines: int = 20,
+        language: str = "français",
+        timeout: int = 60,
+    ) -> str:
+        """Résumé d'article — utilise Haiku (tâche batch)."""
+        text_truncated = text[:15000]
+        prompt = (
+            f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
+            f"ne donne que le résumé, sans commentaire ni remarque : {text_truncated}"
+        )
+        return self.ask(prompt, model=self.model_batch, timeout=timeout, max_tokens=512)
+
+    def generate_entities(self, resume: str, timeout: int = 60) -> dict:
+        """Extraction NER — utilise Haiku (tâche batch)."""
+        if not resume or not isinstance(resume, str) or not resume.strip():
+            return {}
+        prompt = _PROMPT_ENTITIES.format(resume=resume.strip())
+        try:
+            raw = self.ask(
+                prompt, model=self.model_batch, max_attempts=3, timeout=timeout, max_tokens=800
+            )
+            return _parse_entities_response(raw)
+        except Exception as e:
+            default_logger.warning(f"[Claude] Extraction NER échouée : {e}")
+            return {}
+
+    def generate_sentiment(self, resume: str, timeout: int = 30) -> dict:
+        """Sentiment & ton éditorial — utilise Haiku (tâche batch)."""
+        if not resume or not isinstance(resume, str) or not resume.strip():
+            return {}
+        prompt = (
+            "Analyse le ton et le sentiment de ce texte journalistique. "
+            "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
+            "Champs attendus :\n"
+            '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
+            '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
+            '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
+            '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)\n\n'
+            f"Texte :\n{resume.strip()[:3000]}"
+        )
+        try:
+            raw = self.ask(
+                prompt, model=self.model_batch, max_attempts=2, timeout=timeout, max_tokens=150
+            )
+            return _parse_sentiment_response(raw)
+        except Exception as e:
+            default_logger.warning(f"[Claude] Analyse sentiment échouée : {e}")
+            return {}
+
+    def synthesize_topic(self, topic: str, articles: list, timeout: int = 120) -> str:
+        """Synthèse RAG multi-sources — utilise Sonnet (user-facing)."""
+        if not articles:
+            return "Aucun article disponible pour cette synthèse."
+        sources_block = ""
+        for i, a in enumerate(articles[:20], 1):
+            source = a.get("Sources", "Source inconnue")
+            date = a.get("Date de publication", "")
+            resume = (a.get("Résumé") or "")[:800]
+            sources_block += f"\n--- Article {i} ({source}, {date}) ---\n{resume}\n"
+        prompt = (
+            f"Tu es un analyste de presse. Voici {len(articles[:20])} articles de sources différentes "
+            f"traitant du sujet : **{topic}**.\n\n"
+            "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+            "1. **Résumé de la situation** (2-3 phrases)\n"
+            "2. **Points de convergence** entre les sources\n"
+            "3. **Points de divergence ou contradictions**\n"
+            "4. **Positionnement éditorial** : quelles sources sont favorables, neutres ou critiques\n"
+            "5. **Éléments clés manquants** (ce que les articles ne couvrent pas)\n\n"
+            "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n\n"
+            f"Articles :\n{sources_block}"
+        )
+        return self.ask(prompt, model=self.model_synthesis, max_attempts=2, timeout=timeout, max_tokens=2048)
+
+    def generate_report(self, json_content: str, filename: str, timeout: int = 300) -> str:
+        """Rapport synthétique Markdown — utilise Sonnet (user-facing)."""
+        prompt = f"""
+Analyse le fichier ce fichier JSON et fait une synthèse des actualités.
+Affiche la date de publication et les sources lorsque tu cites un article.
+Groupe les articles par catégories que tu auras identifiées.
+En fin de synthèse fait un tableau avec les références (date de publication, sources et URL)
+pour chaque article dans la rubrique "Images" il y a des liens d'images.
+Lorsque cela est possible, publie le lien de l'image sous la forme <img src='{{URL}}' /> sur une nouvelle ligne en fin de paragraphe de catégorie. N'utilise qu'une image par paragraphe et assure-toi qu'une même URL d'image n'apparaisse qu'une seule fois dans tout le rapport.
+
+Filename: {filename}
+File contents:
+----- BEGIN FILE CONTENTS -----
+{json_content}
+----- END FILE CONTENTS -----
+"""
+        return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=4096)
+
+
+# ── Factory ───────────────────────────────────────────────────────────────────
+
+def get_ai_client():
+    """Retourne le client IA actif selon AI_PROVIDER dans .env.
+
+    Returns:
+        EurIAClient si AI_PROVIDER=euria (ou non défini),
+        ClaudeClient si AI_PROVIDER=claude.
+    """
+    provider = get_config().ai_provider
+    if provider == "claude":
+        return ClaudeClient()
+    return EurIAClient()
