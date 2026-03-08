@@ -481,7 +481,7 @@ export default function App() {
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* ── Barre de navigation desktop ── */}
       <header
-        className="hidden md:flex items-center gap-1.5 px-3 py-2 glass-nav border-b border-white/35 dark:border-white/[0.08] shrink-0"
+        className="hidden md:flex items-center gap-1.5 px-3 py-2 glass-nav border-b border-white/35 dark:border-white/[0.08] shrink-0 relative z-50"
         style={{ paddingTop: 'max(8px, env(safe-area-inset-top))' }}
       >
         {/* Logo compact */}
