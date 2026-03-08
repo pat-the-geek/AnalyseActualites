@@ -4,7 +4,7 @@ import {
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
   Maximize2, Minimize2, ExternalLink, Database, Clipboard, BarChart2,
   ToggleLeft, ToggleRight, RotateCcw,
-  Sun, Moon, Monitor, Terminal, TrendingUp, Eye,
+  Sun, Moon, Monitor, Terminal, TrendingUp, Eye, Lock, EyeOff, Pencil,
 } from 'lucide-react'
 
 // ─── Helpers partagés ────────────────────────────────────────────────────────
@@ -1283,14 +1283,198 @@ function QuotaTab() {
   )
 }
 
+// ─── Onglet Variables d'environnement ────────────────────────────────────────
+
+function EnvTab() {
+  const [entries, setEntries]     = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [editKey, setEditKey]     = useState(null)   // clé en cours d'édition
+  const [editVal, setEditVal]     = useState('')
+  const [newKey, setNewKey]       = useState('')
+  const [newVal, setNewVal]       = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState(null)
+  const [showMasked, setShowMasked] = useState({})   // {key: bool}
+
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch('/api/env')
+      .then(r => r.json())
+      .then(d => { setEntries(d); setLoading(false) })
+      .catch(() => { setError('Impossible de charger le fichier .env'); setLoading(false) })
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const saveVar = async (key, value) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const r = await fetch('/api/env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      })
+      const d = await r.json()
+      if (!d.ok) { setError(d.error || 'Erreur inconnue'); return }
+      setEditKey(null)
+      load()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteVar = async (key) => {
+    if (!confirm(`Supprimer la variable ${key} ?`)) return
+    try {
+      await fetch(`/api/env/${encodeURIComponent(key)}`, { method: 'DELETE' })
+      load()
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const addVar = async () => {
+    if (!newKey.trim()) return
+    await saveVar(newKey.trim(), newVal)
+    setNewKey(''); setNewVal('')
+  }
+
+  const vars = entries.filter(e => e.type === 'var')
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <ErrorBanner message={error} />
+      <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-700 bg-amber-50/50 dark:bg-amber-900/10 shrink-0">
+        <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+          <Lock size={12} className="mt-0.5 shrink-0" />
+          Variables sensibles (clés d'API, mots de passe) sont masquées. Les modifications sont écrites dans le fichier <code>.env</code> à la racine du projet.
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {loading ? <Spinner /> : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-700/50">
+                <th className="text-left px-5 py-2.5 w-1/3">Variable</th>
+                <th className="text-left px-4 py-2.5">Valeur</th>
+                <th className="px-4 py-2.5 w-24"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {vars.map(({ key, value, masked }) => (
+                <tr key={key} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+                  <td className="px-5 py-2.5">
+                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{key}</span>
+                    {masked && <Lock size={10} className="inline ml-1.5 text-amber-500" />}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {editKey === key ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={masked && !showMasked[key] ? 'password' : 'text'}
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveVar(key, editVal); if (e.key === 'Escape') setEditKey(null) }}
+                          className="flex-1 bg-white dark:bg-slate-900 border border-blue-400 rounded px-2 py-1 text-xs font-mono focus:outline-none"
+                          autoFocus
+                        />
+                        <button onClick={() => saveVar(key, editVal)} disabled={saving}
+                          className="p-1 text-green-600 hover:text-green-500 disabled:opacity-50">
+                          <Check size={14} />
+                        </button>
+                        <button onClick={() => setEditKey(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">
+                        {masked && !showMasked[key] ? '•••••••••••' : (value || <em className="text-slate-400">vide</em>)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                      {masked && (
+                        <button onClick={() => setShowMasked(s => ({ ...s, [key]: !s[key] }))}
+                          title={showMasked[key] ? 'Masquer' : 'Afficher'}
+                          className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded">
+                          {showMasked[key] ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      )}
+                      <button onClick={() => { setEditKey(key); setEditVal(masked ? '' : value) }}
+                        title="Modifier"
+                        className="p-1 text-slate-400 hover:text-blue-500 rounded">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => deleteVar(key)}
+                        title="Supprimer"
+                        className="p-1 text-slate-400 hover:text-red-500 rounded">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {/* Ligne d'ajout */}
+              <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                <td className="px-5 py-3">
+                  <input
+                    type="text"
+                    value={newKey}
+                    onChange={e => setNewKey(e.target.value)}
+                    placeholder="NOM_VARIABLE"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-400"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <input
+                    type="text"
+                    value={newVal}
+                    onChange={e => setNewVal(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addVar()}
+                    placeholder="valeur"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-400"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={addVar}
+                    disabled={!newKey.trim() || saving}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-500 disabled:opacity-40 transition-colors"
+                  >
+                    <Plus size={12} /> Ajouter
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-2 border-t border-slate-200 dark:border-slate-700 shrink-0 flex justify-end">
+        <button onClick={load} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+          <RefreshCw size={11} /> Actualiser
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Panneau principal Réglages ───────────────────────────────────────────────
 
 const TABS = [
-  { id: 'rss',       label: 'RSS',          short: 'RSS',      Icon: Rss       },
-  { id: 'scheduler', label: 'Planification', short: 'Cron',     Icon: Clock     },
-  { id: 'keywords',  label: 'Mots-clés',     short: 'Mots-cl.', Icon: Tag       },
-  { id: 'flux',      label: 'Flux Reeder',   short: 'Flux',     Icon: Database  },
-  { id: 'quota',     label: 'Quota',         short: 'Quota',    Icon: BarChart2 },
+  { id: 'rss',       label: 'RSS',            short: 'RSS',      Icon: Rss       },
+  { id: 'scheduler', label: 'Planification',   short: 'Cron',     Icon: Clock     },
+  { id: 'keywords',  label: 'Mots-clés',       short: 'Mots-cl.', Icon: Tag       },
+  { id: 'flux',      label: 'Flux Reeder',     short: 'Flux',     Icon: Database  },
+  { id: 'quota',     label: 'Quota',           short: 'Quota',    Icon: BarChart2 },
+  { id: 'env',       label: 'Environnement',   short: 'Env',      Icon: Lock      },
 ]
 
 const THEME_OPTIONS_SETTINGS = [
@@ -1461,6 +1645,7 @@ export default function SettingsPanel({ onClose, theme, onThemeChange, rssStatus
           {activeTab === 'keywords'  && <KeywordsTab />}
           {activeTab === 'flux'      && <FluxTab />}
           {activeTab === 'quota'     && <QuotaTab />}
+          {activeTab === 'env'       && <EnvTab />}
         </div>
       </div>
     </div>

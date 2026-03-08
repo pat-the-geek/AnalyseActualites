@@ -135,16 +135,40 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 
 ### Scheduled cron jobs (inside Docker)
 
+**Continuous / frequent jobs**
+
 | Schedule | Script | Purpose |
 |---|---|---|
-| Every 5 min | `flux_watcher.py` | Round-robin RSS watcher — incremental 48h update |
-| Every 2h from 06:00 to 22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
-| Monday 06:00 | `scheduler_articles.py` | Weekly multi-flux article collection |
+| Every 5 min | `flux_watcher.py` + `entity_timeline.py` + `cross_flux_analysis.py` + `enrich_reading_time.py` | Round-robin RSS watcher — incremental 48h update, entity timeline & cross-flux analysis |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
-| Daily 23:00 | `generate_48h_report.py` | Daily Top 10 entities report (48h window) |
-| Daily 01:00 | `enrich_sentiment.py` | Round-robin sentiment enrichment (1 file/day, articles-from-rss/) |
-| Last day of month 05:00 | `radar_wudd.py` | Monthly thematic radar report |
-| Last day of month 05:30 | `articles_rss_to_markdown.py` | Convert RSS articles to Markdown |
+| Every 2h 06:00–22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
+
+**Nightly pipeline (sequential enrichment)**
+
+| Time | Script | Purpose |
+|---|---|---|
+| 02:00 daily | `enrich_entities.py` | Round-robin NER enrichment — adds `entities` field to articles that don't have it yet |
+| 03:00 daily | `enrich_sentiment.py` | Round-robin sentiment enrichment — adds `sentiment`, `score_sentiment`, `ton_editorial`, `score_ton` |
+| 04:00 Sunday | `repair_failed_summaries.py` | Weekly maintenance — re-generates summaries containing API error messages |
+
+**Morning reports (post-collection)**
+
+| Time | Script | Purpose |
+|---|---|---|
+| 06:00 Monday | `scheduler_articles.py` | Weekly multi-flux article collection |
+| 06:30 Monday | `generate_briefing.py --period weekly` | Weekly executive briefing (top entities + scored articles + trends, EurIA narrative) |
+| 07:00 daily | `trend_detector.py` | Trend detection — generates `data/alertes.json` |
+| 07:30 daily | `generate_morning_digest.py --ai` | Daily morning digest (top stories + active alerts, AI synthesis) |
+| 08:00 daily | `generate_reading_notes.py` | Daily reading notes by tag — saved to `rapports/markdown/_WUDD.AI_/` |
+| 23:00 daily | `generate_48h_report.py` | Daily Top 10 entities report (48h window, after last RSS pass at 22:00) |
+
+**Monthly pipeline (last day of month)**
+
+| Time | Script | Purpose |
+|---|---|---|
+| 05:00 | `radar_wudd.py` | Monthly thematic radar report |
+| 05:30 | `articles_rss_to_markdown.py` | Convert RSS articles to annotated Markdown (with inline NER) |
+| 06:00 | `generate_keyword_reports.py` | Generate one Markdown report per RSS keyword for the current month |
 
 ---
 
@@ -164,8 +188,12 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `trend_detector.py` | Detect trending entities and generate `data/alertes.json` | `--dry-run` |
 | `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
 | `check_cron_health.py` | Cron health probe | (none) |
-| `generate_keyword_reports.py` | Keyword-based report generation | (none) |
+| `generate_keyword_reports.py` | Monthly Markdown report per RSS keyword (current month) | (none) |
 | `generate_48h_report.py` | Daily Top 10 named-entity report from last 48h articles | `--dry-run` |
+| `generate_morning_digest.py` | Daily morning digest: top stories + active alerts + AI synthesis | `--ai`, `--dry-run` |
+| `generate_reading_notes.py` | Daily reading notes by tag — `rapports/markdown/_WUDD.AI_/` | (none) |
+| `generate_briefing.py` | Executive briefing: top entities + scored articles + trends narrative | `--period daily\|weekly`, `--dry-run`, `--no-ai` |
+| `cluster_articles.py` | Thematic clustering of articles (entity-based, no ML deps) — on-demand via UI | `--days`, `--min-size`, `--output`, `--dry-run` |
 | `radar_wudd.py` | Monthly thematic radar — generates end-of-month statistics | (none) |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
 

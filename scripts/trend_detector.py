@@ -276,8 +276,6 @@ def parse_args():
 def _send_notifications(alerts: list[dict], rules: dict) -> None:
     """Envoie des notifications webhook pour les alertes de niveau configuré."""
     notif_cfg = rules.get("notifications", {})
-    if not notif_cfg:
-        return
 
     niveaux_notifies = set(notif_cfg.get("niveaux_notifies", ["élevé", "critique"]))
     alertes_a_notifier = [a for a in alerts if a.get("niveau") in niveaux_notifies]
@@ -285,48 +283,17 @@ def _send_notifications(alerts: list[dict], rules: dict) -> None:
         return
 
     try:
-        from utils.exporters.webhook import send_discord, send_slack, send_ntfy
+        from utils.exporters.webhook import notify_alerts
     except ImportError:
         default_logger.warning("Module webhook introuvable, notifications ignorées.")
         return
 
-    niveaux_map = rules.get("niveaux", {})
-
-    def _emoji(niveau: str) -> str:
-        for cfg in niveaux_map.values():
-            if cfg.get("label") == niveau:
-                return cfg.get("emoji", "🔔")
-        return "🔔"
-
-    lines = [f"**Alertes tendances WUDD.ai** ({len(alertes_a_notifier)} alerte(s))"]
-    for a in alertes_a_notifier[:10]:
-        em = _emoji(a["niveau"])
-        lines.append(
-            f"{em} [{a['niveau'].upper()}] {a['entity_type']}:{a['entity_value']} "
-            f"— ratio {a['ratio']} ({a['count_24h']}/24h vs {a['count_7j']}/7j)"
-        )
-    message = "\n".join(lines)
-
-    if notif_cfg.get("webhook_discord"):
-        try:
-            send_discord(message)
-            default_logger.info("Notification Discord envoyée.")
-        except Exception as exc:
-            default_logger.warning(f"Échec notification Discord : {exc}")
-
-    if notif_cfg.get("webhook_slack"):
-        try:
-            send_slack(message)
-            default_logger.info("Notification Slack envoyée.")
-        except Exception as exc:
-            default_logger.warning(f"Échec notification Slack : {exc}")
-
-    if notif_cfg.get("ntfy"):
-        try:
-            send_ntfy(message, title="WUDD.ai — Alertes tendances")
-            default_logger.info("Notification Ntfy envoyée.")
-        except Exception as exc:
-            default_logger.warning(f"Échec notification Ntfy : {exc}")
+    results = notify_alerts(alertes_a_notifier, title="WUDD.ai · Alertes tendances")
+    for platform, success in results.items():
+        if success:
+            default_logger.info(f"Notification {platform} envoyée.")
+        else:
+            default_logger.warning(f"Échec notification {platform}.")
 
 
 def main():
@@ -386,13 +353,8 @@ def main():
     )
     default_logger.info(f"Alertes sauvegardées dans {_OUTPUT_FILE}")
 
-    # Notifications webhook (si activées et non désactivées par --no-notify)
-    notif_cfg = rules.get("notifications", {})
-    if not args.no_notify and (
-        notif_cfg.get("webhook_discord")
-        or notif_cfg.get("webhook_slack")
-        or notif_cfg.get("ntfy")
-    ):
+    # Notifications webhook (si non désactivées par --no-notify)
+    if not args.no_notify:
         _send_notifications(alerts, rules)
 
 

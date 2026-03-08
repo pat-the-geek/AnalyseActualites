@@ -6,11 +6,14 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2 } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight } from 'lucide-react'
 import AlertsPanel from './components/AlertsPanel'
 import ExportPanel from './components/ExportPanel'
 import TopArticlesPanel from './components/TopArticlesPanel'
 import SourceBiasPanel from './components/SourceBiasPanel'
+import ComparePanel from './components/ComparePanel'
+import EntityWatchPanel from './components/EntityWatchPanel'
+import ClusterView from './components/ClusterView'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 // Heures de passage du cron get-keyword-from-rss.py (Europe/Paris)
@@ -223,6 +226,9 @@ export default function App() {
   const [topOpen, setTopOpen]             = useState(false)
   const [biasOpen, setBiasOpen]           = useState(false)
   const [exportOpen, setExportOpen]       = useState(false)
+  const [compareOpen, setCompareOpen]     = useState(false)
+  const [watchOpen, setWatchOpen]         = useState(false)
+  const [clusterOpen, setClusterOpen]     = useState(false)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isRefreshing, setIsRefreshing]   = useState(false)
@@ -570,6 +576,36 @@ export default function App() {
           <span className="hidden sm:inline">Export</span>
         </button>
 
+        {/* Clustering thématique */}
+        <button
+          onClick={() => setClusterOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Clusters thématiques"
+        >
+          <Layers size={13} />
+          <span className="hidden sm:inline">Clusters</span>
+        </button>
+
+        {/* Entités surveillées */}
+        <button
+          onClick={() => setWatchOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Entités surveillées"
+        >
+          <Bell size={13} />
+          <span className="hidden sm:inline">Veille</span>
+        </button>
+
+        {/* Comparaison temporelle */}
+        <button
+          onClick={() => setCompareOpen(true)}
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Comparer deux périodes"
+        >
+          <ArrowLeftRight size={13} />
+          <span className="hidden sm:inline">Comparer</span>
+        </button>
+
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
@@ -773,6 +809,21 @@ export default function App() {
       )}
       {exportOpen && (
         <ExportPanel onClose={() => setExportOpen(false)} files={files} />
+      )}
+      {clusterOpen && (
+        <ClusterView onClose={() => setClusterOpen(false)} />
+      )}
+      {watchOpen && (
+        <EntityWatchPanel
+          onClose={() => setWatchOpen(false)}
+          onOpenArticles={(type, value) => {
+            setWatchOpen(false)
+            setEntitySearch({ value, type })
+          }}
+        />
+      )}
+      {compareOpen && (
+        <ComparePanel onClose={() => setCompareOpen(false)} />
       )}
       {entitySearch && (
         <EntitySearchModal

@@ -162,25 +162,41 @@ def cron_label(cron: str) -> str:
     p = cron.strip().split()
     if len(p) != 5:
         return cron
-    minute, hour, _, _, dow = p
+    minute, hour, dom, month, dow = p
     jours = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+
+    # Toutes les N minutes : */N * * * *
     if minute.startswith("*/"):
         return f"Toutes les {minute[2:]} min"
-    if minute == "0" and "/" in hour and "-" in hour and _ == "*":
+
+    # Toutes les Xh entre heures : 0 6-22/2 * * *
+    if minute == "0" and "/" in hour and "-" in hour and dom == "*":
         try:
             range_part, step = hour.split("/")
             start, end = range_part.split("-")
             return f"Toutes les {step}h de {start}h à {end}h"
         except ValueError:
             pass
-    if minute == "0" and hour.isdigit() and _ == "*":
-        t = f"{int(hour):02d}:00"
-        if dow == "*":
+
+    # Heure H:M — construire le libellé d'heure
+    if minute.isdigit() and hour.isdigit():
+        t = f"{int(hour):02d}:{int(minute):02d}"
+
+        # Fin de mois (dom 28-31) : M H 28-31 * *
+        if dom == "28-31" and month == "*" and dow == "*":
+            return f"Fin de mois à {t}"
+
+        # Jour de semaine spécifique, tous les mois : M H * * D
+        if dom == "*" and month == "*" and dow.isdigit():
+            try:
+                return f"{jours[int(dow) % 7]} à {t}"
+            except (ValueError, IndexError):
+                pass
+
+        # Quotidien : M H * * *
+        if dom == "*" and month == "*" and dow == "*":
             return f"Quotidien à {t}"
-        try:
-            return f"{jours[int(dow) % 7]} à {t}"
-        except (ValueError, IndexError):
-            pass
+
     return cron
 
 
@@ -282,24 +298,89 @@ def api_save_content():
 
 @app.route("/api/search")
 def api_search():
+    """Recherche textuelle avec filtres optionnels.
+
+    Paramètres :
+      q          : texte à chercher (min 2 chars)
+      type       : "json" ou "markdown" (filtre type de fichier)
+      sentiment  : "positif", "neutre", "négatif" (filtre sur articles JSON)
+      source     : nom de source (filtre partiel, insensible à la casse)
+      date_from  : YYYY-MM-DD (articles publiés à partir de cette date)
+      date_to    : YYYY-MM-DD (articles publiés jusqu'à cette date)
+    """
     q = request.args.get("q", "").strip()
     if len(q) < 2:
         return jsonify([])
+
+    filter_type     = request.args.get("type", "").strip().lower()
+    filter_sentiment = request.args.get("sentiment", "").strip().lower()
+    filter_source   = request.args.get("source", "").strip().lower()
+    filter_from     = request.args.get("date_from", "").strip()
+    filter_to       = request.args.get("date_to", "").strip()
+
+    has_article_filters = bool(filter_sentiment or filter_source or filter_from or filter_to)
+
     pattern = re.compile(re.escape(q), re.IGNORECASE)
     results = []
+
     for info in collect_files():
-        f = PROJECT_ROOT / info["path"]
-        try:
-            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
-            matches = [
-                {"line": i + 1, "text": line.strip()[:200]}
-                for i, line in enumerate(lines)
-                if pattern.search(line)
-            ]
-            if matches:
-                results.append({**info, "matches": matches[:5]})
-        except OSError:
+        # Filtre par type de fichier
+        if filter_type and info["type"] != filter_type:
             continue
+
+        f = PROJECT_ROOT / info["path"]
+
+        # Pour les filtres article, on parse le JSON et applique les filtres
+        if has_article_filters and info["type"] == "json":
+            try:
+                articles = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(articles, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            # Filtrer les articles selon les critères
+            filtered = []
+            for art in articles:
+                if filter_sentiment and art.get("sentiment", "").lower() != filter_sentiment:
+                    continue
+                if filter_source:
+                    src = art.get("Sources", "").lower()
+                    if filter_source not in src:
+                        continue
+                date_str = art.get("Date de publication", "")[:10]
+                if filter_from and date_str and date_str < filter_from:
+                    continue
+                if filter_to and date_str and date_str > filter_to:
+                    continue
+                # Vérifier si la requête textuelle matche
+                resume = art.get("Résumé", "") or ""
+                if pattern.search(resume) or pattern.search(art.get("URL", "") or "") or pattern.search(art.get("Sources", "") or ""):
+                    filtered.append(art)
+
+            if not filtered:
+                continue
+
+            matches = [
+                {"line": 0, "text": f"{art.get('Sources','')} · {art.get('Date de publication','')[:10]} — {(art.get('Résumé','') or '')[:150]}"}
+                for art in filtered[:5]
+            ]
+            results.append({**info, "matches": matches, "article_count": len(filtered)})
+
+        else:
+            # Recherche ligne par ligne (fichiers Markdown ou JSON sans filtres article)
+            try:
+                lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+                matches = [
+                    {"line": i + 1, "text": line.strip()[:200]}
+                    for i, line in enumerate(lines)
+                    if pattern.search(line)
+                ]
+                if matches:
+                    results.append({**info, "matches": matches[:5]})
+            except OSError:
+                continue
+
     return jsonify(results)
 
 
@@ -413,6 +494,41 @@ def api_scheduler():
             "cron": "30 5 28-31 * *",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_rss_markdown.log",
+        },
+        {
+            "name": "Notes de lecture quotidiennes",
+            "script": "generate_reading_notes.py",
+            "cron": "0 8 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_reading_notes.log",
+        },
+        {
+            "name": "Enrichissement NER (entités)",
+            "script": "enrich_entities.py",
+            "cron": "0 2 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_enrich_entities.log",
+        },
+        {
+            "name": "Réparation résumés en erreur",
+            "script": "repair_failed_summaries.py",
+            "cron": "0 4 * * 0",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_repair.log",
+        },
+        {
+            "name": "Briefing exécutif hebdomadaire",
+            "script": "generate_briefing.py --period weekly",
+            "cron": "30 6 * * 1",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_briefing.log",
+        },
+        {
+            "name": "Rapports mensuels par mot-clé",
+            "script": "generate_keyword_reports.py",
+            "cron": "0 6 28-31 * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_keyword_reports.log",
         },
     ]
     for t in fixed:
@@ -2502,6 +2618,527 @@ def api_annotations_delete():
         _save_annotations(data)
 
     return jsonify({"ok": True, "removed": True, "url": url})
+
+
+# ── Entités surveillées ───────────────────────────────────────────────────────
+# Stockées dans data/watched_entities.json
+# [{type, value, added_at, notes}]
+
+_WATCHED_FILE = PROJECT_ROOT / "data" / "watched_entities.json"
+_watched_lock = threading.Lock()
+
+
+def _load_watched() -> list:
+    if not _WATCHED_FILE.exists():
+        return []
+    try:
+        return json.loads(_WATCHED_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _save_watched(data: list) -> None:
+    _WATCHED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _WATCHED_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_WATCHED_FILE)
+
+
+@app.route("/api/watched-entities", methods=["GET"])
+def api_watched_get():
+    """Retourne les entités surveillées avec leur volume de mentions récentes."""
+    with _watched_lock:
+        watched = _load_watched()
+
+    # Calcul rapide des mentions sur les 7 derniers jours
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    cutoff_7d = now - timedelta(days=7)
+    cutoff_24h = now - timedelta(hours=24)
+
+    counts_7d: dict[str, int] = {}
+    counts_24h: dict[str, int] = {}
+
+    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in data_dir.rglob("*.json"):
+            if "cache" in str(json_file):
+                continue
+            try:
+                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(arts, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+            for art in arts:
+                entities = art.get("entities", {})
+                if not isinstance(entities, dict):
+                    continue
+                # Parse date
+                date_str = art.get("Date de publication", "")
+                art_dt = None
+                for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d", "%d/%m/%Y"):
+                    try:
+                        art_dt = datetime.strptime(date_str[:19], fmt).replace(tzinfo=timezone.utc)
+                        break
+                    except ValueError:
+                        continue
+                if art_dt is None:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        art_dt = parsedate_to_datetime(date_str).astimezone(timezone.utc)
+                    except Exception:
+                        pass
+
+                for w in watched:
+                    vals = entities.get(w["type"], [])
+                    if isinstance(vals, list) and w["value"] in vals:
+                        key = f"{w['type']}:{w['value']}"
+                        if art_dt and art_dt >= cutoff_7d:
+                            counts_7d[key] = counts_7d.get(key, 0) + 1
+                        if art_dt and art_dt >= cutoff_24h:
+                            counts_24h[key] = counts_24h.get(key, 0) + 1
+
+    result = []
+    for w in watched:
+        key = f"{w['type']}:{w['value']}"
+        result.append({**w, "mentions_7d": counts_7d.get(key, 0), "mentions_24h": counts_24h.get(key, 0)})
+
+    return jsonify(result)
+
+
+@app.route("/api/watched-entities", methods=["POST"])
+def api_watched_post():
+    """Ajoute ou met à jour une entité surveillée.
+
+    Body JSON : { type: str, value: str, notes?: str }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    etype = (body.get("type") or "").strip().upper()
+    value = (body.get("value") or "").strip()
+    if not etype or not value:
+        return jsonify({"error": "Champs type et value requis"}), 400
+
+    with _watched_lock:
+        watched = _load_watched()
+        # Mise à jour si déjà présent
+        for w in watched:
+            if w["type"] == etype and w["value"] == value:
+                if "notes" in body:
+                    w["notes"] = str(body["notes"])[:500]
+                _save_watched(watched)
+                return jsonify({"ok": True, "action": "updated"})
+        # Ajout
+        entry = {
+            "type": etype,
+            "value": value,
+            "added_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "notes": str(body.get("notes", ""))[:500],
+        }
+        watched.append(entry)
+        _save_watched(watched)
+
+    return jsonify({"ok": True, "action": "added"})
+
+
+@app.route("/api/watched-entities", methods=["DELETE"])
+def api_watched_delete():
+    """Retire une entité de la surveillance (paramètres ?type=...&value=...)."""
+    etype = (request.args.get("type") or "").strip().upper()
+    value = (request.args.get("value") or "").strip()
+    if not etype or not value:
+        return jsonify({"error": "Paramètres type et value requis"}), 400
+
+    with _watched_lock:
+        watched = _load_watched()
+        before = len(watched)
+        watched = [w for w in watched if not (w["type"] == etype and w["value"] == value)]
+        _save_watched(watched)
+
+    return jsonify({"ok": True, "removed": len(watched) < before})
+
+
+# ── Comparaison temporelle ────────────────────────────────────────────────────
+
+@app.route("/api/analytics/compare")
+def api_analytics_compare():
+    """Compare deux périodes temporelles.
+
+    Paramètres :
+      from1, to1 : première période (YYYY-MM-DD)
+      from2, to2 : deuxième période (YYYY-MM-DD)
+    """
+    from collections import defaultdict, Counter
+
+    from1 = request.args.get("from1", "").strip()
+    to1   = request.args.get("to1",   "").strip()
+    from2 = request.args.get("from2", "").strip()
+    to2   = request.args.get("to2",   "").strip()
+
+    if not (from1 and to1 and from2 and to2):
+        return jsonify({"error": "Paramètres from1, to1, from2, to2 requis"}), 400
+
+    def _in_range(date_str: str, d_from: str, d_to: str) -> bool:
+        d = date_str[:10] if date_str else ""
+        return bool(d and d_from <= d <= d_to)
+
+    def _stats(articles):
+        if not articles:
+            return {"count": 0, "sentiment": {}, "top_sources": [], "top_entities": []}
+        sentiments = Counter(a.get("sentiment", "") for a in articles if a.get("sentiment"))
+        sources = Counter(a.get("Sources", "") for a in articles if a.get("Sources"))
+        entities: dict = defaultdict(Counter)
+        for a in articles:
+            ents = a.get("entities")
+            if not isinstance(ents, dict):
+                continue
+            for etype, vals in ents.items():
+                if isinstance(vals, list):
+                    for v in vals:
+                        if isinstance(v, str) and v.strip():
+                            entities[etype][v.strip()] += 1
+        top_entities = []
+        for etype, counts in entities.items():
+            for val, cnt in counts.most_common(5):
+                top_entities.append({"type": etype, "value": val, "count": cnt})
+        top_entities.sort(key=lambda x: x["count"], reverse=True)
+        return {
+            "count": len(articles),
+            "sentiment": dict(sentiments),
+            "top_sources": [{"source": s, "count": c} for s, c in sources.most_common(5)],
+            "top_entities": top_entities[:20],
+        }
+
+    all_articles = []
+    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in data_dir.rglob("*.json"):
+            if "cache" in str(json_file):
+                continue
+            try:
+                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if isinstance(arts, list):
+                    all_articles.extend(arts)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    # Déduplication par URL
+    seen = set()
+    deduped = []
+    for a in all_articles:
+        url = a.get("URL", "")
+        if url and url in seen:
+            continue
+        if url:
+            seen.add(url)
+        deduped.append(a)
+
+    p1 = [a for a in deduped if _in_range(a.get("Date de publication", ""), from1, to1)]
+    p2 = [a for a in deduped if _in_range(a.get("Date de publication", ""), from2, to2)]
+
+    return jsonify({
+        "period1": {"from": from1, "to": to1, **_stats(p1)},
+        "period2": {"from": from2, "to": to2, **_stats(p2)},
+    })
+
+
+# ── Export CSV / XLSX ─────────────────────────────────────────────────────────
+
+@app.route("/api/export/csv")
+def api_export_csv():
+    """Exporte un fichier JSON d'articles en CSV.
+
+    Paramètre :
+      path : chemin relatif du fichier JSON (ex: data/articles-from-rss/OpenAI.json)
+    """
+    import csv
+    import io
+
+    path = request.args.get("path", "").strip()
+    if not path:
+        abort(400, "Paramètre path requis")
+    f = safe_path(path)
+
+    try:
+        articles = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(articles, list):
+            abort(400, "Le fichier ne contient pas une liste d'articles")
+    except json.JSONDecodeError as e:
+        abort(400, f"JSON invalide : {e}")
+
+    # Colonnes exportées
+    FIELDS = ["Date de publication", "Sources", "URL", "Résumé",
+              "sentiment", "score_sentiment", "ton_editorial", "score_ton", "score_pertinence"]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=FIELDS, extrasaction="ignore",
+                             lineterminator="\n")
+    writer.writeheader()
+    for art in articles:
+        row = {k: art.get(k, "") for k in FIELDS}
+        # Aplatir les entités en chaîne
+        entities = art.get("entities", {})
+        if isinstance(entities, dict):
+            row["entities"] = "; ".join(
+                f"{etype}:{','.join(str(v) for v in vals)}"
+                for etype, vals in entities.items() if isinstance(vals, list)
+            )
+        writer.writerow(row)
+
+    csv_content = output.getvalue()
+    stem = Path(path).stem
+    return Response(
+        csv_content,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{stem}.csv"'},
+    )
+
+
+@app.route("/api/export/xlsx")
+def api_export_xlsx():
+    """Exporte un fichier JSON d'articles en XLSX (Excel).
+
+    Paramètre :
+      path : chemin relatif du fichier JSON
+    """
+    path = request.args.get("path", "").strip()
+    if not path:
+        abort(400, "Paramètre path requis")
+    f = safe_path(path)
+
+    try:
+        articles = json.loads(f.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(articles, list):
+            abort(400, "Le fichier ne contient pas une liste d'articles")
+    except json.JSONDecodeError as e:
+        abort(400, f"JSON invalide : {e}")
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        import io
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Articles"
+
+        FIELDS = ["Date de publication", "Sources", "URL", "Résumé",
+                  "sentiment", "score_sentiment", "ton_editorial", "score_ton",
+                  "score_pertinence", "Entités"]
+
+        # En-tête
+        header_fill = PatternFill("solid", fgColor="1A1A2E")
+        header_font = Font(bold=True, color="FFFFFF")
+        for col, field in enumerate(FIELDS, 1):
+            cell = ws.cell(row=1, column=col, value=field)
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Données
+        for row_idx, art in enumerate(articles, 2):
+            entities = art.get("entities", {})
+            entity_str = ""
+            if isinstance(entities, dict):
+                entity_str = "; ".join(
+                    f"{et}:{','.join(str(v) for v in vals)}"
+                    for et, vals in entities.items() if isinstance(vals, list)
+                )
+            values = [
+                art.get("Date de publication", ""),
+                art.get("Sources", ""),
+                art.get("URL", ""),
+                art.get("Résumé", ""),
+                art.get("sentiment", ""),
+                art.get("score_sentiment", ""),
+                art.get("ton_editorial", ""),
+                art.get("score_ton", ""),
+                art.get("score_pertinence", ""),
+                entity_str,
+            ]
+            for col, val in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col, value=val)
+                if col == 4:  # Résumé
+                    cell.alignment = Alignment(wrap_text=True)
+
+        # Largeurs de colonnes
+        ws.column_dimensions["A"].width = 20
+        ws.column_dimensions["B"].width = 20
+        ws.column_dimensions["C"].width = 50
+        ws.column_dimensions["D"].width = 80
+        ws.row_dimensions[1].height = 20
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        stem = Path(path).stem
+        return Response(
+            buf.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{stem}.xlsx"'},
+        )
+    except ImportError:
+        # Fallback : retourne un CSV si openpyxl n'est pas installé
+        return api_export_csv()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Variables d'environnement ─────────────────────────────────────────────────
+# Lit et écrit le fichier .env à la racine du projet.
+# Les valeurs des variables sensibles (bearer, PASSWORD…) sont masquées en lecture.
+
+_ENV_FILE = PROJECT_ROOT / ".env"
+_SENSITIVE_KEYS = {"bearer", "SMTP_PASSWORD", "NTFY_TOKEN"}
+_READONLY_KEYS = set()  # clés qu'on refuse de modifier
+
+
+def _parse_env_file(path: Path) -> list[dict]:
+    """Parse .env ligne par ligne → [{key, value, masked, comment, raw}]."""
+    entries = []
+    if not path.exists():
+        return entries
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            entries.append({"key": None, "value": None, "raw": line, "comment": True})
+            continue
+        if "=" in stripped:
+            key, _, val = stripped.partition("=")
+            key = key.strip()
+            val = val.strip()
+            # Supprimer les guillemets éventuels
+            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            masked = key.lower() in {k.lower() for k in _SENSITIVE_KEYS}
+            entries.append({"key": key, "value": val, "masked": masked, "comment": False})
+        else:
+            entries.append({"key": None, "value": None, "raw": line, "comment": True})
+    return entries
+
+
+def _serialize_env(entries: list[dict]) -> str:
+    """Reconstruit le contenu .env depuis la liste d'entrées."""
+    lines = []
+    for e in entries:
+        if e.get("comment"):
+            lines.append(e.get("raw", ""))
+        else:
+            key = e["key"]
+            val = e.get("value", "")
+            # Mettre entre guillemets si la valeur contient des espaces ou des caractères spéciaux
+            if " " in val or "#" in val or ";" in val:
+                val = f'"{val}"'
+            lines.append(f"{key}={val}")
+    return "\n".join(lines) + "\n"
+
+
+@app.route("/api/env", methods=["GET"])
+def api_env_get():
+    """Retourne la liste des variables d'environnement depuis .env.
+
+    Les valeurs des clés sensibles sont masquées (remplacées par '***').
+    """
+    entries = _parse_env_file(_ENV_FILE)
+    result = []
+    for e in entries:
+        if e.get("comment"):
+            result.append({"type": "comment", "raw": e.get("raw", "")})
+        else:
+            display_val = "***" if e.get("masked") else e["value"]
+            result.append({
+                "type": "var",
+                "key": e["key"],
+                "value": display_val,
+                "masked": e.get("masked", False),
+            })
+    return jsonify(result)
+
+
+@app.route("/api/env", methods=["POST"])
+def api_env_post():
+    """Crée ou met à jour une variable dans .env.
+
+    Body JSON : { key: str, value: str }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    key = (body.get("key") or "").strip()
+    value = str(body.get("value") or "")
+
+    if not key or not key.replace("_", "").isalnum():
+        return jsonify({"error": "Clé invalide (alphanumérique + underscore uniquement)"}), 400
+
+    entries = _parse_env_file(_ENV_FILE)
+
+    # Mise à jour si la clé existe déjà
+    found = False
+    for e in entries:
+        if not e.get("comment") and e.get("key") == key:
+            e["value"] = value
+            found = True
+            break
+
+    if not found:
+        entries.append({"key": key, "value": value, "masked": False, "comment": False})
+
+    # Sauvegarde atomique
+    tmp = _ENV_FILE.with_suffix(".env.tmp")
+    tmp.write_text(_serialize_env(entries), encoding="utf-8")
+    tmp.replace(_ENV_FILE)
+
+    # Recharger dans l'environnement courant du processus Flask
+    os.environ[key] = value
+
+    return jsonify({"ok": True, "key": key})
+
+
+@app.route("/api/env/<key>", methods=["DELETE"])
+def api_env_delete(key: str):
+    """Supprime une variable de .env."""
+    if not key or not key.replace("_", "").isalnum():
+        return jsonify({"error": "Clé invalide"}), 400
+
+    entries = _parse_env_file(_ENV_FILE)
+    entries = [e for e in entries if e.get("comment") or e.get("key") != key]
+
+    tmp = _ENV_FILE.with_suffix(".env.tmp")
+    tmp.write_text(_serialize_env(entries), encoding="utf-8")
+    tmp.replace(_ENV_FILE)
+
+    os.environ.pop(key, None)
+    return jsonify({"ok": True, "key": key})
+
+
+# ── Clustering thématique ──────────────────────────────────────────────────────
+
+@app.route("/api/analytics/clusters")
+def api_analytics_clusters():
+    """Retourne les clusters thématiques des N derniers jours.
+
+    Query params:
+      days      : fenêtre temporelle en jours (défaut 7)
+      min_size  : taille minimale d'un cluster (défaut 2)
+    """
+    days = max(1, min(int(request.args.get("days", 7)), 365))
+    min_size = max(1, int(request.args.get("min_size", 2)))
+
+    try:
+        _sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts.cluster_articles import load_articles, cluster_articles
+
+        articles = load_articles(PROJECT_ROOT, days=days)
+        clusters = cluster_articles(articles)
+        clusters = [c for c in clusters if c["count"] >= min_size]
+
+        return jsonify({
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "window_days": days,
+            "total_articles": len(articles),
+            "clusters": clusters,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/", defaults={"path": ""})

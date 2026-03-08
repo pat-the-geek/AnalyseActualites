@@ -344,6 +344,28 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
           Télécharger
         </button>
 
+        {/* Boutons export CSV / XLSX (uniquement pour les tableaux d'articles) */}
+        {isArticleArray && (
+          <>
+            <a
+              href={`/api/export/csv?path=${encodeURIComponent(file.path)}`}
+              download
+              title="Exporter en CSV"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+            >
+              <Download size={12} /> CSV
+            </a>
+            <a
+              href={`/api/export/xlsx?path=${encodeURIComponent(file.path)}`}
+              download
+              title="Exporter en Excel (XLSX)"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+            >
+              <Download size={12} /> Excel
+            </a>
+          </>
+        )}
+
         {/* Bouton supprimer (uniquement pour les fichiers non-JSON) */}
         {onDelete && file?.type !== 'json' && (
           <button

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, FileJson, FileText, X, ArrowRight } from 'lucide-react'
+import { Search, FileJson, FileText, X, ArrowRight, SlidersHorizontal, ChevronDown } from 'lucide-react'
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -24,8 +24,15 @@ export default function SearchOverlay({ onClose, onSelect }) {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [showFilters, setShowFilters] = useState(false)
+  const [filterSentiment, setFilterSentiment] = useState('')
+  const [filterSource, setFilterSource] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
   const inputRef = useRef(null)
   const debounceRef = useRef(null)
+
+  const hasFilters = filterSentiment || filterSource || filterFrom || filterTo
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -39,13 +46,18 @@ export default function SearchOverlay({ onClose, onSelect }) {
     if (query.length < 2) { setResults([]); return }
     setLoading(true)
     debounceRef.current = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      const params = new URLSearchParams({ q: query })
+      if (filterSentiment) params.set('sentiment', filterSentiment)
+      if (filterSource)    params.set('source', filterSource)
+      if (filterFrom)      params.set('date_from', filterFrom)
+      if (filterTo)        params.set('date_to', filterTo)
+      fetch(`/api/search?${params}`)
         .then(r => r.json())
         .then(data => { setResults(data); setActiveIdx(0); setLoading(false) })
         .catch(() => setLoading(false))
     }, 300)
     return () => clearTimeout(debounceRef.current)
-  }, [query])
+  }, [query, filterSentiment, filterSource, filterFrom, filterTo])
 
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, results.length - 1)) }
@@ -72,10 +84,80 @@ export default function SearchOverlay({ onClose, onSelect }) {
             className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:outline-none"
           />
           {loading && <span className="text-xs text-slate-400 dark:text-slate-500 animate-pulse shrink-0">Recherche…</span>}
+          <button
+            onClick={() => setShowFilters(f => !f)}
+            title="Filtres avancés"
+            className={`shrink-0 p-1 rounded transition-colors ${showFilters || hasFilters ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+          >
+            <SlidersHorizontal size={14} />
+          </button>
           <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 shrink-0">
             <X size={14} />
           </button>
         </div>
+
+        {/* Filtres avancés */}
+        {showFilters && (
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 flex flex-wrap gap-3">
+            {/* Sentiment */}
+            <div className="flex flex-col gap-1 min-w-[130px]">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Sentiment</label>
+              <select
+                value={filterSentiment}
+                onChange={e => setFilterSentiment(e.target.value)}
+                className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+              >
+                <option value="">Tous</option>
+                <option value="positif">Positif</option>
+                <option value="neutre">Neutre</option>
+                <option value="négatif">Négatif</option>
+              </select>
+            </div>
+
+            {/* Source */}
+            <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Source</label>
+              <input
+                type="text"
+                value={filterSource}
+                onChange={e => setFilterSource(e.target.value)}
+                placeholder="ex: Le Monde"
+                className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+
+            {/* Date début */}
+            <div className="flex flex-col gap-1 min-w-[130px]">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Du</label>
+              <input
+                type="date"
+                value={filterFrom}
+                onChange={e => setFilterFrom(e.target.value)}
+                className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+
+            {/* Date fin */}
+            <div className="flex flex-col gap-1 min-w-[130px]">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Au</label>
+              <input
+                type="date"
+                value={filterTo}
+                onChange={e => setFilterTo(e.target.value)}
+                className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+
+            {hasFilters && (
+              <button
+                onClick={() => { setFilterSentiment(''); setFilterSource(''); setFilterFrom(''); setFilterTo('') }}
+                className="self-end text-xs text-red-500 hover:text-red-400 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Résultats */}
         <div className="max-h-[420px] overflow-y-auto">

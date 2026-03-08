@@ -158,13 +158,12 @@ def generate_newsletter_html(
         if not isinstance(resume, str):
             resume = ""
 
-        # Titre = première ligne du résumé ou source + date
+        # Titre = première ligne du résumé ou source + date (texte complet, sans troncature)
         lines = [l.strip() for l in resume.splitlines() if l.strip()]
-        title_text = lines[0][:80] if lines else f"{source} · {date}"
+        title_text = lines[0] if lines else f"{source} · {date}"
 
-        resume_truncated = _truncate(resume, 300)
-        # Échapper le HTML basique
-        resume_html = resume_truncated.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        # Résumé complet — pas de troncature (user request)
+        resume_html = resume.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         articles_html_parts.append(_ARTICLE_TEMPLATE.format(
             source=source,
