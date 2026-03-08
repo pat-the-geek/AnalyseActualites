@@ -247,7 +247,7 @@ def build_digest_markdown(
         for alert in top_alerts:
             niveau = alert.get("niveau", "")
             emoji = NIVEAU_EMOJI.get(niveau, "⚪")
-            entite = alert.get("entite", alert.get("entity", ""))
+            entite = alert.get("entite", alert.get("entity", alert.get("entity_value", "")))
             ratio = alert.get("ratio", 0)
             nb = alert.get("mentions_24h", alert.get("count_24h", ""))
             desc = alert.get("description", "")
