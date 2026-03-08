@@ -4,8 +4,14 @@ import { Volume2, VolumeX } from 'lucide-react'
 // Singleton global : une seule instance TTS active à la fois
 let _setActive = null
 
+/** Arrête toute synthèse vocale en cours et réinitialise l'état React associé. */
+export function stopAll() {
+  window.speechSynthesis?.cancel()
+  if (_setActive) { _setActive(false); _setActive = null }
+}
+
 /** Nettoie le Markdown pour produire du texte brut lisible à voix haute. */
-function stripMarkdown(text) {
+export function stripMarkdown(text) {
   if (!text) return ''
   return text
     .replace(/^---[\s\S]*?---\n?/, '')        // frontmatter YAML
@@ -41,7 +47,6 @@ export function useTTS(text) {
     window.speechSynthesis.cancel()
 
     if (speaking) {
-      // L'utilisateur voulait stopper — c'est fait
       if (_setActive === setSpeaking) _setActive = null
       setSpeaking(false)
       return
@@ -103,7 +108,7 @@ export default function TTSButton({ text, size = 13, className = '' }) {
       className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
         speaking
           ? 'text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
-          : 'text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+          : 'text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
       } ${className}`}
     >
       {speaking ? <VolumeX size={size} /> : <Volume2 size={size} />}
