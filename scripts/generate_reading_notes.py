@@ -164,6 +164,7 @@ def build_reading_notes_markdown(
         for entry in entries:
             url = entry["url"]
             notes = entry["notes"]
+            is_important = entry.get("is_important", False)
             article = entry.get("article") or {}
             source = article.get("Sources", "")
             date_label = format_datetime(article.get("Date de publication", ""))
@@ -176,7 +177,8 @@ def build_reading_notes_markdown(
                 meta_parts.append(f"*{source}*")
             meta = " · ".join(meta_parts)
 
-            lines.append(f"- {meta + ' — ' if meta else ''}[{titre}]({url})")
+            star = "⭐ " if is_important else ""
+            lines.append(f"- {meta + ' — ' if meta else ''}{star}[{titre}]({url})")
             if notes:
                 lines.append(f"  > {notes}")
 
@@ -204,7 +206,7 @@ def generate_reading_notes(dry_run: bool = False) -> None:
     # 2. Garder uniquement celles avec note OU tags saisis
     selected = {
         url: ann for url, ann in annotations.items()
-        if ann.get("notes", "").strip() or ann.get("tags")
+        if ann.get("notes", "").strip() or [t for t in (ann.get("tags") or []) if t]
     }
     print_console(f"{len(selected)} annotations avec note ou tag")
 
@@ -224,6 +226,7 @@ def generate_reading_notes(dry_run: bool = False) -> None:
                 "url": url,
                 "tags": [t for t in (ann.get("tags") or []) if t],
                 "notes": ann.get("notes", "").strip(),
+                "is_important": bool(ann.get("is_important", False)),
                 "updated_at": ann.get("updated_at", ""),
                 "article": article_index.get(url, {}),
             }
