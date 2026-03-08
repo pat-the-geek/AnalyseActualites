@@ -394,6 +394,13 @@ def api_scheduler():
             "log_file": PROJECT_ROOT / "rapports" / "cron_trends.log",
         },
         {
+            "name": "Morning Digest quotidien",
+            "script": "generate_morning_digest.py --ai",
+            "cron": "30 7 * * *",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_morning_digest.log",
+        },
+        {
             "name": "Enrichissement sentiment",
             "script": "enrich_sentiment.py",
             "cron": "0 3 * * *",
