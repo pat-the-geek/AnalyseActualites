@@ -460,8 +460,8 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
-      {/* ── Barre de navigation ── */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/40 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
+      {/* ── Barre de navigation — masquée sur mobile (bottom nav prend en charge) ── */}
+      <header className="hidden md:flex items-center gap-3 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/40 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
         {/* Bouton hamburger — mobile uniquement */}
         <button
           onClick={() => setSidebarOpen(v => !v)}
@@ -604,7 +604,8 @@ export default function App() {
       </header>
 
       {/* ── Corps principal ── */}
-      <div className="flex flex-1 overflow-hidden relative pb-16 md:pb-0">
+      {/* safe-area-inset-top sur mobile (le header étant masqué, le contenu remonte sous l'encoche) */}
+      <div className="flex flex-1 overflow-hidden relative pb-16 md:pb-0" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {/* Overlay backdrop — mobile uniquement, ferme la sidebar au clic */}
         {sidebarOpen && (
           <div
@@ -712,7 +713,16 @@ export default function App() {
                 : 'text-slate-400 dark:text-slate-500'
             }`}
           >
-            <Settings size={24} strokeWidth={settingsOpen ? 2.2 : 1.8} />
+            <span className="relative">
+              <Settings size={24} strokeWidth={settingsOpen ? 2.2 : 1.8} />
+              {rssStatus?.running ? (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500" />
+              ) : (rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null) ? (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
+              ) : null}
+            </span>
             <span className="text-[10px] font-medium leading-none">Réglages</span>
           </button>
 
