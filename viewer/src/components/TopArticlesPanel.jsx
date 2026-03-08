@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { X, Star, ExternalLink, RefreshCw, Clock, Tag, ChevronDown, ChevronUp, Maximize2, PlayCircle, Pause, Volume2 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
-import TTSButton, { stripMarkdown, stopAll } from './TTSButton'
+import TTSButton, { stopAll } from './TTSButton'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,26 +111,10 @@ function ImageLightbox({ url, alt, onClose }) {
 
 // ── Hook lecture podcast ───────────────────────────────────────────────────────
 
-/**
- * Lit tous les articles en séquence comme un podcast.
- * Annonce "Article N sur M — Source — Titre — Résumé" pour chaque article.
- */
 function usePodcast(articles) {
-  const [playing, setPlaying]     = useState(false)
+  const [playing, setPlaying]       = useState(false)
   const [currentIdx, setCurrentIdx] = useState(-1)
   const playingRef = useRef(false)
-
-  // Construit le texte announcé pour un article donné
-  const buildText = (article, idx, total) => {
-    const titre  = article['Titre']?.trim() || ''
-    const resume = article['Résumé'] || ''
-    const source = article['Sources'] || ''
-    let text = `Article ${idx + 1} sur ${total}. `
-    if (source) text += `${source}. `
-    if (titre)  text += `${titre}. `
-    if (resume) text += resume
-    return text.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim()
-  }
 
   const speakAt = useCallback((idx) => {
     if (!playingRef.current || idx >= articles.length) {
@@ -139,23 +123,28 @@ function usePodcast(articles) {
       playingRef.current = false
       return
     }
-    const text = buildText(articles[idx], idx, articles.length)
+    const art    = articles[idx]
+    const titre  = art['Titre']?.trim() || ''
+    const resume = art['Résumé'] || ''
+    const source = art['Sources'] || ''
+    let text = `Article ${idx + 1} sur ${articles.length}. `
+    if (source) text += `${source}. `
+    if (titre)  text += `${titre}. `
+    if (resume) text += resume
+    text = text.replace(/\n+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+
     const utt = new SpeechSynthesisUtterance(text)
-    utt.lang = 'fr-FR'
-    utt.rate = 0.92
-    utt.onend  = () => speakAt(idx + 1)
-    utt.onerror = () => {
-      setPlaying(false)
-      setCurrentIdx(-1)
-      playingRef.current = false
-    }
+    utt.lang    = 'fr-FR'
+    utt.rate    = 0.92
+    utt.onend   = () => speakAt(idx + 1)
+    utt.onerror = () => { setPlaying(false); setCurrentIdx(-1); playingRef.current = false }
     setCurrentIdx(idx)
     window.speechSynthesis.speak(utt)
   }, [articles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = useCallback(() => {
     if (!window.speechSynthesis || articles.length === 0) return
-    stopAll() // arrête tout TTS en cours (boutons individuels)
+    stopAll()
     playingRef.current = true
     setPlaying(true)
     speakAt(0)
@@ -168,13 +157,33 @@ function usePodcast(articles) {
     setCurrentIdx(-1)
   }, [])
 
-  // Nettoyage au démontage
-  useEffect(() => () => {
-    playingRef.current = false
-    window.speechSynthesis?.cancel()
-  }, [])
+  useEffect(() => () => { playingRef.current = false; window.speechSynthesis?.cancel() }, [])
 
   return { playing, currentIdx, start, stop }
+}
+
+// ── Bouton podcast — composant stable (hors du parent) ────────────────────────
+
+function PodcastBtn({ playing, currentIdx, total, onStart, onStop, disabled, mobile }) {
+  const hasTTS = typeof window !== 'undefined' && !!window.speechSynthesis
+  if (!hasTTS) return null
+  return (
+    <button
+      onClick={playing ? onStop : onStart}
+      disabled={disabled}
+      title={disabled ? 'Chargement…' : playing ? 'Arrêter le podcast' : 'Écouter tous les articles en séquence'}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        playing
+          ? 'bg-violet-600 hover:bg-violet-700 text-white'
+          : 'bg-violet-100 dark:bg-violet-900/40 hover:bg-violet-200 dark:hover:bg-violet-800/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800'
+      } ${mobile ? 'flex-1 justify-center' : ''}`}
+    >
+      {playing
+        ? <><Pause size={12} /> {currentIdx + 1}/{total}</>
+        : <><PlayCircle size={12} /> Écouter</>
+      }
+    </button>
+  )
 }
 
 // ── Carte article ─────────────────────────────────────────────────────────────
@@ -183,15 +192,15 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
   const [expanded, setExpanded] = useState(rank <= 3)
   const [lightbox, setLightbox] = useState(false)
 
-  const resume  = article['Résumé'] ?? ''
+  const resume   = article['Résumé'] ?? ''
   const entities = article.entities ?? null
   const hasEntities = entities && Object.keys(entities).length > 0
-  const count   = useMemo(() => entityCount(article), [article])
-  const imgUrl  = firstImage(article['Images'])
-  const date    = formatDate(article['Date de publication'])
-  const time    = formatTime(article['Date de publication'])
-  const url     = article['URL'] || article['url'] || '#'
-  const titre   = article['Titre']?.trim() || ''
+  const count    = useMemo(() => entityCount(article), [article])
+  const imgUrl   = firstImage(article['Images'])
+  const date     = formatDate(article['Date de publication'])
+  const time     = formatTime(article['Date de publication'])
+  const url      = article['URL'] || article['url'] || '#'
+  const titre    = article['Titre']?.trim() || ''
 
   return (
     <article className={`bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col ${
@@ -200,34 +209,25 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
         : 'border-white/50 dark:border-slate-700/60'
     }`}>
 
-      {/* Image */}
       {imgUrl && (
-        <button
-          type="button"
-          onClick={() => setLightbox(true)}
+        <button type="button" onClick={() => setLightbox(true)}
           className="group relative w-full h-36 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left shrink-0"
-          title="Agrandir l'image"
-        >
-          <img
-            src={imgUrl} alt={titre || article['Sources'] || ''}
+          title="Agrandir l'image">
+          <img src={imgUrl} alt={titre || article['Sources'] || ''}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            onError={e => { e.currentTarget.closest('button').style.display = 'none' }}
-          />
+            loading="lazy" onError={e => { e.currentTarget.closest('button').style.display = 'none' }} />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
             <Maximize2 size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
           </div>
         </button>
       )}
-
       {lightbox && imgUrl && (
         <ImageLightbox url={imgUrl} alt={titre || article['Sources'] || ''} onClose={() => setLightbox(false)} />
       )}
 
-      {/* Corps */}
       <div className="p-5 flex flex-col flex-1">
 
-        {/* Rang centré au-dessus du titre */}
+        {/* Rang */}
         <div className="flex justify-center mb-3">
           <div className={`flex items-center justify-center rounded-full font-bold text-white shadow-md
             ${rank === 1 ? 'w-12 h-12 text-xl bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-800' :
@@ -238,7 +238,8 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
           </div>
         </div>
 
-        <div className="flex items-start justify-between gap-3 mb-2">
+        {/* En-tête : meta + lien */}
+        <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -263,17 +264,13 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
               </h3>
             )}
           </div>
-          {/* Boutons action : TTS + lien externe */}
-          <div className="flex items-center gap-1 shrink-0 mt-0.5">
-            {resume && <TTSButton text={resume} size={14} />}
-            {url && url !== '#' && (
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
-                title="Ouvrir l'article">
-                <ExternalLink size={14} />
-              </a>
-            )}
-          </div>
+          {url && url !== '#' && (
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="shrink-0 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5"
+              title="Ouvrir l'article">
+              <ExternalLink size={14} />
+            </a>
+          )}
         </div>
 
         {/* Résumé */}
@@ -290,16 +287,37 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
           </button>
         )}
 
-        {/* Score */}
-        <ScoreBar score={article.score_pertinence ?? 0} />
-
-        {/* Indicateur podcast en cours */}
-        {isCurrentPodcast && (
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-violet-600 dark:text-violet-400 font-medium">
-            <Volume2 size={11} className="animate-pulse" />
-            Lecture en cours…
-          </div>
-        )}
+        {/* Barre d'actions : TTS + score */}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50 flex items-center gap-2">
+          {/* Bouton TTS individuel avec label */}
+          <TTSButton text={resume || titre} size={13} className="shrink-0" />
+          <span className="text-[10px] text-slate-400 dark:text-slate-500">Écouter</span>
+          {/* Indicateur podcast */}
+          {isCurrentPodcast && (
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 font-medium">
+              <Volume2 size={11} className="animate-pulse" />
+              En cours…
+            </span>
+          )}
+          {/* Score */}
+          {!isCurrentPodcast && (
+            <div className="ml-auto flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">Score</span>
+              <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    (article.score_pertinence ?? 0) >= 70 ? 'bg-emerald-500' :
+                    (article.score_pertinence ?? 0) >= 40 ? 'bg-amber-500' : 'bg-slate-400'
+                  }`}
+                  style={{ width: `${article.score_pertinence ?? 0}%` }}
+                />
+              </div>
+              <span className="text-xs tabular-nums font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                {article.score_pertinence ?? 0}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )
@@ -314,7 +332,7 @@ export default function TopArticlesPanel({ onClose }) {
   const [hours, setHours]       = useState(48)
   const [topN, setTopN]         = useState(10)
   const [isMaximized, setIsMaximized] = useState(false)
-  const [selectedEntity, setSelectedEntity] = useState(null) // { type, value }
+  const [selectedEntity, setSelectedEntity] = useState(null)
 
   const { playing, currentIdx, start: podcastStart, stop: podcastStop } = usePodcast(articles)
 
@@ -336,26 +354,6 @@ export default function TopArticlesPanel({ onClose }) {
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Bouton podcast (mutualisé desktop + mobile)
-  const PodcastButton = ({ mobile = false }) => (
-    window.speechSynthesis && articles.length > 0 ? (
-      <button
-        onClick={playing ? podcastStop : podcastStart}
-        title={playing ? 'Arrêter le podcast' : 'Écouter tous les articles en podcast'}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-          playing
-            ? 'bg-violet-600 hover:bg-violet-700 text-white'
-            : 'bg-violet-100 dark:bg-violet-900/40 hover:bg-violet-200 dark:hover:bg-violet-800/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800'
-        } ${mobile ? 'flex-1 justify-center' : ''}`}
-      >
-        {playing
-          ? <><Pause size={12} /> Article {currentIdx + 1}/{articles.length}</>
-          : <><PlayCircle size={12} /> Écouter</>
-        }
-      </button>
-    ) : null
-  )
-
   return (
     <>
     <div
@@ -372,9 +370,16 @@ export default function TopArticlesPanel({ onClose }) {
             <span className="text-xs text-slate-400 dark:text-slate-500">— {articles.length} article{articles.length > 1 ? 's' : ''}</span>
           )}
 
-          {/* Contrôles desktop (masqués sur mobile) */}
+          {/* Contrôles desktop */}
           <div className="hidden md:flex flex-wrap items-center gap-3 ml-auto">
-            <PodcastButton />
+            <PodcastBtn
+              playing={playing}
+              currentIdx={currentIdx}
+              total={articles.length}
+              onStart={podcastStart}
+              onStop={podcastStop}
+              disabled={loading || articles.length === 0}
+            />
             <div className="flex items-center gap-2 text-sm">
               <label className="text-slate-500 dark:text-slate-400 text-xs">Fenêtre :</label>
               <select value={hours} onChange={e => setHours(Number(e.target.value))}
@@ -396,15 +401,12 @@ export default function TopArticlesPanel({ onClose }) {
                 <option value="50">50</option>
               </select>
             </div>
-            <button onClick={load}
-              title="Actualiser"
+            <button onClick={load} title="Actualiser"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs rounded-lg transition-colors">
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
               Actualiser
             </button>
-            <button
-              onClick={() => setIsMaximized(m => !m)}
-              title={isMaximized ? 'Réduire' : 'Plein écran'}
+            <button onClick={() => setIsMaximized(m => !m)} title={isMaximized ? 'Réduire' : 'Plein écran'}
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors">
               <Maximize2 size={14} />
             </button>
@@ -414,10 +416,9 @@ export default function TopArticlesPanel({ onClose }) {
             </button>
           </div>
 
-          {/* Bouton plein écran mobile uniquement dans l'en-tête */}
+          {/* Mobile en-tête */}
           <div className="flex md:hidden items-center gap-2 ml-auto">
-            <button
-              onClick={() => setIsMaximized(m => !m)}
+            <button onClick={() => setIsMaximized(m => !m)}
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
               <Maximize2 size={14} />
             </button>
@@ -465,40 +466,46 @@ export default function TopArticlesPanel({ onClose }) {
       />
     )}
 
-    {/* ── Toolbar mobile fixée en bas ── */}
+    {/* ── Toolbar mobile ── */}
     <div
       className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 px-4 py-3 flex items-center gap-2"
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
     >
-      <div className="flex items-center gap-2 flex-1">
-        <PodcastButton mobile />
-        <div className="flex items-center gap-1.5">
-          <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Fenêtre :</label>
-          <select value={hours} onChange={e => setHours(Number(e.target.value))}
-            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
-            <option value="6">6h</option>
-            <option value="24">24h</option>
-            <option value="48">48h</option>
-            <option value="168">7j</option>
-            <option value="0">Tout</option>
-          </select>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Top :</label>
-          <select value={topN} onChange={e => setTopN(Number(e.target.value))}
-            className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-          </select>
-        </div>
-        <button onClick={load}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs rounded-lg transition-colors">
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-          Actualiser
-        </button>
+      <PodcastBtn
+        playing={playing}
+        currentIdx={currentIdx}
+        total={articles.length}
+        onStart={podcastStart}
+        onStop={podcastStop}
+        disabled={loading || articles.length === 0}
+        mobile
+      />
+      <div className="flex items-center gap-1.5">
+        <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Fenêtre :</label>
+        <select value={hours} onChange={e => setHours(Number(e.target.value))}
+          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
+          <option value="6">6h</option>
+          <option value="24">24h</option>
+          <option value="48">48h</option>
+          <option value="168">7j</option>
+          <option value="0">Tout</option>
+        </select>
       </div>
+      <div className="flex items-center gap-1.5">
+        <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Top :</label>
+        <select value={topN} onChange={e => setTopN(Number(e.target.value))}
+          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+      <button onClick={load}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs rounded-lg transition-colors">
+        <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+        Actualiser
+      </button>
       <button onClick={onClose}
         className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
         <X size={16} />
