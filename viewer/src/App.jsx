@@ -691,6 +691,7 @@ export default function App() {
           onDelete={deleteFile}
           annotations={annotations}
           onAnnotate={handleAnnotate}
+          sidebarOpen={sidebarOpen}
         />
       </div>
 

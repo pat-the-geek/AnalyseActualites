@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Download, FileText, Calendar, HardDrive, ChevronRight, Images, ArrowUp, Tag, Braces, LayoutList, Trash2, AlertTriangle } from 'lucide-react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, ChevronDown, Images, ArrowUp, Tag, Braces, LayoutList, Trash2, AlertTriangle } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 import EntityPanel from './EntityPanel'
@@ -193,14 +193,16 @@ function Lightbox({ images, index, onClose, onNav }) {
   )
 }
 
-export default function FileViewer({ file, content, loading, loadingProgress, onDownload, onContentSaved, onEntitySearch, onDelete, annotations, onAnnotate }) {
+export default function FileViewer({ file, content, loading, loadingProgress, onDownload, onContentSaved, onEntitySearch, onDelete, annotations, onAnnotate, sidebarOpen }) {
   const scrollRef = useRef(null)
   const entitiesRef = useRef(null)
   const imagesRef = useRef(null)
+  const exportRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewMode, setViewMode] = useState('articles') // 'json' | 'articles'
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleteError, setDeleteError]     = useState(null)
+  const [exportOpen, setExportOpen]       = useState(false)
 
   // Écoute le scroll du conteneur principal (re-attaché à chaque changement de fichier)
   useEffect(() => {
@@ -212,7 +214,17 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
   }, [file])
 
   // Remet le scroll à 0 et la vue JSON lors d'un changement de fichier
-  useEffect(() => { setScrollTop(0); setViewMode('articles') }, [file])
+  useEffect(() => { setScrollTop(0); setViewMode('articles'); setExportOpen(false) }, [file])
+
+  // Ferme le dropdown export au clic extérieur
+  useEffect(() => {
+    if (!exportOpen) return
+    const handler = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [exportOpen])
 
   // Détecte si le JSON contient des images
   const hasImages = useMemo(() => {
@@ -273,10 +285,14 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
     <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900 relative">
       {/* ── Barre de fichier ── */}
       <div
-        className="flex items-center gap-3 px-5 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-t border-white/30 dark:border-slate-700/40 md:border-t-0 md:border-b shrink-0 fixed left-0 right-0 z-40 md:static md:z-auto"
+        className={`flex items-center gap-2 px-3 py-2 backdrop-blur-xl border-t border-white/30 dark:border-slate-700/40 md:border-t-0 md:border-b shrink-0 fixed left-0 right-0 md:static md:z-auto transition-all duration-200 ${
+          sidebarOpen
+            ? 'z-[15] bg-white/25 dark:bg-slate-800/25'
+            : 'z-40 bg-white/60 dark:bg-slate-800/60'
+        }`}
         style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom))' }}
       >
-        {/* Fil d'Ariane */}
+        {/* Fil d'Ariane — desktop uniquement */}
         <div className="hidden md:flex items-center gap-0.5 min-w-0 flex-1 text-xs text-slate-400 dark:text-slate-500 overflow-hidden">
           {pathParts.map((part, i) => (
             <span key={i} className="flex items-center gap-0.5 shrink-0">
@@ -288,7 +304,7 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
           ))}
         </div>
 
-        {/* Méta */}
+        {/* Méta — large desktop uniquement */}
         <div className="hidden lg:flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500 shrink-0">
           <span className="flex items-center gap-1">
             <Calendar size={11} />
@@ -303,55 +319,117 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
               ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
               : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
           }`}>
-            {file.type === 'json' ? 'JSON' : 'Markdown'}
+            {file.type === 'json' ? 'JSON' : 'MD'}
           </span>
         </div>
 
-        {/* Toggle JSON / Articles (uniquement pour les tableaux d'articles) */}
+        {/* ── Spacer mobile : pousse les boutons à droite ── */}
+        <div className="flex-1 md:hidden" />
+
+        {/* Toggle Articles / JSON (uniquement pour les tableaux d'articles) */}
         {isArticleArray && (
           <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0">
             <button
               onClick={() => setViewMode('articles')}
               title="Vue articles annotés"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1.5 text-xs transition-colors ${
                 viewMode === 'articles'
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
-              <LayoutList size={12} /> Articles
+              <LayoutList size={12} />
+              <span className="hidden sm:inline">Articles</span>
             </button>
             <button
               onClick={() => setViewMode('json')}
               title="Vue JSON brut"
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1.5 text-xs transition-colors ${
                 viewMode === 'json'
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
-              <Braces size={12} /> JSON
+              <Braces size={12} />
+              <span className="hidden sm:inline">JSON</span>
             </button>
           </div>
         )}
 
-        {/* Bouton télécharger */}
+        {/* ── Export : dropdown sur mobile, boutons séparés sur desktop ── */}
+
+        {/* Mobile : dropdown unique regroupant tous les exports */}
+        <div ref={exportRef} className="relative md:hidden shrink-0">
+          <button
+            onClick={() => setExportOpen(v => !v)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              exportOpen
+                ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                : 'bg-slate-100 dark:bg-slate-700/70 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <Download size={13} />
+            <span>Export</span>
+            <ChevronDown size={10} className={`transition-transform duration-150 ${exportOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {exportOpen && (
+            <div className="absolute bottom-full mb-2 right-0 glass-panel rounded-xl border border-white/40 dark:border-slate-700/60 shadow-2xl z-[200] py-1.5 min-w-[9.5rem] overflow-hidden">
+              {/* JSON brut */}
+              <button
+                onClick={() => { onDownload(); setExportOpen(false) }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-700/70 active:bg-slate-200/70 transition-colors"
+              >
+                <Download size={13} className="text-blue-500 shrink-0" />
+                <span>JSON</span>
+              </button>
+
+              {/* CSV — uniquement si tableau d'articles */}
+              {isArticleArray && (
+                <a
+                  href={`/api/export/csv?path=${encodeURIComponent(file.path)}`}
+                  download
+                  onClick={() => setExportOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-700/70 active:bg-slate-200/70 transition-colors"
+                >
+                  <Download size={13} className="text-green-500 shrink-0" />
+                  <span>CSV</span>
+                </a>
+              )}
+
+              {/* XLSX — uniquement si tableau d'articles */}
+              {isArticleArray && (
+                <a
+                  href={`/api/export/xlsx?path=${encodeURIComponent(file.path)}`}
+                  download
+                  onClick={() => setExportOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-700/70 active:bg-slate-200/70 transition-colors"
+                >
+                  <Download size={13} className="text-emerald-500 shrink-0" />
+                  <span>XLSX</span>
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop : boutons séparés */}
         <button
           onClick={onDownload}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+          title="Télécharger le fichier JSON"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
         >
           <Download size={12} />
-          Télécharger
+          JSON
         </button>
 
-        {/* Boutons export CSV / XLSX (uniquement pour les tableaux d'articles) */}
         {isArticleArray && (
           <>
             <a
               href={`/api/export/csv?path=${encodeURIComponent(file.path)}`}
               download
               title="Exporter en CSV"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
             >
               <Download size={12} /> CSV
             </a>
@@ -359,9 +437,9 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
               href={`/api/export/xlsx?path=${encodeURIComponent(file.path)}`}
               download
               title="Exporter en Excel (XLSX)"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
             >
-              <Download size={12} /> Excel
+              <Download size={12} /> XLSX
             </a>
           </>
         )}
