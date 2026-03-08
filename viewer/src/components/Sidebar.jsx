@@ -19,6 +19,14 @@ function formatTime(timestamp) {
   })
 }
 
+function isToday(timestamp) {
+  const d = new Date(timestamp * 1000)
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate()
+}
+
 export default function Sidebar({
   files, selectedFile, onSelect,
   typeFilter, onTypeFilterChange,
@@ -148,8 +156,13 @@ export default function Sidebar({
                     : <FileText size={14} className="shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
                   }
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate leading-snug">
-                      {file.name}
+                    <div className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate leading-snug flex items-center gap-1.5">
+                      <span className="truncate">{file.name}</span>
+                      {isToday(file.modified) && (
+                        <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-500 text-white leading-none">
+                          new
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[10px] px-1.5 rounded font-mono leading-4 ${
