@@ -426,7 +426,7 @@ export default function TopArticlesPanel({ onClose }) {
         </div>
 
         {/* ── Corps ── */}
-        <div className="flex-1 overflow-y-auto p-5 pb-28 md:pb-5">
+        <div className="flex-1 overflow-y-auto p-5 pb-36 md:pb-5">
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">{error}</div>
           )}
@@ -468,9 +468,38 @@ export default function TopArticlesPanel({ onClose }) {
 
     {/* ── Toolbar mobile ── */}
     <div
-      className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 px-4 py-3 flex items-center gap-2"
-      style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+      className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-t border-slate-200/60 dark:border-slate-700/60 px-4 pt-2 flex flex-col gap-2"
+      style={{ paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}
     >
+      {/* Ligne 1 : filtres + rafraîchir + fermer */}
+      <div className="flex items-center gap-2">
+        <label className="text-slate-500 dark:text-slate-400 text-xs shrink-0">Fenêtre</label>
+        <select value={hours} onChange={e => setHours(Number(e.target.value))}
+          className="flex-1 min-w-0 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
+          <option value="6">6h</option>
+          <option value="24">24h</option>
+          <option value="48">48h</option>
+          <option value="168">7j</option>
+          <option value="0">Tout</option>
+        </select>
+        <label className="text-slate-500 dark:text-slate-400 text-xs shrink-0">Top</label>
+        <select value={topN} onChange={e => setTopN(Number(e.target.value))}
+          className="flex-1 min-w-0 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+        <button onClick={load} title="Actualiser"
+          className="w-9 h-9 rounded-full bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center shrink-0 transition-colors">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        </button>
+        <button onClick={onClose} title="Fermer"
+          className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0 transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+      {/* Ligne 2 : podcast */}
       <PodcastBtn
         playing={playing}
         currentIdx={currentIdx}
@@ -480,36 +509,6 @@ export default function TopArticlesPanel({ onClose }) {
         disabled={loading || articles.length === 0}
         mobile
       />
-      <div className="flex items-center gap-1.5">
-        <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Fenêtre :</label>
-        <select value={hours} onChange={e => setHours(Number(e.target.value))}
-          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
-          <option value="6">6h</option>
-          <option value="24">24h</option>
-          <option value="48">48h</option>
-          <option value="168">7j</option>
-          <option value="0">Tout</option>
-        </select>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <label className="text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">Top :</label>
-        <select value={topN} onChange={e => setTopN(Number(e.target.value))}
-          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
-        </select>
-      </div>
-      <button onClick={load}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs rounded-lg transition-colors">
-        <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        Actualiser
-      </button>
-      <button onClick={onClose}
-        className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
-        <X size={16} />
-      </button>
     </div>
   </>
   )
