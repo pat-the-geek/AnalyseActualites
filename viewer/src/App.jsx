@@ -6,7 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight, ChevronDown, MoreHorizontal } from 'lucide-react'
 import AlertsPanel from './components/AlertsPanel'
 import ExportPanel from './components/ExportPanel'
 import TopArticlesPanel from './components/TopArticlesPanel'
@@ -229,6 +229,8 @@ export default function App() {
   const [compareOpen, setCompareOpen]     = useState(false)
   const [watchOpen, setWatchOpen]         = useState(false)
   const [clusterOpen, setClusterOpen]     = useState(false)
+  const [outilsOpen, setOutilsOpen]       = useState(false)
+  const outilsMenuRef                     = useRef(null)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isRefreshing, setIsRefreshing]   = useState(false)
@@ -385,6 +387,17 @@ export default function App() {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  // Fermer le menu Outils au clic en dehors
+  useEffect(() => {
+    if (!outilsOpen) return
+    const handler = (e) => {
+      if (outilsMenuRef.current && !outilsMenuRef.current.contains(e.target))
+        setOutilsOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [outilsOpen])
+
   const selectFile = useCallback((file) => {
     setSelectedFile(file)
     setFileContent(null)
@@ -466,29 +479,28 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
-      {/* ── Barre de navigation — masquée sur mobile (bottom nav prend en charge) ── */}
-      <header className="hidden md:flex items-center gap-3 px-4 py-2.5 glass-nav border-b border-white/35 dark:border-white/[0.08] shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
-        {/* Bouton hamburger — mobile uniquement */}
-        <button
-          onClick={() => setSidebarOpen(v => !v)}
-          className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Afficher / masquer les fichiers"
-        >
-          <Menu size={18} />
-        </button>
-        <div className="flex items-center gap-2">
-          <img src={wuddLogo} alt="WUDD.ai" className="hidden sm:block w-12 h-12 rounded-md select-none" />
-          <span className="font-semibold text-slate-900 dark:text-slate-100">WUDD.ai</span>
+      {/* ── Barre de navigation desktop ── */}
+      <header
+        className="hidden md:flex items-center gap-1.5 px-3 py-2 glass-nav border-b border-white/35 dark:border-white/[0.08] shrink-0"
+        style={{ paddingTop: 'max(8px, env(safe-area-inset-top))' }}
+      >
+        {/* Logo compact */}
+        <div className="flex items-center gap-1.5 shrink-0 mr-1">
+          <img src={wuddLogo} alt="WUDD.ai" className="w-8 h-8 rounded-md select-none" />
+          <span className="hidden xl:block font-semibold text-sm text-slate-900 dark:text-slate-100 whitespace-nowrap">WUDD.ai</span>
         </div>
 
-        {/* Statut RSS + prochain passage */}
+        {/* Statut RSS */}
         <RssStatusBar status={rssStatus} nextRssLabel={nextRssLabel} />
 
-        <div className="flex-1" />
+        <div className="flex-1 min-w-0" />
+
+        {/* ── Séparateur ── */}
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
 
         {/* Sélecteur de thème */}
         <div
-          className="hidden md:flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0"
+          className="flex items-center rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0"
           title="Thème d'affichage"
         >
           {THEME_OPTIONS.map(({ key, Icon, title }) => (
@@ -496,7 +508,7 @@ export default function App() {
               key={key}
               onClick={() => setTheme(key)}
               title={title}
-              className={`px-2 py-1.5 transition-colors ${
+              className={`px-1.5 py-1.5 transition-colors ${
                 theme === key
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200'
@@ -507,10 +519,13 @@ export default function App() {
           ))}
         </div>
 
+        {/* ── Séparateur ── */}
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
+
         {/* Console RSS keywords */}
         <button
           onClick={() => setConsoleOpen(true)}
-          className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm transition-colors ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-sm transition-colors ${
             rssStatus?.running
               ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400'
               : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -522,119 +537,122 @@ export default function App() {
         >
           <Terminal size={13} />
           {rssStatus?.running ? (
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
-            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
           ) : rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null ? (
-            <span className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
           ) : rssStatus?.file_count > 0 ? (
-            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
           ) : null}
-          <span className="hidden sm:inline">Mots-clés RSS</span>
+          <span className="hidden xl:inline">RSS</span>
           {!rssStatus?.running && rssStatus?.file_count > 0 && (
-            <span className="ml-0.5 text-xs tabular-nums opacity-60">{rssStatus.file_count}</span>
+            <span className="text-xs tabular-nums opacity-60">{rssStatus.file_count}</span>
           )}
         </button>
 
         {/* Top articles */}
         <button
           onClick={() => setTopOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Top articles par score de pertinence"
         >
           <Star size={13} />
-          <span className="hidden sm:inline">Top</span>
+          <span className="hidden xl:inline">Top</span>
         </button>
 
         {/* Tendances & alertes */}
         <button
           onClick={() => setAlertsOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Alertes de tendances"
         >
           <TrendingUp size={13} />
-          <span className="hidden sm:inline">Tendances</span>
-        </button>
-
-        {/* Biais éditoriaux */}
-        <button
-          onClick={() => setBiasOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Analyse des biais éditoriaux par source"
-        >
-          <Eye size={13} />
-          <span className="hidden sm:inline">Biais</span>
-        </button>
-
-        {/* Export & Diffusion */}
-        <button
-          onClick={() => setExportOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Export &amp; Diffusion — Atom XML, Newsletter, Webhook"
-        >
-          <Share2 size={13} />
-          <span className="hidden sm:inline">Export</span>
-        </button>
-
-        {/* Clustering thématique */}
-        <button
-          onClick={() => setClusterOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Clusters thématiques"
-        >
-          <Layers size={13} />
-          <span className="hidden sm:inline">Clusters</span>
-        </button>
-
-        {/* Entités surveillées */}
-        <button
-          onClick={() => setWatchOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Entités surveillées"
-        >
-          <Bell size={13} />
-          <span className="hidden sm:inline">Veille</span>
-        </button>
-
-        {/* Comparaison temporelle */}
-        <button
-          onClick={() => setCompareOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-          title="Comparer deux périodes"
-        >
-          <ArrowLeftRight size={13} />
-          <span className="hidden sm:inline">Comparer</span>
+          <span className="hidden xl:inline">Tendances</span>
         </button>
 
         {/* Dashboard entités */}
         <button
           onClick={() => setDashboardOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Dashboard des entités nommées"
         >
           <BarChart2 size={13} />
-          <span className="hidden sm:inline">Entités</span>
+          <span className="hidden xl:inline">Entités</span>
         </button>
+
+        {/* ── Séparateur ── */}
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
+
+        {/* Menu déroulant Outils : Biais, Export, Clusters, Veille, Comparer */}
+        <div ref={outilsMenuRef} className="relative shrink-0">
+          <button
+            onClick={() => setOutilsOpen(v => !v)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-sm transition-colors ${
+              outilsOpen
+                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300'
+                : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+            title="Outils d'analyse : Biais, Export, Clusters, Veille, Comparer"
+          >
+            <MoreHorizontal size={13} />
+            <span className="hidden xl:inline">Outils</span>
+            <ChevronDown size={11} className={`transition-transform duration-200 ${outilsOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {outilsOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-54 glass-panel rounded-xl border border-white/45 dark:border-white/[0.09] shadow-2xl z-[100] py-1 overflow-hidden min-w-[13rem]">
+              {[
+                { Icon: Eye,           label: 'Biais éditoriaux',    desc: 'Analyse par source',             action: () => { setBiasOpen(true);    setOutilsOpen(false) } },
+                { Icon: Share2,        label: 'Export & Diffusion',  desc: 'Atom, Newsletter, Webhook',      action: () => { setExportOpen(true);  setOutilsOpen(false) } },
+                { Icon: Layers,        label: 'Clusters thématiques',desc: 'Regroupement par thème',         action: () => { setClusterOpen(true); setOutilsOpen(false) } },
+                { Icon: Bell,          label: 'Entités surveillées', desc: 'Veille & tendances 24h/7j',      action: () => { setWatchOpen(true);   setOutilsOpen(false) } },
+                { Icon: ArrowLeftRight,label: 'Comparer périodes',   desc: 'Analyse deux fenêtres de temps', action: () => { setCompareOpen(true); setOutilsOpen(false) } },
+              ].map(({ Icon, label, desc, action }) => (
+                <button
+                  key={label}
+                  onClick={action}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-100/80 dark:hover:bg-slate-700/60 transition-colors group"
+                >
+                  <Icon size={14} className="text-slate-400 dark:text-slate-500 shrink-0 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</div>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">{desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Séparateur ── */}
+        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
 
         {/* Réglages */}
         <button
           onClick={() => setSettingsOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           title="Réglages — planification, mots-clés, flux"
         >
-          <Settings size={13} />
-          <span className="hidden sm:inline">Réglages</span>
+          <span className="relative">
+            <Settings size={13} />
+            {rssStatus?.running ? (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            ) : null}
+          </span>
+          <span className="hidden xl:inline">Réglages</span>
         </button>
 
         {/* Recherche plein texte */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          title="Recherche plein texte (Ctrl+K)"
         >
           <Search size={13} />
-          <span className="hidden sm:inline">Recherche plein texte</span>
-          <kbd className="hidden md:inline-flex items-center gap-0.5 ml-1 text-xs bg-slate-200 dark:bg-slate-900 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700">
-            Ctrl K
+          <span className="hidden lg:inline">Recherche</span>
+          <kbd className="hidden xl:inline-flex items-center gap-0.5 text-xs bg-slate-200 dark:bg-slate-900 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700">
+            ⌘K
           </kbd>
         </button>
       </header>
