@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
-generate_reading_notes.py — Notes de lecture quotidiennes par tag (08h00)
+generate_reading_notes.py — Notes de lecture personnelles par tag (08h00)
 
-Agrège les articles collectés par mot-clé (data/articles-from-rss/*.json)
-sur les dernières 24 heures et génère un rapport Markdown organisé par tag.
+Lit data/annotations.json et génère un rapport Markdown de toutes les
+annotations saisies manuellement (note et/ou tags).
+Groupées par tag ; articles sans tag regroupés sous « Sans tag ».
 
-Sources de données (lecture seule) :
-  - data/articles-from-rss/<tag>.json  (un fichier par mot-clé/tag)
-
-Sortie :
-  - rapports/markdown/_WUDD.AI_/notes_lecture_YYYY-MM-DD.md
+Le fichier de sortie est TOUJOURS le même (écrasé à chaque exécution) :
+  rapports/markdown/_WUDD.AI_/notes_lecture.md
 
 Usage :
     python3 scripts/generate_reading_notes.py
-    python3 scripts/generate_reading_notes.py --hours 48    # fenêtre 48h
-    python3 scripts/generate_reading_notes.py --dry-run     # affiche sans sauvegarder
+    python3 scripts/generate_reading_notes.py --dry-run   # affiche sans sauvegarder
 """
 
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
@@ -31,153 +29,156 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from utils.config import get_config
 from utils.logging import print_console
 
-# Répertoires exclus dans data/articles-from-rss/
-EXCLUDED_DIRS = {"_WUDD.AI_"}
+ANNOTATIONS_FILE = PROJECT_ROOT / "data" / "annotations.json"
+OUTPUT_FILE = PROJECT_ROOT / "rapports" / "markdown" / "_WUDD.AI_" / "notes_lecture.md"
 
 
 # ── Chargement ────────────────────────────────────────────────────────────────
 
-def load_keyword_articles(project_root: Path) -> dict[str, list]:
-    """
-    Charge tous les fichiers data/articles-from-rss/<tag>.json.
-    Retourne un dict {tag: [articles]}.
-    """
-    rss_dir = project_root / "data" / "articles-from-rss"
-    result: dict[str, list] = {}
+def load_annotations() -> dict:
+    if not ANNOTATIONS_FILE.exists():
+        return {}
+    try:
+        return json.loads(ANNOTATIONS_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print_console(f"Erreur lecture annotations.json : {e}", level="error")
+        return {}
 
-    if not rss_dir.exists():
-        print_console(f"Répertoire introuvable : {rss_dir}", level="warning")
-        return result
 
-    for f in sorted(rss_dir.glob("*.json")):
-        tag = f.stem  # nom du fichier sans extension
+def build_article_index(project_root: Path) -> dict:
+    """Construit un index {url: article_dict} depuis tous les JSON d'articles."""
+    index: dict = {}
+
+    def _index_list(articles: list) -> None:
+        for a in articles:
+            if isinstance(a, dict) and a.get("URL"):
+                index[a["URL"]] = a
+
+    for f in (project_root / "data" / "articles-from-rss").rglob("*.json"):
         try:
-            articles = json.loads(f.read_text(encoding="utf-8"))
-            if isinstance(articles, list) and articles:
-                result[tag] = articles
-        except Exception as e:
-            print_console(f"Erreur lecture {f.name} : {e}", level="warning")
+            data = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                _index_list(data)
+        except Exception:
+            pass
 
-    return result
+    for f in (project_root / "data" / "articles").rglob("*.json"):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                _index_list(data)
+        except Exception:
+            pass
 
+    return index
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def parse_date(date_str: str) -> datetime | None:
-    """Tente de parser une date dans plusieurs formats courants."""
     if not date_str:
         return None
-    # RFC 2822 : "Fri, 20 Feb 2026 13:06:25 +0100"
     try:
         dt = parsedate_to_datetime(date_str)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     except Exception:
         pass
-    # ISO 8601 strict
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(date_str[:len(fmt) + 5], fmt)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+            dt = datetime.strptime(date_str[:19], fmt)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
         except Exception:
             continue
     return None
 
 
-def filter_recent(articles: list, cutoff: datetime) -> list:
-    """Filtre les articles publiés après `cutoff`."""
-    recent = []
-    for a in articles:
-        dt = parse_date(a.get("Date de publication", ""))
-        if dt and dt >= cutoff:
-            recent.append((dt, a))
-    # Plus récents en premier
-    recent.sort(key=lambda x: x[0], reverse=True)
-    return [a for _, a in recent]
+def format_datetime(date_str: str) -> str:
+    dt = parse_date(date_str)
+    if dt:
+        return dt.strftime("%d/%m/%Y · %H:%M")
+    return date_str[:10] if date_str else ""
 
 
-def extract_title(article: dict) -> str:
-    """Extrait un titre depuis le champ Titre ou la première phrase du Résumé."""
-    titre = article.get("Titre", "").strip()
+def extract_title(article: dict, url: str = "") -> str:
+    titre = (article.get("Titre") or "").strip()
     if titre:
         return titre[:150]
-    resume = article.get("Résumé", "").strip()
-    # Première ligne non vide
-    for line in resume.split("\n"):
+    for line in (article.get("Résumé") or "").split("\n"):
         line = line.strip().lstrip("*_#").strip()
         if len(line) > 10:
             return line[:150]
-    return "Sans titre"
-
-
-def format_datetime(article: dict) -> tuple[str, str]:
-    """Retourne (date_label, heure_label) lisibles."""
-    dt = parse_date(article.get("Date de publication", ""))
-    if dt:
-        return dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M")
-    return article.get("Date de publication", "")[:10], ""
+    # Fallback : dernier segment de l'URL
+    return url.rstrip("/").split("/")[-1][:100] if url else "Sans titre"
 
 
 # ── Construction du Markdown ──────────────────────────────────────────────────
 
 def build_reading_notes_markdown(
-    articles_by_tag: dict[str, list],
+    annotated: list,
     today_str: str,
     today_iso: str,
-    hours: int,
 ) -> str:
-    total = sum(len(v) for v in articles_by_tag.values())
-    nb_tags = len(articles_by_tag)
+    # Grouper par tag (un article avec N tags apparaît dans N sections)
+    by_tag: dict[str, list] = defaultdict(list)
+    for entry in annotated:
+        tags = entry["tags"]
+        if tags:
+            for tag in tags:
+                by_tag[tag].append(entry)
+        else:
+            by_tag["Sans tag"].append(entry)
+
+    sorted_tags = sorted([t for t in by_tag if t != "Sans tag"], key=str.lower)
+    if "Sans tag" in by_tag:
+        sorted_tags.append("Sans tag")
+
+    total = len(annotated)
+    nb_tags = len(by_tag)
 
     lines = [
         "---",
-        f'title: "Notes de lecture WUDD.ai — {today_str}"',
+        'title: "Notes de lecture WUDD.ai"',
         f"date: {today_iso}",
-        f"période: Dernières {hours}h",
-        f"articles: {total}",
+        f"mis_à_jour: {today_str}",
+        f"annotations: {total}",
         f"tags: {nb_tags}",
         "---",
         "",
-        f"# Notes de lecture — {today_str}",
+        "# Notes de lecture",
         "",
-        f"> {total} articles · {nb_tags} tags · fenêtre {hours}h · généré par WUDD.ai",
+        f"> {total} article(s) annotés · {nb_tags} tag(s) · mis à jour le {today_str}",
         "",
         "## Sommaire",
         "",
     ]
 
-    # Table des matières
-    for tag in articles_by_tag:
+    for tag in sorted_tags:
         anchor = tag.lower().replace(" ", "-").replace("_", "-")
-        nb = len(articles_by_tag[tag])
-        lines.append(f"- [{tag}](#{anchor}) ({nb})")
+        lines.append(f"- [{tag}](#{anchor}) ({len(by_tag[tag])})")
     lines.append("")
 
-    # Sections par tag
-    for tag, articles in articles_by_tag.items():
+    for tag in sorted_tags:
         lines.append(f"## {tag}")
         lines.append("")
-        for a in articles:
-            date_label, heure_label = format_datetime(a)
-            titre = extract_title(a)
-            url = a.get("URL", "")
-            source = a.get("Sources", "")
+        entries = sorted(by_tag[tag], key=lambda e: e.get("updated_at", ""), reverse=True)
+        for entry in entries:
+            url = entry["url"]
+            notes = entry["notes"]
+            article = entry.get("article") or {}
+            source = article.get("Sources", "")
+            date_label = format_datetime(article.get("Date de publication", ""))
+            titre = extract_title(article, url)
 
-            # Ligne de référence : date · heure · source · [titre](url)
             meta_parts = []
             if date_label:
                 meta_parts.append(date_label)
-            if heure_label:
-                meta_parts.append(heure_label)
             if source:
                 meta_parts.append(f"*{source}*")
             meta = " · ".join(meta_parts)
 
-            if url:
-                lines.append(f"- {meta} — [{titre}]({url})")
-            else:
-                lines.append(f"- {meta} — {titre}")
+            lines.append(f"- {meta + ' — ' if meta else ''}[{titre}]({url})")
+            if notes:
+                lines.append(f"  > {notes}")
 
         lines.append("")
 
@@ -186,68 +187,78 @@ def build_reading_notes_markdown(
 
 # ── Point d'entrée ────────────────────────────────────────────────────────────
 
-def generate_reading_notes(hours: int = 24, dry_run: bool = False) -> None:
+def generate_reading_notes(dry_run: bool = False) -> None:
     config = get_config()
     config.setup_directories()
 
     now = datetime.now(timezone.utc)
     today_iso = now.strftime("%Y-%m-%d")
     today_str = now.strftime("%-d %B %Y")
-    cutoff = now - timedelta(hours=hours)
 
-    print_console(f"=== Notes de lecture {today_str} (fenêtre {hours}h) ===")
+    print_console("=== Notes de lecture ===")
 
-    # 1. Charger tous les fichiers keyword
-    all_keyword_articles = load_keyword_articles(PROJECT_ROOT)
-    print_console(f"{len(all_keyword_articles)} tags chargés")
+    # 1. Charger les annotations
+    annotations = load_annotations()
+    print_console(f"{len(annotations)} annotations chargées")
 
-    # 2. Filtrer les articles récents par tag
-    articles_by_tag: dict[str, list] = {}
-    for tag, articles in all_keyword_articles.items():
-        recent = filter_recent(articles, cutoff)
-        if recent:
-            articles_by_tag[tag] = recent
+    # 2. Garder uniquement celles avec note OU tags saisis
+    selected = {
+        url: ann for url, ann in annotations.items()
+        if ann.get("notes", "").strip() or ann.get("tags")
+    }
+    print_console(f"{len(selected)} annotations avec note ou tag")
 
-    # Trier les tags alphabétiquement
-    articles_by_tag = dict(sorted(articles_by_tag.items(), key=lambda x: x[0].lower()))
-
-    total = sum(len(v) for v in articles_by_tag.values())
-    print_console(f"{total} articles récents répartis sur {len(articles_by_tag)} tags")
-
-    if not articles_by_tag:
-        print_console("Aucun article dans la fenêtre temporelle — rapport annulé", level="warning")
+    if not selected:
+        print_console("Aucune annotation à exporter — rapport annulé", level="warning")
         sys.exit(0)
 
-    # 3. Construire le Markdown
+    # 3. Index URL → métadonnées article
+    print_console("Construction de l'index articles…")
+    article_index = build_article_index(PROJECT_ROOT)
+    print_console(f"{len(article_index)} articles indexés")
+
+    # 4. Assembler les entrées, triées par date de mise à jour décroissante
+    annotated = sorted(
+        [
+            {
+                "url": url,
+                "tags": [t for t in (ann.get("tags") or []) if t],
+                "notes": ann.get("notes", "").strip(),
+                "updated_at": ann.get("updated_at", ""),
+                "article": article_index.get(url, {}),
+            }
+            for url, ann in selected.items()
+        ],
+        key=lambda e: e["updated_at"],
+        reverse=True,
+    )
+
+    # 5. Construire le Markdown
     notes_md = build_reading_notes_markdown(
-        articles_by_tag=articles_by_tag,
+        annotated=annotated,
         today_str=today_str,
         today_iso=today_iso,
-        hours=hours,
     )
 
     if dry_run:
         print_console("=== MODE DRY-RUN — aperçu ===")
-        print(notes_md[:3000])
-        if len(notes_md) > 3000:
+        print(notes_md[:4000])
+        if len(notes_md) > 4000:
             print(f"\n[...tronqué — {len(notes_md)} caractères au total]")
         return
 
-    # 4. Sauvegarder
-    output_dir = PROJECT_ROOT / "rapports" / "markdown" / "_WUDD.AI_"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f"notes_lecture_{today_iso}.md"
-    output_file.write_text(notes_md, encoding="utf-8")
-    print_console(f"✓ Notes sauvegardées : {output_file}")
+    # 6. Sauvegarder — fichier fixe, toujours écrasé
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_FILE.write_text(notes_md, encoding="utf-8")
+    print_console(f"✓ Notes sauvegardées : {OUTPUT_FILE}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Génère les notes de lecture quotidiennes WUDD.ai")
-    parser.add_argument("--hours", type=int, default=24, help="Fenêtre temporelle en heures (défaut: 24)")
+    parser = argparse.ArgumentParser(description="Génère les notes de lecture personnelles WUDD.ai")
     parser.add_argument("--dry-run", action="store_true", help="Affiche sans sauvegarder")
     args = parser.parse_args()
 
-    generate_reading_notes(hours=args.hours, dry_run=args.dry_run)
+    generate_reading_notes(dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
