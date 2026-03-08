@@ -229,7 +229,12 @@ function AnnotationPanel({ annotation, onSave, onClose }) {
           Annuler
         </button>
         <button
-          onClick={() => { onSave({ notes, tags }); onClose() }}
+          onClick={() => {
+            const t = tagInput.trim()
+            const finalTags = t && !tags.includes(t) ? [...tags, t] : tags
+            onSave({ notes, tags: finalTags })
+            onClose()
+          }}
           className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
         >
           <Check size={10} /> Enregistrer
