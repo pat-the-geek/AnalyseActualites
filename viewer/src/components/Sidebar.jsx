@@ -39,7 +39,7 @@ export default function Sidebar({
 
   return (
     <aside className={[
-      'w-72 flex flex-col bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl border-r border-white/40 dark:border-slate-700/50 shrink-0',
+      'w-72 flex flex-col glass-sidebar border-r border-white/40 dark:border-white/[0.07] shrink-0',
       // Desktop : position normale dans le flux
       'md:relative md:translate-x-0 md:z-auto md:shadow-none',
       // Mobile : drawer fixe qui slide depuis la gauche

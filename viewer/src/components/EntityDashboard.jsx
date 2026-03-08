@@ -150,7 +150,7 @@ export default function EntityDashboard({ onClose, onEntitySearch }) {
         className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-start p-4 overflow-y-auto'}`}
         onClick={e => e.target === e.currentTarget && onClose()}
       >
-        <div className={`bg-slate-50 dark:bg-slate-900 shadow-2xl w-full border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
+        <div className={`glass-panel shadow-2xl w-full border border-white/45 dark:border-white/[0.09] overflow-hidden flex flex-col ${isMaximized ? '' : 'max-w-4xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
 
           {/* ── En-tête ── */}
           <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-t border-white/30 dark:border-slate-700/40 md:border-t-0 md:border-b shrink-0 order-last md:order-first" style={isMaximized ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' } : undefined}>

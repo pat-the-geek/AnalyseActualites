@@ -95,7 +95,7 @@ export default function ScriptConsolePanel({ onClose, onDone }) {
 
       {/* Fenêtre console — centrée desktop, bottom sheet mobile */}
       <div className="fixed inset-0 z-[71] flex items-end md:items-center justify-center md:p-4 pointer-events-none">
-        <div className="pointer-events-auto w-full md:max-w-2xl bg-slate-950 md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col border border-slate-700/80"
+        <div className="pointer-events-auto w-full md:max-w-2xl glass-dark md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col border border-white/[0.08]"
              style={{ maxHeight: '75vh' }}>
 
           {/* En-tête */}

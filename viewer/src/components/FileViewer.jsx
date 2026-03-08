@@ -400,7 +400,7 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
       {/* ── Dialog de confirmation suppression ── */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 p-6">
+          <div className="glass-panel rounded-2xl shadow-2xl w-full max-w-sm border border-white/45 dark:border-white/[0.09] p-6">
             <div className="flex items-start gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
                 <AlertTriangle size={16} className="text-red-600 dark:text-red-400" />

@@ -475,7 +475,7 @@ export default function ExportPanel({ onClose, files = [] }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+      <div className="w-full max-w-xl glass-panel rounded-2xl shadow-2xl border border-white/45 dark:border-white/[0.09] flex flex-col overflow-hidden max-h-[90vh]">
         {/* En-tête */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
           <div className="flex items-center gap-2">

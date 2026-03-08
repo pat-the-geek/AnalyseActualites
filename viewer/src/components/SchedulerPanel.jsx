@@ -80,7 +80,7 @@ export default function SchedulerPanel({ onClose }) {
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start justify-center pt-16 px-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-4xl max-h-[80vh] bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 flex flex-col overflow-hidden">
+      <div className="w-full max-w-4xl max-h-[80vh] glass-dark rounded-2xl shadow-2xl border border-white/[0.08] flex flex-col overflow-hidden">
 
         {/* ── En-tête ── */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-700/50 bg-slate-800/60 backdrop-blur-xl shrink-0">

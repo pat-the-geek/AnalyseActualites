@@ -461,7 +461,7 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* ── Barre de navigation — masquée sur mobile (bottom nav prend en charge) ── */}
-      <header className="hidden md:flex items-center gap-3 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/40 shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
+      <header className="hidden md:flex items-center gap-3 px-4 py-2.5 glass-nav border-b border-white/35 dark:border-white/[0.08] shrink-0" style={{ paddingTop: 'max(10px, env(safe-area-inset-top))' }}>
         {/* Bouton hamburger — mobile uniquement */}
         <button
           onClick={() => setSidebarOpen(v => !v)}
@@ -642,7 +642,7 @@ export default function App() {
 
       {/* ── Barre de navigation bas — mobile uniquement (Apple HIG: 5 tabs max, labels, verre dépoli) ── */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl backdrop-saturate-150 border-t border-white/40 dark:border-slate-700/40"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-nav border-t border-white/35 dark:border-white/[0.08]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-stretch h-[49px]">

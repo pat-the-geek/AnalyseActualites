@@ -1314,11 +1314,11 @@ export default function SettingsPanel({ onClose, theme, onThemeChange, rssStatus
       className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center ${isMaximized ? 'items-stretch' : 'items-stretch md:items-start md:pt-10 md:px-4 md:pb-4'}`}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className={`bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl shadow-2xl w-full border border-white/40 dark:border-slate-700/50 flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
+      <div className={`glass-panel shadow-2xl w-full border border-white/45 dark:border-white/[0.09] flex flex-col overflow-hidden ${isMaximized ? '' : 'md:max-w-5xl md:max-h-[88vh] md:rounded-2xl'}`}>
 
         {/* ── Navigation tabs — desktop : header / mobile : tab bar bas harmonisé ── */}
         <div
-          className="shrink-0 order-last md:order-first border-t border-white/40 dark:border-slate-700/40 bg-white/80 dark:bg-slate-900/85 backdrop-blur-xl backdrop-saturate-150 md:border-t-0 md:border-b md:bg-white/60 md:dark:bg-slate-800/60"
+          className="shrink-0 order-last md:order-first glass-nav border-t border-white/35 dark:border-white/[0.08] md:border-t-0 md:border-b"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
           {/* Desktop : barre d'en-tête avec titre + onglets pill + boutons */}

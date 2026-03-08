@@ -254,7 +254,7 @@ export default function TopArticlesPanel({ onClose }) {
       className={`fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm ${isMaximized ? 'items-stretch' : 'items-start justify-center p-4 overflow-y-auto'}`}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className={`flex flex-col bg-slate-50 dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden w-full ${isMaximized ? '' : 'max-w-5xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
+      <div className={`flex flex-col glass-panel shadow-2xl border border-white/45 dark:border-white/[0.09] overflow-hidden w-full ${isMaximized ? '' : 'max-w-5xl rounded-2xl my-4 max-h-[calc(100dvh-4rem)]'}`}>
 
         {/* ── En-tête ── */}
         <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0">
