@@ -6,7 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight, ChevronDown, MoreHorizontal } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight, ChevronDown, MoreHorizontal, MessageSquare } from 'lucide-react'
 import AlertsPanel from './components/AlertsPanel'
 import ExportPanel from './components/ExportPanel'
 import TopArticlesPanel from './components/TopArticlesPanel'
@@ -14,6 +14,7 @@ import SourceBiasPanel from './components/SourceBiasPanel'
 import ComparePanel from './components/ComparePanel'
 import EntityWatchPanel from './components/EntityWatchPanel'
 import ClusterView from './components/ClusterView'
+import ChatbotPanel from './components/ChatbotPanel'
 import wuddLogo from './assets/wudd-prism-floyd.svg'
 
 // Heures de passage du cron get-keyword-from-rss.py (Europe/Paris)
@@ -229,6 +230,7 @@ export default function App() {
   const [compareOpen, setCompareOpen]     = useState(false)
   const [watchOpen, setWatchOpen]         = useState(false)
   const [clusterOpen, setClusterOpen]     = useState(false)
+  const [chatOpen, setChatOpen]           = useState(false)
   const [outilsOpen, setOutilsOpen]       = useState(false)
   const outilsMenuRef                     = useRef(null)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
@@ -587,6 +589,16 @@ export default function App() {
         {/* ── Séparateur ── */}
         <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
 
+        {/* Chatbot IA */}
+        <button
+          onClick={() => setChatOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-green-50 dark:hover:bg-green-900/20 border border-slate-200 dark:border-slate-600 hover:border-green-300 dark:hover:border-green-700 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-green-700 dark:hover:text-green-400 transition-colors"
+          title="Chatbot IA — interrogez vos données et rapports"
+        >
+          <MessageSquare size={13} />
+          <span className="hidden xl:inline">Chatbot</span>
+        </button>
+
         {/* Menu déroulant Outils : Biais, Export, Clusters, Veille, Comparer */}
         <div ref={outilsMenuRef} className="relative shrink-0">
           <button
@@ -784,6 +796,15 @@ export default function App() {
         </div>
       </nav>
 
+      {/* ── Bouton flottant Chatbot — mobile ── */}
+      <button
+        onClick={() => setChatOpen(true)}
+        className="md:hidden fixed bottom-[calc(49px+env(safe-area-inset-bottom)+12px)] right-4 z-40 w-11 h-11 rounded-full bg-green-700 hover:bg-green-600 shadow-lg flex items-center justify-center text-white transition-colors"
+        title="Chatbot IA"
+      >
+        <MessageSquare size={18} />
+      </button>
+
       {/* ── Overlays ── */}
       {consoleOpen && (
         <ScriptConsolePanel onClose={() => setConsoleOpen(false)} onDone={refreshFiles} />
@@ -848,6 +869,9 @@ export default function App() {
       )}
       {compareOpen && (
         <ComparePanel onClose={() => setCompareOpen(false)} />
+      )}
+      {chatOpen && (
+        <ChatbotPanel onClose={() => setChatOpen(false)} onFileSaved={refreshFiles} />
       )}
       {entitySearch && (
         <EntitySearchModal
