@@ -329,7 +329,10 @@ class EurIAClient:
             f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
             f"ne donne que le résumé, sans commentaire ni remarque : {text_truncated}"
         )
-        return self.ask(prompt, timeout=timeout)
+        result = self.ask(prompt, timeout=timeout)
+        # Supprimer le préfixe de titre Markdown que certains modèles ajoutent (ex: "# Résumé\n")
+        result = re.sub(r'^#{1,3}\s*[Rr]é[sc]?umé\s*[:\-]?\s*\n?', '', result).strip()
+        return result
     
     def generate_entities(
         self,
@@ -519,7 +522,8 @@ class ClaudeClient:
             max_attempts: Nombre maximal de tentatives
             timeout     : Timeout en secondes
             backoff_factor: Facteur de backoff exponentiel
-            max_tokens  : Nombre maximal de tokens en sortie (obligatoire pour Claude)
+            max_tokens  : Nombre maximal de tokens en sortie (obligatoire pour Claude).
+                          Au-delà de 8192, le beta extended output est activé automatiquement.
 
         Returns:
             Réponse texte nettoyée.
@@ -539,14 +543,19 @@ class ClaudeClient:
         }
         last_error = None
 
+        # Activer le beta extended output si max_tokens > 8192
+        headers = dict(self.headers)
+        if max_tokens > 8192:
+            headers["anthropic-beta"] = "output-128k-2025-02-19"
+
         for attempt in range(max_attempts):
             try:
                 default_logger.info(
                     f"[Claude/{active_model}] Envoi prompt (tentative {attempt + 1}/{max_attempts}, "
-                    f"timeout={timeout}s)"
+                    f"timeout={timeout}s, max_tokens={max_tokens})"
                 )
                 response = requests.post(
-                    CLAUDE_API_URL, json=data, headers=self.headers, timeout=timeout
+                    CLAUDE_API_URL, json=data, headers=headers, timeout=timeout
                 )
                 response.raise_for_status()
                 json_data = response.json()
@@ -604,7 +613,10 @@ class ClaudeClient:
             f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
             f"ne donne que le résumé, sans commentaire ni remarque : {text_truncated}"
         )
-        return self.ask(prompt, model=self.model_batch, timeout=timeout, max_tokens=512)
+        result = self.ask(prompt, model=self.model_batch, timeout=timeout, max_tokens=512)
+        # Supprimer le préfixe de titre Markdown que certains modèles ajoutent (ex: "# Résumé\n")
+        result = re.sub(r'^#{1,3}\s*[Rr]é[sc]?umé\s*[:\-]?\s*\n?', '', result).strip()
+        return result
 
     def generate_entities(self, resume: str, timeout: int = 60) -> dict:
         """Extraction NER — utilise Haiku (tâche batch)."""
@@ -683,7 +695,7 @@ File contents:
 {json_content}
 ----- END FILE CONTENTS -----
 """
-        return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=4096)
+        return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=16000)
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────

@@ -294,7 +294,7 @@ def generate_48h_report(dry_run: bool = False) -> None:
     print_console("Génération du rapport IA (timeout 300s)...")
 
     try:
-        report_content = api_client.ask(prompt, max_attempts=3, timeout=300)
+        report_content = api_client.ask(prompt, max_attempts=3, timeout=300, max_tokens=16000)
     except RuntimeError as e:
         print_console(f"Échec de la génération du rapport : {e}", level="error")
         sys.exit(1)

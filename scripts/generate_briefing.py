@@ -341,7 +341,7 @@ def generate_ai_synthesis(
         from utils.api_client import get_ai_client
         client = get_ai_client()
         prompt = _build_ai_prompt(period_label, articles, top_entities, alerts)
-        return client.ask(prompt, timeout=120) or ""
+        return client.ask(prompt, timeout=120, max_tokens=8192) or ""
     except Exception as exc:
         default_logger.warning(f"Synthèse IA ignorée : {exc}")
         return ""

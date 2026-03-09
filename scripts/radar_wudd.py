@@ -137,7 +137,7 @@ def call_api(client, corpus_t0, corpus_t1, t0_label, t1_label, t0_count, t1_coun
         "Format exact : [{\"theme\":\"...\",\"freqT0\":0.0,\"freqT1\":0.0,\"vel\":0.0,\"art\":0}]"
     )
 
-    raw = client.ask(prompt, max_attempts=3, timeout=120, max_tokens=8192)
+    raw = client.ask(prompt, max_attempts=3, timeout=120, max_tokens=16000)
 
     # Supprimer les blocs de réflexion <think>…</think> de Qwen3
     import re
