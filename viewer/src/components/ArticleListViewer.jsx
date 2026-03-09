@@ -1,9 +1,9 @@
-import { useMemo, useState, useRef, useCallback } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
   Download, LayoutGrid, AlignLeft, Maximize2, Clock,
-  Star, Eye, Pencil, Check,
+  Star, Eye, Pencil, Check, RefreshCw,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
@@ -245,20 +245,75 @@ function AnnotationPanel({ annotation, onSave, onClose }) {
   )
 }
 
-/** Carte article complète (vue grille). */
-function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate }) {
-  const [expanded, setExpanded] = useState(index < 3)
-  const [lightbox, setLightbox] = useState(false)
-  const [noteOpen, setNoteOpen] = useState(false)
-  const titre = article['Titre']?.trim() || ''
-  const resume = article['Résumé'] ?? ''
+/** Hook : marque l'article comme lu quand il quitte le viewport après y avoir été visible. */
+function useAutoRead(articleUrl, isRead, onAnnotate) {
+  const ref = useRef(null)
+  const wasVisible = useRef(false)
+
+  useEffect(() => {
+    if (!articleUrl || !onAnnotate || isRead) return
+    const el = ref.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        wasVisible.current = true
+      } else if (wasVisible.current && !isRead) {
+        onAnnotate(articleUrl, { is_read: true })
+        observer.disconnect()
+      }
+    }, { threshold: 0.2 })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [articleUrl, isRead, onAnnotate])
+
+  return ref
+}
+
+/** Modal de choix du fournisseur IA pour rafraîchir un résumé. */
+function IAPickerModal({ providers, onPick, onClose }) {
+  const LABELS = { euria: 'EurIA — Infomaniak', claude: 'Claude — Anthropic' }
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-xs">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-1">Rafraîchir le résumé</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Choisir le fournisseur IA :</p>
+        <div className="flex flex-col gap-2">
+          {providers.map(p => (
+            <button key={p} onClick={() => onPick(p)}
+              className="w-full px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+              {LABELS[p] ?? p}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+          Annuler
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Carte article complète (vue grille) — style Liquid Glass. */
+function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders }) {
+  const [expanded, setExpanded]           = useState(index < 3)
+  const [lightbox, setLightbox]           = useState(false)
+  const [noteOpen, setNoteOpen]           = useState(false)
+  const [refreshing, setRefreshing]       = useState(false)
+  const [refreshResume, setRefreshResume] = useState(null) // résumé mis à jour localement
+  const [showIAPicker, setShowIAPicker]   = useState(false)
+
+  const titre    = article['Titre']?.trim() || ''
+  const resume   = refreshResume ?? article['Résumé'] ?? ''
   const entities = article.entities ?? null
   const hasEntities = entities && Object.keys(entities).length > 0
-  const imgUrl = firstImage(article['Images'])
-  const date = formatDate(article['Date de publication'])
-  const time = formatTime(article['Date de publication'])
-  const count = useMemo(() => entityCount(article), [article])
-  const url = article['URL'] ?? ''
+  const imgUrl   = firstImage(article['Images'])
+  const date     = formatDate(article['Date de publication'])
+  const time     = formatTime(article['Date de publication'])
+  const count    = useMemo(() => entityCount(article), [article])
+  const url      = article['URL'] ?? ''
 
   const isImportant = annotation?.is_important ?? false
   const isRead      = annotation?.is_read ?? false
@@ -269,18 +324,51 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
     if (onAnnotate && url) onAnnotate(url, { [field]: !(annotation?.[field] ?? false) })
   }, [onAnnotate, url, annotation])
 
+  // Auto-marquage lu au scroll
+  const cardRef = useAutoRead(url, isRead, onAnnotate)
+
+  const handleRefreshResume = useCallback(async (provider) => {
+    if (!filePath || !url) return
+    setShowIAPicker(false)
+    setRefreshing(true)
+    try {
+      const r = await fetch('/api/article/refresh-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: filePath, article_url: url, provider }),
+      })
+      const d = await r.json()
+      if (d.ok) setRefreshResume(d.resume)
+    } catch { /* silence */ } finally {
+      setRefreshing(false)
+    }
+  }, [filePath, url])
+
+  const triggerRefresh = useCallback(() => {
+    if (!availableProviders || availableProviders.length === 0) return
+    if (availableProviders.length === 1) {
+      handleRefreshResume(availableProviders[0])
+    } else {
+      setShowIAPicker(true)
+    }
+  }, [availableProviders, handleRefreshResume])
+
   return (
-    <article className={`bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border border-white/50 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow ${isRead ? 'opacity-60' : ''}`}>
+    <article ref={cardRef} className={`bg-white/60 dark:bg-slate-800/50 backdrop-blur-2xl border border-white/70 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/8 dark:shadow-black/30 hover:shadow-2xl hover:shadow-black/12 dark:hover:shadow-black/40 transition-all duration-300 ${isRead ? 'opacity-55' : ''}`}>
+      {showIAPicker && (
+        <IAPickerModal providers={availableProviders} onPick={handleRefreshResume} onClose={() => setShowIAPicker(false)} />
+      )}
       {imgUrl && (
         <button
           type="button"
           onClick={() => setLightbox(true)}
-          className="group relative w-full h-32 sm:h-40 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
+          className="group relative w-full h-44 sm:h-52 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
           title="Agrandir l'image"
         >
-          <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy" onError={e => { e.currentTarget.closest('button').style.display = 'none' }} />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/30" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
             <Maximize2 size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
           </div>
         </button>
@@ -291,8 +379,9 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            {/* Source + date en pill frosted */}
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="inline-flex items-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-black/5 dark:bg-white/10 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
                 {article['Sources'] ?? '—'}
               </span>
               {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
@@ -305,43 +394,53 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
             </div>
             <SentimentBadge article={article} />
             {titre && (
-              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-3">
+              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-tight tracking-tight">
                 {titre}
               </h3>
             )}
           </div>
-          {/* Boutons d'action : annotation + lien externe */}
-          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          {/* Boutons d'action */}
+          <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
             {onAnnotate && url && (
               <>
                 <button
                   onClick={() => toggle('is_important')}
                   title={isImportant ? 'Retirer des importants' : 'Marquer comme important'}
-                  className={`p-1.5 rounded-lg transition-colors ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400'}`}
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}
                 >
-                  <Star size={13} fill={isImportant ? 'currentColor' : 'none'} />
+                  <Star size={14} fill={isImportant ? 'currentColor' : 'none'} />
                 </button>
                 <button
                   onClick={() => toggle('is_read')}
                   title={isRead ? 'Marquer comme non lu' : 'Marquer comme lu'}
-                  className={`p-1.5 rounded-lg transition-colors ${isRead ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400'}`}
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isRead ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-700/50'}`}
                 >
-                  <Eye size={13} />
+                  <Eye size={14} />
                 </button>
                 <button
                   onClick={() => setNoteOpen(v => !v)}
                   title="Notes et tags"
-                  className={`p-1.5 rounded-lg transition-colors ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400'}`}
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}
                 >
-                  <Pencil size={13} />
+                  <Pencil size={14} />
                 </button>
               </>
             )}
-            {resume && <TTSButton text={resume} size={13} />}
+            {filePath && availableProviders?.length > 0 && (
+              <button
+                onClick={triggerRefresh}
+                disabled={refreshing}
+                title="Rafraîchir le résumé avec l'IA"
+                className="p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 disabled:opacity-40"
+              >
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+              </button>
+            )}
+            {resume && <TTSButton text={resume} size={14} />}
             {article['URL'] && (
               <a href={article['URL']} target="_blank" rel="noopener noreferrer"
-                className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors" title="Ouvrir l'article">
-                <ExternalLink size={13} />
+                className="p-2 rounded-xl min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-colors" title="Ouvrir l'article">
+                <ExternalLink size={14} />
               </a>
             )}
           </div>
@@ -358,7 +457,8 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
           </div>
         )}
 
-        <div className={`text-base overflow-hidden transition-all ${expanded ? '' : 'max-h-28'}`}>
+        {/* Résumé */}
+        <div className={`text-sm leading-relaxed overflow-hidden transition-all ${expanded ? '' : 'max-h-28'}`}>
           {hasEntities
             ? <EntityHighlighter text={resume} entities={entities} onEntityClick={onEntityClick} />
             : <SearchHighlighter text={resume} query={highlight} />
@@ -450,7 +550,7 @@ function TimelineItem({ article }) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function ArticleListViewer({ content, annotations, onAnnotate }) {
+export default function ArticleListViewer({ content, annotations, onAnnotate, filePath, availableProviders }) {
   const [searchQuery, setSearchQuery]         = useState('')
   const [sortBy, setSortBy]                   = useState('date-desc')
   const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'timeline'
@@ -816,6 +916,8 @@ export default function ArticleListViewer({ content, annotations, onAnnotate }) 
               onEntityClick={(type, value) => setSelectedEntity({ type, value })}
               annotation={annotations?.[article['URL']] ?? null}
               onAnnotate={onAnnotate}
+              filePath={filePath}
+              availableProviders={availableProviders}
             />
           ))}
         </div>

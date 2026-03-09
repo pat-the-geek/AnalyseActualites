@@ -339,6 +339,15 @@ export default function App() {
       .catch(() => {})
   }, [])
 
+  // ── Fournisseurs IA disponibles ──────────────────────────────────────────────
+  const [availableProviders, setAvailableProviders] = useState([])
+  useEffect(() => {
+    fetch('/api/ai-providers')
+      .then(r => r.ok ? r.json() : { providers: [] })
+      .then(d => setAvailableProviders(d.providers ?? []))
+      .catch(() => {})
+  }, [])
+
   // Callback : crée ou met à jour l'annotation d'un article (optimistic update)
   const handleAnnotate = useCallback(async (url, changes) => {
     if (!url) return
@@ -692,6 +701,7 @@ export default function App() {
           annotations={annotations}
           onAnnotate={handleAnnotate}
           sidebarOpen={sidebarOpen}
+          availableProviders={availableProviders}
         />
       </div>
 
@@ -772,10 +782,6 @@ export default function App() {
               <Settings size={24} strokeWidth={settingsOpen ? 2.2 : 1.8} />
               {rssStatus?.running ? (
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500" />
-              ) : (rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null) ? (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
               ) : null}
             </span>
             <span className="text-[10px] font-medium leading-none">Réglages</span>
@@ -821,7 +827,12 @@ export default function App() {
         />
       )}
       {topOpen && (
-        <TopArticlesPanel onClose={() => setTopOpen(false)} />
+        <TopArticlesPanel
+          onClose={() => setTopOpen(false)}
+          annotations={annotations}
+          onAnnotate={handleAnnotate}
+          availableProviders={availableProviders}
+        />
       )}
       {biasOpen && (
         <SourceBiasPanel onClose={() => setBiasOpen(false)} />

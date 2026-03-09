@@ -3,7 +3,7 @@
  * Style : cartes article identiques à la vue JSON, grille 2 colonnes, modal large.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { X, Star, ExternalLink, RefreshCw, Clock, Tag, ChevronDown, ChevronUp, Maximize2, PlayCircle, Pause, Volume2 } from 'lucide-react'
+import { X, Star, ExternalLink, RefreshCw, Clock, Tag, ChevronDown, ChevronUp, Maximize2, PlayCircle, Pause, Volume2, Eye, Pencil, Check } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
 import TTSButton, { stopAll } from './TTSButton'
@@ -186,37 +186,178 @@ function PodcastBtn({ playing, currentIdx, total, onStart, onStop, disabled, mob
   )
 }
 
-// ── Carte article ─────────────────────────────────────────────────────────────
+// ── Hook auto-read ────────────────────────────────────────────────────────────
 
-function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
-  const [expanded, setExpanded] = useState(rank <= 3)
-  const [lightbox, setLightbox] = useState(false)
+function useAutoRead(articleUrl, isRead, onAnnotate) {
+  const ref = useRef(null)
+  const wasVisible = useRef(false)
 
-  const resume   = article['Résumé'] ?? ''
-  const entities = article.entities ?? null
-  const hasEntities = entities && Object.keys(entities).length > 0
-  const count    = useMemo(() => entityCount(article), [article])
-  const imgUrl   = firstImage(article['Images'])
-  const date     = formatDate(article['Date de publication'])
-  const time     = formatTime(article['Date de publication'])
-  const url      = article['URL'] || article['url'] || '#'
-  const titre    = article['Titre']?.trim() || ''
+  useEffect(() => {
+    if (!articleUrl || !onAnnotate || isRead) return
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        wasVisible.current = true
+      } else if (wasVisible.current && !isRead) {
+        onAnnotate(articleUrl, { is_read: true })
+        observer.disconnect()
+      }
+    }, { threshold: 0.2 })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [articleUrl, isRead, onAnnotate])
+
+  return ref
+}
+
+// ── Panneau annotation ────────────────────────────────────────────────────────
+
+function AnnotationPanel({ annotation, onSave, onClose }) {
+  const [notes, setNotes]       = useState(annotation?.notes ?? '')
+  const [tagInput, setTagInput] = useState('')
+  const [tags, setTags]         = useState(annotation?.tags ?? [])
+
+  const addTag = () => {
+    const t = tagInput.trim()
+    if (t && !tags.includes(t) && tags.length < 20) { setTags(prev => [...prev, t]); setTagInput('') }
+  }
+  const removeTag = t => setTags(prev => prev.filter(x => x !== t))
 
   return (
-    <article className={`bg-white/80 dark:bg-slate-800/60 backdrop-blur-sm border rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all flex flex-col ${
+    <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60">
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.map(t => (
+          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 dark:bg-amber-800/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+            {t}
+            <button onClick={() => removeTag(t)} className="hover:text-red-500 transition-colors"><X size={9} /></button>
+          </span>
+        ))}
+        <div className="flex items-center gap-1">
+          <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+            placeholder="+ tag"
+            className="text-[11px] px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400 w-16" />
+        </div>
+      </div>
+      <textarea value={notes} onChange={e => setNotes(e.target.value)}
+        placeholder="Notes personnelles…" maxLength={5000} rows={2}
+        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none" />
+      <div className="flex items-center justify-end gap-2 mt-1.5">
+        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">Annuler</button>
+        <button onClick={() => { const t = tagInput.trim(); const finalTags = t && !tags.includes(t) ? [...tags, t] : tags; onSave({ notes, tags: finalTags }); onClose() }}
+          className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors">
+          <Check size={10} /> Enregistrer
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal choix fournisseur IA ────────────────────────────────────────────────
+
+function IAPickerModal({ providers, onPick, onClose }) {
+  const LABELS = { euria: 'EurIA — Infomaniak', claude: 'Claude — Anthropic' }
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-xs">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-1">Rafraîchir le résumé</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Choisir le fournisseur IA :</p>
+        <div className="flex flex-col gap-2">
+          {providers.map(p => (
+            <button key={p} onClick={() => onPick(p)}
+              className="w-full px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+              {LABELS[p] ?? p}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">Annuler</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Carte article ─────────────────────────────────────────────────────────────
+
+function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast, annotation, onAnnotate, filePath, availableProviders }) {
+  const [expanded, setExpanded]           = useState(rank <= 3)
+  const [lightbox, setLightbox]           = useState(false)
+  const [noteOpen, setNoteOpen]           = useState(false)
+  const [refreshing, setRefreshing]       = useState(false)
+  const [refreshResume, setRefreshResume] = useState(null)
+  const [showIAPicker, setShowIAPicker]   = useState(false)
+
+  const resume      = refreshResume ?? article['Résumé'] ?? ''
+  const entities    = article.entities ?? null
+  const hasEntities = entities && Object.keys(entities).length > 0
+  const count       = useMemo(() => entityCount(article), [article])
+  const imgUrl      = firstImage(article['Images'])
+  const date        = formatDate(article['Date de publication'])
+  const time        = formatTime(article['Date de publication'])
+  const url         = article['URL'] || article['url'] || '#'
+  const titre       = article['Titre']?.trim() || ''
+
+  const isImportant = annotation?.is_important ?? false
+  const isRead      = annotation?.is_read ?? false
+  const tags        = annotation?.tags ?? []
+  const hasNote     = !!(annotation?.notes?.trim())
+
+  const toggle = useCallback((field) => {
+    if (onAnnotate && url && url !== '#') onAnnotate(url, { [field]: !(annotation?.[field] ?? false) })
+  }, [onAnnotate, url, annotation])
+
+  const cardRef = useAutoRead(url !== '#' ? url : null, isRead, onAnnotate)
+
+  const handleRefreshResume = useCallback(async (provider) => {
+    if (!filePath || !url || url === '#') return
+    setShowIAPicker(false)
+    setRefreshing(true)
+    try {
+      const r = await fetch('/api/article/refresh-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: filePath, article_url: url, provider }),
+      })
+      const d = await r.json()
+      if (d.ok) setRefreshResume(d.resume)
+    } catch { /* silence */ } finally {
+      setRefreshing(false)
+    }
+  }, [filePath, url])
+
+  const triggerRefresh = useCallback(() => {
+    if (!availableProviders || availableProviders.length === 0) return
+    if (availableProviders.length === 1) handleRefreshResume(availableProviders[0])
+    else setShowIAPicker(true)
+  }, [availableProviders, handleRefreshResume])
+
+  return (
+    <article ref={cardRef} className={`bg-white/60 dark:bg-slate-800/50 backdrop-blur-2xl border rounded-3xl overflow-hidden shadow-xl shadow-black/8 dark:shadow-black/30 hover:shadow-2xl hover:shadow-black/12 dark:hover:shadow-black/40 transition-all duration-300 flex flex-col ${
       isCurrentPodcast
-        ? 'border-violet-400 dark:border-violet-500 ring-2 ring-violet-300 dark:ring-violet-700'
-        : 'border-white/50 dark:border-slate-700/60'
-    }`}>
+        ? 'border-violet-400 dark:border-violet-500 ring-2 ring-violet-300/50 dark:ring-violet-700/50'
+        : 'border-white/70 dark:border-white/10'
+    } ${isRead ? 'opacity-55' : ''}`}>
+
+      {showIAPicker && (
+        <IAPickerModal providers={availableProviders} onPick={handleRefreshResume} onClose={() => setShowIAPicker(false)} />
+      )}
 
       {imgUrl && (
         <button type="button" onClick={() => setLightbox(true)}
-          className="group relative w-full h-36 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left shrink-0"
+          className="group relative w-full h-44 sm:h-52 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left shrink-0"
           title="Agrandir l'image">
+          {/* Badge rang en haut-gauche */}
+          <span className={`absolute top-2 left-2 z-10 flex items-center justify-center rounded-full font-bold text-white shadow-lg text-[11px] w-7 h-7 ${
+            rank === 1 ? 'bg-amber-400' : rank === 2 ? 'bg-slate-400' : rank === 3 ? 'bg-orange-400' : 'bg-slate-600/70'
+          }`}>
+            {rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}
+          </span>
           <img src={imgUrl} alt={titre || article['Sources'] || ''}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy" onError={e => { e.currentTarget.closest('button').style.display = 'none' }} />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/30" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
             <Maximize2 size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
           </div>
         </button>
@@ -227,29 +368,27 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
 
       <div className="p-5 flex flex-col flex-1">
 
-        {/* Rang */}
-        <div className="flex justify-center mb-3">
-          <div className={`flex items-center justify-center rounded-full font-bold text-white shadow-md
-            ${rank === 1 ? 'w-12 h-12 text-xl bg-amber-400 ring-4 ring-amber-200 dark:ring-amber-800' :
-              rank === 2 ? 'w-10 h-10 text-lg bg-slate-400 ring-4 ring-slate-200 dark:ring-slate-700' :
-              rank === 3 ? 'w-10 h-10 text-lg bg-orange-400 ring-4 ring-orange-200 dark:ring-orange-800' :
-                           'w-8 h-8 text-sm bg-amber-500/70'}`}>
-            {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
+        {/* Badge rang quand pas d'image */}
+        {!imgUrl && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className={`flex items-center justify-center rounded-full font-bold text-white shadow-md text-xs w-8 h-8 shrink-0 ${
+              rank === 1 ? 'bg-amber-400 ring-2 ring-amber-200 dark:ring-amber-800' :
+              rank === 2 ? 'bg-slate-400 ring-2 ring-slate-200 dark:ring-slate-700' :
+              rank === 3 ? 'bg-orange-400 ring-2 ring-orange-200 dark:ring-orange-800' : 'bg-slate-500/70'
+            }`}>
+              {rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}
+            </span>
           </div>
-        </div>
+        )}
 
-        {/* En-tête : meta + lien */}
-        <div className="flex items-start justify-between gap-2 mb-2">
+        {/* En-tête */}
+        <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="inline-flex items-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-black/5 dark:bg-white/10 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
                 {article['Sources'] ?? '—'}
               </span>
-              {date && (
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                  {date}{time ? <> · <span>{time}</span></> : ''}
-                </span>
-              )}
+              {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
               {hasEntities && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
                   <Tag size={9} />{count} entités
@@ -259,19 +398,58 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
             </div>
             <SentimentBadge article={article} />
             {titre && (
-              <h3 className="mt-1.5 text-base font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-3">
+              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-tight tracking-tight">
                 {titre}
               </h3>
             )}
           </div>
-          {url && url !== '#' && (
-            <a href={url} target="_blank" rel="noopener noreferrer"
-              className="shrink-0 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5"
-              title="Ouvrir l'article">
-              <ExternalLink size={14} />
-            </a>
-          )}
+
+          {/* Boutons d'action */}
+          <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+            {onAnnotate && url && url !== '#' && (
+              <>
+                <button onClick={() => toggle('is_important')}
+                  title={isImportant ? 'Retirer des importants' : 'Marquer comme important'}
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
+                  <Star size={14} fill={isImportant ? 'currentColor' : 'none'} />
+                </button>
+                <button onClick={() => toggle('is_read')}
+                  title={isRead ? 'Marquer comme non lu' : 'Marquer comme lu'}
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isRead ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-700/50'}`}>
+                  <Eye size={14} />
+                </button>
+                <button onClick={() => setNoteOpen(v => !v)}
+                  title="Notes et tags"
+                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
+                  <Pencil size={14} />
+                </button>
+              </>
+            )}
+            {filePath && availableProviders?.length > 0 && (
+              <button onClick={triggerRefresh} disabled={refreshing}
+                title="Rafraîchir le résumé avec l'IA"
+                className="p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 disabled:opacity-40">
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+              </button>
+            )}
+            {resume && <TTSButton text={resume || titre} size={14} />}
+            {url && url !== '#' && (
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                className="p-2 rounded-xl min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-colors" title="Ouvrir l'article">
+                <ExternalLink size={14} />
+              </a>
+            )}
+          </div>
         </div>
+
+        {/* Tags inline */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {tags.map(t => (
+              <span key={t} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">{t}</span>
+            ))}
+          </div>
+        )}
 
         {/* Résumé */}
         <div className={`text-sm leading-relaxed overflow-hidden transition-all ${expanded ? '' : 'max-h-24'}`}>
@@ -287,36 +465,33 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
           </button>
         )}
 
-        {/* Barre d'actions : TTS + score */}
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50 flex items-center gap-2">
-          {/* Bouton TTS individuel avec label */}
-          <TTSButton text={resume || titre} size={13} className="shrink-0" />
-          <span className="text-[10px] text-slate-400 dark:text-slate-500">Écouter</span>
-          {/* Indicateur podcast */}
+        {/* Panneau notes */}
+        {noteOpen && onAnnotate && url && url !== '#' && (
+          <AnnotationPanel annotation={annotation} onSave={changes => onAnnotate(url, changes)} onClose={() => setNoteOpen(false)} />
+        )}
+        {!noteOpen && hasNote && (
+          <div className="mt-2 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60">
+            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed line-clamp-2">{annotation.notes}</p>
+          </div>
+        )}
+
+        {/* Barre score + podcast */}
+        <div className="mt-3 pt-3 border-t border-white/40 dark:border-white/5 flex items-center gap-2">
           {isCurrentPodcast && (
-            <span className="ml-auto flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 font-medium">
-              <Volume2 size={11} className="animate-pulse" />
-              En cours…
+            <span className="flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 font-medium">
+              <Volume2 size={11} className="animate-pulse" />En cours…
             </span>
           )}
-          {/* Score */}
-          {!isCurrentPodcast && (
-            <div className="ml-auto flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">Score</span>
-              <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${
-                    (article.score_pertinence ?? 0) >= 70 ? 'bg-emerald-500' :
-                    (article.score_pertinence ?? 0) >= 40 ? 'bg-amber-500' : 'bg-slate-400'
-                  }`}
-                  style={{ width: `${article.score_pertinence ?? 0}%` }}
-                />
-              </div>
-              <span className="text-xs tabular-nums font-semibold text-slate-500 dark:text-slate-400 shrink-0">
-                {article.score_pertinence ?? 0}
-              </span>
+          <div className="ml-auto flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">Score</span>
+            <div className="flex-1 h-1.5 bg-slate-200/60 dark:bg-slate-700/50 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${
+                (article.score_pertinence ?? 0) >= 70 ? 'bg-emerald-500' :
+                (article.score_pertinence ?? 0) >= 40 ? 'bg-amber-500' : 'bg-slate-400'
+              }`} style={{ width: `${article.score_pertinence ?? 0}%` }} />
             </div>
-          )}
+            <span className="text-xs tabular-nums font-semibold text-slate-500 dark:text-slate-400 shrink-0">{article.score_pertinence ?? 0}</span>
+          </div>
         </div>
       </div>
     </article>
@@ -325,7 +500,7 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast }) {
 
 // ── Panel principal ───────────────────────────────────────────────────────────
 
-export default function TopArticlesPanel({ onClose }) {
+export default function TopArticlesPanel({ onClose, annotations = {}, onAnnotate, availableProviders = [] }) {
   const [articles, setArticles] = useState([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(null)
@@ -443,15 +618,21 @@ export default function TopArticlesPanel({ onClose }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {articles.map((article, i) => (
-                <ArticleCard
-                  key={article['URL'] ?? article['url'] ?? i}
-                  article={article}
-                  rank={i + 1}
-                  isCurrentPodcast={playing && currentIdx === i}
-                  onEntityClick={(type, value) => setSelectedEntity({ type, value })}
-                />
-              ))}
+              {articles.map((article, i) => {
+                const artUrl = article['URL'] ?? article['url'] ?? ''
+                return (
+                  <ArticleCard
+                    key={artUrl || i}
+                    article={article}
+                    rank={i + 1}
+                    isCurrentPodcast={playing && currentIdx === i}
+                    onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                    annotation={artUrl ? annotations[artUrl] : undefined}
+                    onAnnotate={onAnnotate}
+                    availableProviders={availableProviders}
+                  />
+                )
+              })}
             </div>
           )}
         </div>

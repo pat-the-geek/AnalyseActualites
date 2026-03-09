@@ -1,7 +1,10 @@
-"""Module client API pour l'interaction avec EurIA d'Infomaniak.
+"""Module client API pour l'interaction avec EurIA (Infomaniak) et Claude (Anthropic).
 
-Fournit une interface robuste pour envoyer des prompts à l'API EurIA
-avec retry automatique et gestion d'erreurs avancée.
+Fournit :
+- EurIAClient  : client pour l'API EurIA/Qwen3 d'Infomaniak
+- ClaudeClient : client pour l'API Anthropic Claude
+- FallbackClient : wrapper qui essaie le client primaire, puis le secondaire en cas d'échec
+- get_ai_client() : factory qui retourne le(s) client(s) selon AI_PROVIDER dans .env
 """
 
 import json
@@ -698,16 +701,82 @@ File contents:
         return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=16000)
 
 
+# ── Fallback Client ───────────────────────────────────────────────────────────
+
+class FallbackClient:
+    """Client IA avec fallback automatique : tente le client primaire,
+    puis le secondaire si le primaire échoue avec une RuntimeError.
+
+    Les deux clients doivent exposer les mêmes méthodes publiques :
+    generate_summary, generate_entities, generate_sentiment,
+    synthesize_topic, generate_report.
+    """
+
+    def __init__(self, primary, secondary):
+        self._primary = primary
+        self._secondary = secondary
+        _name_p = type(primary).__name__
+        _name_s = type(secondary).__name__
+        default_logger.info(f"[FallbackClient] primaire={_name_p}, secondaire={_name_s}")
+
+    def _call(self, method_name: str, *args, **kwargs):
+        try:
+            result = getattr(self._primary, method_name)(*args, **kwargs)
+            return result
+        except (RuntimeError, Exception) as exc:
+            default_logger.warning(
+                f"[FallbackClient] {type(self._primary).__name__}.{method_name} "
+                f"échoué ({exc}) — bascule sur {type(self._secondary).__name__}"
+            )
+            return getattr(self._secondary, method_name)(*args, **kwargs)
+
+    def generate_summary(self, *args, **kwargs):
+        return self._call("generate_summary", *args, **kwargs)
+
+    def generate_entities(self, *args, **kwargs):
+        return self._call("generate_entities", *args, **kwargs)
+
+    def generate_sentiment(self, *args, **kwargs):
+        return self._call("generate_sentiment", *args, **kwargs)
+
+    def synthesize_topic(self, *args, **kwargs):
+        return self._call("synthesize_topic", *args, **kwargs)
+
+    def generate_report(self, *args, **kwargs):
+        return self._call("generate_report", *args, **kwargs)
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
-def get_ai_client():
-    """Retourne le client IA actif selon AI_PROVIDER dans .env.
+def get_ai_client(fallback: bool = True):
+    """Retourne le client IA selon AI_PROVIDER dans .env.
 
+    Si fallback=True (défaut) et que les deux IAs sont configurées,
+    retourne un FallbackClient (primaire → secondaire sur erreur).
+
+    Args:
+        fallback: Si True, active le fallback automatique vers l'autre IA.
     Returns:
+        FallbackClient si les deux IA sont configurées et fallback=True,
         EurIAClient si AI_PROVIDER=euria (ou non défini),
         ClaudeClient si AI_PROVIDER=claude.
     """
-    provider = get_config().ai_provider
+    config = get_config()
+    provider = config.ai_provider
+
+    # Vérifier la disponibilité des credentials
+    import os as _os
+    euria_ok = bool(_os.environ.get("URL", "").strip() and _os.environ.get("bearer", "").strip())
+    claude_ok = bool(_os.environ.get("ANTHROPIC_API_KEY", "").strip())
+
+    if fallback and euria_ok and claude_ok:
+        # Les deux IAs sont configurées : activer le fallback
+        if provider == "claude":
+            return FallbackClient(ClaudeClient(), EurIAClient())
+        else:
+            return FallbackClient(EurIAClient(), ClaudeClient())
+
+    # Un seul fournisseur disponible
     if provider == "claude":
         return ClaudeClient()
     return EurIAClient()

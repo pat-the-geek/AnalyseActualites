@@ -23,6 +23,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 30 7 * * * root cd /app && python3 scripts/generate_morning_digest.py --ai 2>&1 | tee -a /app/rapports/cron_morning_digest.log
 # Notes de lecture quotidiennes à 8h00 (articles des 24h par tag, dans rapports/markdown/_WUDD.AI_/)
 0 8 * * * root cd /app && python3 scripts/generate_reading_notes.py 2>&1 | tee -a /app/rapports/cron_reading_notes.log
+# Backup des données : data/ → BACKUP_L1 → BACKUP_L2 chaque nuit à 1h00
+# (avant les enrichissements NER/sentiment, après la dernière collecte de la veille)
+0 1 * * * root cd /app && python3 scripts/backup_data.py 2>&1 | tee -a /app/rapports/cron_backup.log
+
 # Enrichissement NER Round-Robin : 1 fichier/source par jour à 2h00
 # Ajoute le champ "entities" aux articles qui n'en ont pas encore (tous les répertoires data/)
 0 2 * * * root cd /app && python3 scripts/enrich_entities.py 2>&1 | tee -a /app/rapports/cron_enrich_entities.log

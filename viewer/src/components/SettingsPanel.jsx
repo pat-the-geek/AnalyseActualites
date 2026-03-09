@@ -1296,6 +1296,15 @@ function EnvTab() {
   const [error, setError]         = useState(null)
   const [showMasked, setShowMasked] = useState({})   // {key: bool}
 
+  // Check IA : { euria: null | 'checking' | {ok, message, latency_ms}, claude: ... }
+  const [aiCheck, setAiCheck]     = useState({ euria: null, claude: null })
+
+  // Check répertoires backup
+  const [backupCheck, setBackupCheck] = useState({ l1: null, l2: null }) // null | 'checking' | {ok, message}
+  const [backupL1, setBackupL1]   = useState('')
+  const [backupL2, setBackupL2]   = useState('')
+  const [backupSaving, setBackupSaving] = useState({ l1: false, l2: false })
+
   const load = useCallback(() => {
     setLoading(true)
     fetch('/api/env')
@@ -1340,6 +1349,55 @@ function EnvTab() {
     if (!newKey.trim()) return
     await saveVar(newKey.trim(), newVal)
     setNewKey(''); setNewVal('')
+  }
+
+  // Initialise les champs backup depuis les variables .env
+  useEffect(() => {
+    const v = entries.filter(e => e.type === 'var')
+    const l1 = v.find(e => e.key === 'BACKUP_L1')?.value || ''
+    const l2 = v.find(e => e.key === 'BACKUP_L2')?.value || ''
+    if (l1 !== '***') setBackupL1(l1)
+    if (l2 !== '***') setBackupL2(l2)
+  }, [entries])
+
+  const checkAI = async (provider) => {
+    setAiCheck(prev => ({ ...prev, [provider]: 'checking' }))
+    try {
+      const r = await fetch('/api/ai-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      })
+      const d = await r.json()
+      setAiCheck(prev => ({ ...prev, [provider]: d }))
+    } catch (e) {
+      setAiCheck(prev => ({ ...prev, [provider]: { ok: false, message: String(e), latency_ms: 0 } }))
+    }
+  }
+
+  const checkBackupDir = async (level) => {
+    const path = level === 'l1' ? backupL1 : backupL2
+    if (!path.trim()) return
+    setBackupCheck(prev => ({ ...prev, [level]: 'checking' }))
+    try {
+      const r = await fetch('/api/backup/check-dir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path.trim() }),
+      })
+      const d = await r.json()
+      setBackupCheck(prev => ({ ...prev, [level]: d }))
+    } catch (e) {
+      setBackupCheck(prev => ({ ...prev, [level]: { ok: false, message: String(e) } }))
+    }
+  }
+
+  const saveBackupDir = async (level) => {
+    const key = level === 'l1' ? 'BACKUP_L1' : 'BACKUP_L2'
+    const value = level === 'l1' ? backupL1 : backupL2
+    setBackupSaving(prev => ({ ...prev, [level]: true }))
+    await saveVar(key, value)
+    setBackupSaving(prev => ({ ...prev, [level]: false }))
   }
 
   const vars = entries.filter(e => e.type === 'var')
@@ -1488,17 +1546,41 @@ function EnvTab() {
               {ENV_GROUPS.map(group => {
                 const groupVars = group.keys.map(k => vars.find(v => v.key === k)).filter(Boolean)
                 const isActive = group.provider === currentProvider
+                const checkState = aiCheck[group.provider]
                 return (
                   <Fragment key={group.label}>
                     <tr className={isActive
                       ? 'bg-blue-50/60 dark:bg-blue-900/15 border-l-2 border-blue-400'
                       : 'bg-slate-100/40 dark:bg-slate-800/40 opacity-50'}>
                       <td colSpan={3} className="px-5 py-1.5">
-                        <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-                          isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'
-                        }`}>
-                          {group.label}{isActive && ' ✓'}
-                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                            isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'
+                          }`}>
+                            {group.label}{isActive && ' ✓'}
+                          </span>
+                          {/* Bouton Check IA */}
+                          <div className="flex items-center gap-2">
+                            {checkState && checkState !== 'checking' && (
+                              <span className={`text-[10px] flex items-center gap-1 ${checkState.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                                {checkState.ok
+                                  ? <><CheckCircle2 size={11} /> OK {checkState.latency_ms > 0 ? `· ${checkState.latency_ms}ms` : ''}</>
+                                  : <><AlertTriangle size={11} /> {checkState.message.slice(0, 60)}</>
+                                }
+                              </span>
+                            )}
+                            <button
+                              onClick={() => checkAI(group.provider)}
+                              disabled={checkState === 'checking'}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors"
+                            >
+                              {checkState === 'checking'
+                                ? <><RefreshCw size={10} className="animate-spin" /> Test…</>
+                                : <><Check size={10} /> Check</>
+                              }
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                     {groupVars.length > 0
@@ -1552,6 +1634,65 @@ function EnvTab() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* ── Section Backup ───────────────────────────────────────────────── */}
+      <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-700 shrink-0 bg-slate-50/50 dark:bg-slate-800/20">
+        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider flex items-center gap-1.5">
+          <Database size={11} /> Backup des données
+        </p>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+          Copie automatique de <code className="text-xs bg-slate-100 dark:bg-slate-700 px-1 rounded">data/</code> vers les répertoires ci-dessous chaque nuit à 01h00.
+          L1 est mis à jour en premier, L2 reçoit ensuite une copie de L1.
+          En Docker, montez les chemins comme volumes supplémentaires.
+        </p>
+        {[
+          { key: 'l1', label: 'Backup L1 (principal)', varKey: 'BACKUP_L1', val: backupL1, setVal: setBackupL1 },
+          { key: 'l2', label: 'Backup L2 (secondaire)', varKey: 'BACKUP_L2', val: backupL2, setVal: setBackupL2 },
+        ].map(({ key, label, varKey, val, setVal }) => {
+          const chk = backupCheck[key]
+          return (
+            <div key={key} className="mb-3">
+              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block mb-1">{label}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={val}
+                  onChange={e => { setVal(e.target.value); setBackupCheck(prev => ({ ...prev, [key]: null })) }}
+                  onKeyDown={e => e.key === 'Enter' && saveBackupDir(key)}
+                  placeholder={`/chemin/absolu/backup-${key}`}
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-blue-400"
+                />
+                <button
+                  onClick={() => checkBackupDir(key)}
+                  disabled={!val.trim() || chk === 'checking'}
+                  title="Vérifier l'accessibilité du répertoire"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-40 transition-colors"
+                >
+                  {chk === 'checking'
+                    ? <RefreshCw size={11} className="animate-spin" />
+                    : <Check size={11} />
+                  }
+                  Check
+                </button>
+                <button
+                  onClick={() => saveBackupDir(key)}
+                  disabled={!val.trim() || backupSaving[key]}
+                  title="Sauvegarder dans .env"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 transition-colors"
+                >
+                  {backupSaving[key] ? <RefreshCw size={11} className="animate-spin" /> : <Save size={11} />}
+                </button>
+              </div>
+              {chk && chk !== 'checking' && (
+                <p className={`text-[11px] mt-1 flex items-center gap-1 ${chk.ok ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                  {chk.ok ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />}
+                  {chk.message}
+                </p>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Footer */}

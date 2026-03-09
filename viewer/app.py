@@ -3210,6 +3210,182 @@ def api_env_delete(key: str):
     return jsonify({"ok": True, "key": key})
 
 
+# ── Test de connexion IA ───────────────────────────────────────────────────────
+
+@app.route("/api/ai-check", methods=["POST"])
+def api_ai_check():
+    """Vérifie la connexion à un fournisseur IA en envoyant un prompt minimal.
+
+    Body JSON : { "provider": "euria" | "claude" }
+    Retourne  : { ok: bool, message: str, latency_ms: int }
+    """
+    import time as _time
+    body = request.get_json(force=True, silent=True) or {}
+    provider = (body.get("provider") or "").strip().lower()
+    if provider not in ("euria", "claude"):
+        return jsonify({"error": "provider doit être 'euria' ou 'claude'"}), 400
+
+    try:
+        from utils.api_client import EurIAClient, ClaudeClient
+    except ImportError as e:
+        return jsonify({"ok": False, "message": f"Import impossible : {e}", "latency_ms": 0}), 500
+
+    prompt = "Réponds uniquement par 'OK'."
+    t0 = _time.monotonic()
+    try:
+        if provider == "euria":
+            url = os.environ.get("URL", "").strip()
+            bearer = os.environ.get("bearer", "").strip()
+            if not url or not bearer:
+                return jsonify({"ok": False, "message": "URL ou bearer non configuré.", "latency_ms": 0})
+            client = EurIAClient(url=url, bearer=bearer)
+            result = client.ask(prompt, timeout=10)
+        else:
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            if not api_key:
+                return jsonify({"ok": False, "message": "ANTHROPIC_API_KEY non configurée.", "latency_ms": 0})
+            client = ClaudeClient(api_key=api_key)
+            result = client.ask(prompt, max_tokens=16, timeout=10)
+
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        ok = bool(result and len(result.strip()) > 0)
+        return jsonify({"ok": ok, "message": result.strip() if ok else "Réponse vide.", "latency_ms": latency_ms})
+
+    except Exception as exc:
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        return jsonify({"ok": False, "message": str(exc), "latency_ms": latency_ms})
+
+
+# ── Rafraîchissement d'un résumé article ─────────────────────────────────────
+
+@app.route("/api/article/refresh-resume", methods=["POST"])
+def api_article_refresh_resume():
+    """Régénère le résumé d'un article via l'IA choisie et met à jour le fichier JSON.
+
+    Body JSON :
+      file_path   (str) — chemin relatif du fichier JSON dans PROJECT_ROOT
+      article_url (str) — URL de l'article à rafraîchir
+      provider    (str) — 'euria', 'claude', ou 'auto' (utilise AI_PROVIDER depuis .env)
+    Retourne : { ok: bool, resume: str }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    rel_path = (body.get("file_path") or "").strip()
+    article_url = (body.get("article_url") or "").strip()
+    provider = (body.get("provider") or "auto").strip().lower()
+
+    if not rel_path or not article_url:
+        return jsonify({"error": "file_path et article_url sont requis"}), 400
+
+    # Validation du chemin — uniquement data/ et articles-from-rss/
+    if not (rel_path.startswith("data/") or rel_path.startswith("samples/")):
+        return jsonify({"error": "Chemin non autorisé"}), 403
+
+    target = (PROJECT_ROOT / rel_path).resolve()
+    if not str(target).startswith(str(PROJECT_ROOT) + "/"):
+        return jsonify({"error": "Accès refusé"}), 403
+    if not target.exists():
+        return jsonify({"error": "Fichier non trouvé"}), 404
+
+    try:
+        articles = json.loads(target.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return jsonify({"error": f"Lecture impossible : {e}"}), 500
+
+    # Trouver l'article par URL
+    article = next((a for a in articles if a.get("URL") == article_url), None)
+    if article is None:
+        return jsonify({"error": "Article non trouvé dans le fichier"}), 404
+
+    # Récupérer le texte source (Résumé existant ou titre + source)
+    source_text = article.get("Résumé") or article.get("Titre") or ""
+    if not source_text.strip():
+        return jsonify({"error": "Aucun texte source disponible pour générer un résumé"}), 400
+
+    # Sélectionner le client IA
+    try:
+        from utils.api_client import EurIAClient, ClaudeClient
+        if provider == "auto":
+            provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+
+        if provider == "claude":
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            if not api_key:
+                return jsonify({"error": "ANTHROPIC_API_KEY non configurée"}), 400
+            client = ClaudeClient(api_key=api_key)
+        else:
+            url_env = os.environ.get("URL", "").strip()
+            bearer = os.environ.get("bearer", "").strip()
+            if not url_env or not bearer:
+                return jsonify({"error": "URL ou bearer non configuré"}), 400
+            client = EurIAClient(url=url_env, bearer=bearer)
+
+        new_resume = client.generate_summary(source_text)
+    except Exception as exc:
+        return jsonify({"error": f"Erreur IA : {exc}"}), 500
+
+    # Mettre à jour le fichier JSON
+    article["Résumé"] = new_resume
+    try:
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(articles, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(target)
+    except OSError as e:
+        return jsonify({"error": f"Erreur écriture : {e}"}), 500
+
+    return jsonify({"ok": True, "resume": new_resume})
+
+
+# ── Vérification répertoire backup ────────────────────────────────────────────
+
+@app.route("/api/backup/check-dir", methods=["POST"])
+def api_backup_check_dir():
+    """Vérifie qu'un répertoire existe et est accessible en écriture.
+
+    Body JSON : { "path": str }
+    Retourne  : { ok: bool, message: str }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    path_str = (body.get("path") or "").strip()
+    if not path_str:
+        return jsonify({"ok": False, "message": "Chemin vide"}), 400
+
+    import stat as _stat
+    p = Path(path_str)
+    try:
+        if not p.exists():
+            return jsonify({"ok": False, "message": f"Répertoire introuvable : {path_str}"})
+        if not p.is_dir():
+            return jsonify({"ok": False, "message": f"Ce chemin n'est pas un répertoire"})
+        if not os.access(str(p), os.W_OK):
+            return jsonify({"ok": False, "message": f"Répertoire non inscriptible"})
+        # Vérification de l'espace disque (informative)
+        try:
+            usage = _stat.os.statvfs(str(p))
+            free_gb = (usage.f_bavail * usage.f_frsize) / (1024 ** 3)
+            return jsonify({"ok": True, "message": f"Accessible · {free_gb:.1f} Go libres"})
+        except Exception:
+            return jsonify({"ok": True, "message": "Accessible en écriture"})
+    except Exception as exc:
+        return jsonify({"ok": False, "message": str(exc)})
+
+
+# ── Disponibilité des fournisseurs IA (pour le frontend) ──────────────────────
+
+@app.route("/api/ai-providers")
+def api_ai_providers():
+    """Retourne la liste des fournisseurs IA dont les credentials sont configurés.
+
+    Retourne : { providers: ["euria"|"claude", ...], active: str }
+    """
+    available = []
+    if os.environ.get("URL", "").strip() and os.environ.get("bearer", "").strip():
+        available.append("euria")
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        available.append("claude")
+    active = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+    return jsonify({"providers": available, "active": active})
+
+
 # ── Clustering thématique ──────────────────────────────────────────────────────
 
 @app.route("/api/analytics/clusters")

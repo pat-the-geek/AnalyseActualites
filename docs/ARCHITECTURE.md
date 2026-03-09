@@ -13,7 +13,7 @@
 5. [Modèle de données](#5-modèle-de-données)
 6. [Analyse sémantique — Entités nommées (NER)](#6-analyse-sémantique--entités-nommées-ner)
 7. [Viewer — Interface web](#7-viewer--interface-web)
-8. [Intégrations externes — API EurIA](#8-intégrations-externes--api-euria)
+8. [Intégrations externes — API EurIA & Claude](#8-intégrations-externes--api-euria--claude-anthropic)
 9. [Infrastructure & Chemins](#9-infrastructure--chemins)
 10. [Sécurité](#10-sécurité)
 11. [Performance et scalabilité](#11-performance-et-scalabilité)
@@ -733,9 +733,29 @@ L'interface est entièrement adaptée aux appareils mobiles et tablettes :
 
 ---
 
-## 8. Intégrations externes — API EurIA
+## 8. Intégrations externes — API EurIA & Claude (Anthropic)
 
-### Appel API standard
+Le projet supporte deux fournisseurs IA interchangeables via `utils/api_client.py`. Toutes les méthodes (`generate_summary`, `generate_entities`, `generate_sentiment`, `synthesize_topic`, `generate_report`) sont disponibles sur les deux clients avec la même interface.
+
+| Fournisseur | Variable env | Modèle par défaut | Endpoint |
+|---|---|---|---|
+| **EurIA — Infomaniak** | `URL` + `bearer` | `qwen3` | OpenAI-compatible (`/v1/chat/completions`) |
+| **Claude — Anthropic** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | `https://api.anthropic.com/v1/messages` |
+
+### Sélection du fournisseur
+
+La variable `AI_PROVIDER` dans `.env` sélectionne le fournisseur actif (`euria` ou `claude`).
+`get_ai_client()` retourne un `FallbackClient` si les deux fournisseurs sont configurés et que `fallback=True` (défaut). Le `FallbackClient` essaie le fournisseur primaire, et bascule automatiquement sur le secondaire en cas de `RuntimeError`.
+
+```python
+# Automatique — FallbackClient si les 2 sont configurés
+client = get_ai_client()
+
+# Fournisseur unique explicite
+client = get_ai_client(fallback=False)
+```
+
+### Appel API EurIA (standard)
 
 ```python
 response = requests.post(

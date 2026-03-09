@@ -14,6 +14,9 @@ services:
       - ./samples:/app/samples
       - ./archives:/app/archives
       - ./config:/app/config
+      # Backup — décommentez et adaptez les chemins si BACKUP_L1/BACKUP_L2 sont définis dans .env
+      # - /votre/chemin/backup-L1:/backup-L1
+      # - /votre/chemin/backup-L2:/backup-L2
     ports:
       - "5050:5050"   # Viewer WUDD.ai → http://localhost:5050
     restart: unless-stopped
