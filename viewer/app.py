@@ -3352,19 +3352,25 @@ def api_backup_check_dir():
     import stat as _stat
     p = Path(path_str)
     try:
-        if not p.exists():
-            return jsonify({"ok": False, "message": f"Répertoire introuvable : {path_str}"})
-        if not p.is_dir():
-            return jsonify({"ok": False, "message": f"Ce chemin n'est pas un répertoire"})
-        if not os.access(str(p), os.W_OK):
-            return jsonify({"ok": False, "message": f"Répertoire non inscriptible"})
-        # Vérification de l'espace disque (informative)
-        try:
-            usage = _stat.os.statvfs(str(p))
-            free_gb = (usage.f_bavail * usage.f_frsize) / (1024 ** 3)
-            return jsonify({"ok": True, "message": f"Accessible · {free_gb:.1f} Go libres"})
-        except Exception:
-            return jsonify({"ok": True, "message": "Accessible en écriture"})
+        if p.exists():
+            if not p.is_dir():
+                return jsonify({"ok": False, "message": "Ce chemin n'est pas un répertoire"})
+            if not os.access(str(p), os.W_OK):
+                return jsonify({"ok": False, "message": "Répertoire non inscriptible"})
+            try:
+                usage = _stat.os.statvfs(str(p))
+                free_gb = (usage.f_bavail * usage.f_frsize) / (1024 ** 3)
+                return jsonify({"ok": True, "message": f"Accessible · {free_gb:.1f} Go libres"})
+            except Exception:
+                return jsonify({"ok": True, "message": "Accessible en écriture"})
+        else:
+            # Le répertoire n'existe pas encore — vérifier que le parent est accessible
+            parent = p.parent
+            if not parent.exists():
+                return jsonify({"ok": False, "message": f"Répertoire parent introuvable : {parent}"})
+            if not os.access(str(parent), os.W_OK):
+                return jsonify({"ok": False, "message": f"Répertoire parent non inscriptible : {parent}"})
+            return jsonify({"ok": True, "message": "Répertoire sera créé automatiquement"})
     except Exception as exc:
         return jsonify({"ok": False, "message": str(exc)})
 

@@ -337,7 +337,7 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast, annotatio
       isCurrentPodcast
         ? 'border-violet-400 dark:border-violet-500 ring-2 ring-violet-300/50 dark:ring-violet-700/50'
         : 'border-white/70 dark:border-white/10'
-    } ${isRead ? 'opacity-55' : ''}`}>
+    }`}>
 
       {showIAPicker && (
         <IAPickerModal providers={availableProviders} onPick={handleRefreshResume} onClose={() => setShowIAPicker(false)} />
@@ -381,46 +381,43 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast, annotatio
           </div>
         )}
 
-        {/* En-tête */}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="inline-flex items-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-black/5 dark:bg-white/10 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
-                {article['Sources'] ?? '—'}
+        {/* En-tête — pleine largeur */}
+        <div className="mb-2">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="inline-flex items-center text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider bg-black/5 dark:bg-white/10 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
+              {article['Sources'] ?? '—'}
+            </span>
+            {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
+            {hasEntities && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
+                <Tag size={9} />{count} entités
               </span>
-              {date && <span className="text-xs text-slate-400 dark:text-slate-500">{date}{time ? <> · <span>{time}</span></> : ''}</span>}
-              {hasEntities && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
-                  <Tag size={9} />{count} entités
-                </span>
-              )}
-              <ReadingTimeBadge article={article} />
-            </div>
-            <SentimentBadge article={article} />
-            {titre && (
-              <h3 className="mt-1.5 text-lg font-semibold text-slate-800 dark:text-slate-100 leading-tight tracking-tight">
-                {titre}
-              </h3>
             )}
+            <ReadingTimeBadge article={article} />
           </div>
-
-          {/* Boutons d'action */}
-          <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+          <SentimentBadge article={article} />
+          {titre && (
+            <h3 className="mt-1.5 text-xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
+              {titre}
+            </h3>
+          )}
+          {/* Boutons d'action — pleine largeur sous le titre */}
+          <div className="flex items-center gap-0.5 mt-2 -ml-1.5">
             {onAnnotate && url && url !== '#' && (
               <>
                 <button onClick={() => toggle('is_important')}
                   title={isImportant ? 'Retirer des importants' : 'Marquer comme important'}
-                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
+                  className={`p-1.5 rounded-xl transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center ${isImportant ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
                   <Star size={14} fill={isImportant ? 'currentColor' : 'none'} />
                 </button>
                 <button onClick={() => toggle('is_read')}
                   title={isRead ? 'Marquer comme non lu' : 'Marquer comme lu'}
-                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${isRead ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-700/50'}`}>
-                  <Eye size={14} />
+                  className={`p-1.5 rounded-xl transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center ${isRead ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-700/50'}`}>
+                  <Eye size={14} fill={isRead ? 'currentColor' : 'none'} />
                 </button>
                 <button onClick={() => setNoteOpen(v => !v)}
                   title="Notes et tags"
-                  className={`p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
+                  className={`p-1.5 rounded-xl transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center ${(noteOpen || hasNote || tags.length > 0) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/30' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-900/20'}`}>
                   <Pencil size={14} />
                 </button>
               </>
@@ -428,14 +425,14 @@ function ArticleCard({ article, rank, onEntityClick, isCurrentPodcast, annotatio
             {filePath && availableProviders?.length > 0 && (
               <button onClick={triggerRefresh} disabled={refreshing}
                 title="Rafraîchir le résumé avec l'IA"
-                className="p-2 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 disabled:opacity-40">
+                className="p-1.5 rounded-xl transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 disabled:opacity-40">
                 <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
               </button>
             )}
             {resume && <TTSButton text={resume || titre} size={14} />}
             {url && url !== '#' && (
               <a href={url} target="_blank" rel="noopener noreferrer"
-                className="p-2 rounded-xl min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-colors" title="Ouvrir l'article">
+                className="p-1.5 rounded-xl min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-colors" title="Ouvrir l'article">
                 <ExternalLink size={14} />
               </a>
             )}

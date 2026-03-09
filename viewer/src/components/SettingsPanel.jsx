@@ -1425,6 +1425,10 @@ function EnvTab() {
   // AI_PROVIDER est géré par le sélecteur — exclure de la table générique
   const groupedKeys = [...ENV_GROUPS.flatMap(g => g.keys), 'AI_PROVIDER']
 
+  // Clés considérées sensibles côté frontend (masquées par défaut)
+  const _SENSITIVE_FRONT = new Set(['bearer', 'ANTHROPIC_API_KEY', 'SMTP_PASSWORD', 'NTFY_TOKEN'])
+  const isSensitiveFront = k => _SENSITIVE_FRONT.has(k) || k.endsWith('_KEY') || k.endsWith('_TOKEN') || k.endsWith('_PASSWORD')
+
   // Rendu d'une ligne de variable
   const renderVarRow = ({ key, value, masked }) => (
     <tr key={key} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
@@ -1453,12 +1457,14 @@ function EnvTab() {
           </div>
         ) : (
           <span className="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">
-            {masked && !showMasked[key] ? '•••••••••••' : (value || <em className="text-slate-400">vide</em>)}
+            {masked && !showMasked[key]
+              ? (value ? '•••••••••••' : <em className="text-slate-400 text-[11px]">non configurée</em>)
+              : (value || <em className="text-slate-400">vide</em>)}
           </span>
         )}
       </td>
       <td className="px-4 py-2.5">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+        <div className="flex items-center gap-1 justify-end">
           {masked && (
             <button onClick={() => setShowMasked(s => ({ ...s, [key]: !s[key] }))}
               title={showMasked[key] ? 'Masquer' : 'Afficher'}
@@ -1544,7 +1550,10 @@ function EnvTab() {
             <tbody>
               {/* Groupes visuels — groupe actif mis en évidence, groupe inactif grisé */}
               {ENV_GROUPS.map(group => {
-                const groupVars = group.keys.map(k => vars.find(v => v.key === k)).filter(Boolean)
+                // Toujours afficher toutes les clés du groupe, même si absentes du .env
+                const groupVars = group.keys.map(k =>
+                  vars.find(v => v.key === k) ?? { key: k, value: '', masked: isSensitiveFront(k), _missing: true }
+                )
                 const isActive = group.provider === currentProvider
                 const checkState = aiCheck[group.provider]
                 return (
@@ -1583,16 +1592,7 @@ function EnvTab() {
                         </div>
                       </td>
                     </tr>
-                    {groupVars.length > 0
-                      ? groupVars.map(v => renderVarRow(v))
-                      : (
-                        <tr className={isActive ? '' : 'opacity-50'}>
-                          <td colSpan={3} className="px-5 py-2 text-xs text-slate-400 italic">
-                            Aucune variable configurée — ajoutez-les ci-dessous
-                          </td>
-                        </tr>
-                      )
-                    }
+                    {groupVars.map(v => renderVarRow(v))}
                   </Fragment>
                 )
               })}

@@ -155,7 +155,7 @@ function RssStatusBar({ status, nextRssLabel }) {
       ) : status.last_run || prog?.finished_at ? (
         <>
           <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-            <span className={`w-1.5 h-1.5 rounded-full inline-block ${status.last_returncode === 0 || prog?.returncode === 0 ? 'bg-green-500' : status.last_returncode != null || prog?.returncode != null ? 'bg-red-500' : 'bg-slate-400'}`} />
+            <span className="w-1.5 h-1.5 rounded-full inline-block bg-slate-400 dark:bg-slate-600" />
             {formatLastRun(status.last_run || prog?.finished_at)}
           </span>
           {status.article_count > 0 && (
@@ -547,12 +547,6 @@ export default function App() {
           <Terminal size={13} />
           {rssStatus?.running ? (
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          ) : rssStatus?.last_returncode === 0 || rssStatus?.progress?.returncode === 0 ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          ) : rssStatus?.last_returncode != null || rssStatus?.progress?.returncode != null ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-          ) : rssStatus?.file_count > 0 ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
           ) : null}
           <span className="hidden xl:inline">RSS</span>
           {!rssStatus?.running && rssStatus?.file_count > 0 && (
