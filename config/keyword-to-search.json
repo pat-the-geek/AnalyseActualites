@@ -88,6 +88,11 @@
   },
   {
     "and": [],
+    "keyword": "Inflation",
+    "or": []
+  },
+  {
+    "and": [],
     "keyword": "Infomaniak",
     "or": [
       "euria",
@@ -165,7 +170,7 @@
     "or": []
   },
   {
-    "keyword": "robot",
+    "keyword": "Robotic",
     "or": [
       "Robotique"
     ]
@@ -243,10 +248,5 @@
       "Visual Studio Code",
       "Multi-Agent Development"
     ]
-  },
-  {
-    "keyword": "Inflation",
-    "or": [],
-    "and": []
   }
 ]
