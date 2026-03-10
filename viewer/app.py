@@ -424,53 +424,96 @@ def api_scheduler():
             pass
 
     # Tâches cron fixes (issues de archives/crontab)
+    # Catégories : "Surveillance en continu" | "Enrichissement nocturne" | "Rapports & digests" | "Pipeline mensuel"
     fixed = [
+        # ── Surveillance en continu ──────────────────────────────────────────────
         {
             "name": "Veille RSS temps-réel (round-robin)",
             "script": "flux_watcher.py → entity_timeline.py → cross_flux_analysis.py → enrich_reading_time.py",
             "cron": "*/5 * * * *",
+            "category": "Surveillance en continu",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_flux_watcher.log",
             "extra_last_run": flux_watcher_last_run,
             "detail": flux_watcher_detail,
         },
         {
+            "name": "Surveillance sources web (sitemap)",
+            "script": "web_watcher.py",
+            "cron": "0 */2 * * *",
+            "category": "Surveillance en continu",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_web_watcher.log",
+        },
+        {
             "name": "Extraction mots-clés RSS",
             "script": "get-keyword-from-rss.py",
             "cron": "0 6-22/2 * * *",
+            "category": "Surveillance en continu",
             "data_dir": PROJECT_ROOT / "data" / "articles-from-rss",
-        },
-        {
-            "name": "Rapport Top 10 entités 48h",
-            "script": "generate_48h_report.py",
-            "cron": "0 23 * * *",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_48h_report.log",
-        },
-        {
-            "name": "Collecte multi-flux",
-            "script": "scheduler_articles.py",
-            "cron": "0 6 * * 1",
-            "data_dir": PROJECT_ROOT / "data" / "articles",
         },
         {
             "name": "Vérification santé cron",
             "script": "check_cron_health.py",
             "cron": "*/10 * * * *",
+            "category": "Surveillance en continu",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_health.log",
         },
+        # ── Enrichissement nocturne ──────────────────────────────────────────────
         {
-            "name": "Radar thématique",
-            "script": "radar_wudd.py",
-            "cron": "0 5 28-31 * *",
+            "name": "Backup des données",
+            "script": "backup_data.py",
+            "cron": "0 1 * * *",
+            "category": "Enrichissement nocturne",
             "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_radar.log",
+            "log_file": PROJECT_ROOT / "rapports" / "cron_backup.log",
+        },
+        {
+            "name": "Enrichissement NER (entités)",
+            "script": "enrich_entities.py",
+            "cron": "0 2 * * *",
+            "category": "Enrichissement nocturne",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_enrich_entities.log",
+        },
+        {
+            "name": "Enrichissement sentiment",
+            "script": "enrich_sentiment.py",
+            "cron": "0 3 * * *",
+            "category": "Enrichissement nocturne",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_sentiment.log",
+        },
+        {
+            "name": "Réparation résumés en erreur",
+            "script": "repair_failed_summaries.py",
+            "cron": "0 4 * * 0",
+            "category": "Enrichissement nocturne",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_repair.log",
+        },
+        # ── Rapports & digests ───────────────────────────────────────────────────
+        {
+            "name": "Collecte multi-flux",
+            "script": "scheduler_articles.py",
+            "cron": "0 6 * * 1",
+            "category": "Rapports & digests",
+            "data_dir": PROJECT_ROOT / "data" / "articles",
+        },
+        {
+            "name": "Briefing exécutif hebdomadaire",
+            "script": "generate_briefing.py --period weekly",
+            "cron": "30 6 * * 1",
+            "category": "Rapports & digests",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_briefing.log",
         },
         {
             "name": "Détection tendances & alertes",
             "script": "trend_detector.py",
             "cron": "0 7 * * *",
+            "category": "Rapports & digests",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_trends.log",
         },
@@ -478,55 +521,48 @@ def api_scheduler():
             "name": "Morning Digest quotidien",
             "script": "generate_morning_digest.py --ai",
             "cron": "30 7 * * *",
+            "category": "Rapports & digests",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_morning_digest.log",
-        },
-        {
-            "name": "Enrichissement sentiment",
-            "script": "enrich_sentiment.py",
-            "cron": "0 3 * * *",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_sentiment.log",
-        },
-        {
-            "name": "Conversion articles RSS → Markdown",
-            "script": "articles_rss_to_markdown.py",
-            "cron": "30 5 28-31 * *",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_rss_markdown.log",
         },
         {
             "name": "Notes de lecture quotidiennes",
             "script": "generate_reading_notes.py",
             "cron": "0 8 * * *",
+            "category": "Rapports & digests",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_reading_notes.log",
         },
         {
-            "name": "Enrichissement NER (entités)",
-            "script": "enrich_entities.py",
-            "cron": "0 2 * * *",
+            "name": "Rapport Top 10 entités 48h",
+            "script": "generate_48h_report.py",
+            "cron": "0 23 * * *",
+            "category": "Rapports & digests",
             "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_enrich_entities.log",
+            "log_file": PROJECT_ROOT / "rapports" / "cron_48h_report.log",
+        },
+        # ── Pipeline mensuel ─────────────────────────────────────────────────────
+        {
+            "name": "Radar thématique",
+            "script": "radar_wudd.py",
+            "cron": "0 5 28-31 * *",
+            "category": "Pipeline mensuel",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_radar.log",
         },
         {
-            "name": "Réparation résumés en erreur",
-            "script": "repair_failed_summaries.py",
-            "cron": "0 4 * * 0",
+            "name": "Conversion articles RSS → Markdown",
+            "script": "articles_rss_to_markdown.py",
+            "cron": "30 5 28-31 * *",
+            "category": "Pipeline mensuel",
             "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_repair.log",
-        },
-        {
-            "name": "Briefing exécutif hebdomadaire",
-            "script": "generate_briefing.py --period weekly",
-            "cron": "30 6 * * 1",
-            "data_dir": None,
-            "log_file": PROJECT_ROOT / "rapports" / "cron_briefing.log",
+            "log_file": PROJECT_ROOT / "rapports" / "cron_rss_markdown.log",
         },
         {
             "name": "Rapports mensuels par mot-clé",
             "script": "generate_keyword_reports.py",
             "cron": "0 6 28-31 * *",
+            "category": "Pipeline mensuel",
             "data_dir": None,
             "log_file": PROJECT_ROOT / "rapports" / "cron_keyword_reports.log",
         },
@@ -546,6 +582,7 @@ def api_scheduler():
             "script": t["script"],
             "cron": t["cron"],
             "label": cron_label(t["cron"]),
+            "category": t.get("category", "Surveillance en continu"),
             "last_run": last_run.isoformat() if last_run else None,
             "next_run": next_run.isoformat() if next_run else None,
             "flux": None,
@@ -770,6 +807,141 @@ def api_rss_feeds_stats():
             continue
 
     return jsonify(stats)
+
+
+@app.route("/api/web-sources", methods=["GET"])
+def api_get_web_sources():
+    """Retourne la liste des sources web depuis config/web_sources.json."""
+    path = PROJECT_ROOT / "config" / "web_sources.json"
+    if not path.exists():
+        return jsonify([])
+    try:
+        return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/web-sources/save", methods=["POST"])
+def api_save_web_sources():
+    """Sauvegarde la liste des sources web dans config/web_sources.json."""
+    sources = request.get_json(force=True)
+    if not isinstance(sources, list):
+        return jsonify({"error": "Données invalides"}), 400
+    path = PROJECT_ROOT / "config" / "web_sources.json"
+    try:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        return jsonify({"ok": True, "count": len(sources)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/web-sources/check", methods=["POST"])
+def api_check_web_source():
+    """Vérifie si une URL de sitemap ou de site est accessible. Body JSON: {"url": "..."}"""
+    import requests as req
+    data = request.get_json(force=True) or {}
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL manquante"}), 400
+    try:
+        r = req.head(url, timeout=8, allow_redirects=True,
+                     headers={"User-Agent": "WUDD.ai/2.2"})
+        ok = r.status_code < 400
+        return jsonify({"ok": ok, "status": r.status_code})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/web-sources/resolve", methods=["POST"])
+def api_resolve_web_source():
+    """Résout une URL de site web : extrait le titre et détecte le sitemap.
+
+    Body JSON: {"url": "https://example.com"}
+    Retourne: {ok, title, base_url, sitemap_url, html_url}
+    """
+    import requests as req
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse, urljoin
+
+    data = request.get_json(force=True) or {}
+    url = data.get("url", "").strip()
+    if not url or not url.startswith("http"):
+        return jsonify({"ok": False, "error": "URL invalide"}), 400
+
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; WUDD.ai/2.2)"}
+    try:
+        r = req.get(url, timeout=10, allow_redirects=True, headers=headers)
+        if r.status_code >= 400:
+            return jsonify({"ok": False, "error": f"HTTP {r.status_code}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+    soup = BeautifulSoup(r.content, "html.parser")
+    parsed = urlparse(r.url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    # Titre du site
+    title = ""
+    og = soup.find("meta", property="og:site_name")
+    if og:
+        title = og.get("content", "").strip()
+    if not title:
+        og = soup.find("meta", property="og:title")
+        if og:
+            title = og.get("content", "").strip()
+    if not title:
+        t = soup.find("title")
+        if t:
+            title = t.get_text(strip=True)
+    if not title:
+        title = parsed.netloc.replace("www.", "")
+
+    # Détection du sitemap
+    sitemap_url = ""
+    # 1. Balise <link rel="sitemap">
+    link_tag = soup.find("link", rel=lambda v: v and "sitemap" in (v if isinstance(v, str) else " ".join(v)).lower())
+    if link_tag:
+        sitemap_url = urljoin(base_url, link_tag.get("href", ""))
+
+    # 2. Essai /sitemap.xml
+    if not sitemap_url:
+        candidates = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap.xml.gz"]
+        for cand in candidates:
+            try:
+                test_url = base_url + cand
+                tr = req.head(test_url, timeout=5, headers=headers, allow_redirects=True)
+                if tr.status_code < 400:
+                    sitemap_url = test_url
+                    break
+            except Exception:
+                continue
+
+    return jsonify({
+        "ok": True,
+        "title": title,
+        "base_url": base_url,
+        "sitemap_url": sitemap_url,
+        "html_url": r.url,
+    })
+
+
+@app.route("/api/web-sources/state", methods=["GET"])
+def api_web_sources_state():
+    """Retourne l'état du web_watcher : nombre d'URLs traitées par source."""
+    state_path = PROJECT_ROOT / "data" / "web_watcher_state.json"
+    if not state_path.exists():
+        return jsonify({})
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        summary = {
+            name: len(v.get("processed_urls", []))
+            for name, v in state.items()
+        }
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/flux-sources", methods=["GET"])

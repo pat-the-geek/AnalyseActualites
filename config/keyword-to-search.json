@@ -124,10 +124,21 @@
     "or": []
   },
   {
+    "keyword": "Louvre"
+  },
+  {
     "keyword": "Meta"
   },
   {
     "keyword": "Microsoft"
+  },
+  {
+    "keyword": "MoMA",
+    "or": [
+      "MoMA PS1",
+      "PS1",
+      "Queens Museum"
+    ]
   },
   {
     "and": [

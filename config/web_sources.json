@@ -1,0 +1,35 @@
+[
+  {
+    "name": "anthropic-news",
+    "title": "Anthropic Newsroom",
+    "base_url": "https://www.anthropic.com",
+    "sitemap_url": "https://www.anthropic.com/sitemap.xml",
+    "url_pattern": "/news/[a-z0-9]",
+    "keyword": "Anthropic",
+    "langue": "en",
+    "max_per_run": 5,
+    "actif": true
+  },
+  {
+    "name": "moma-ps1-programs",
+    "title": "MoMA PS1 — Programs",
+    "base_url": "https://www.momaps1.org",
+    "sitemap_url": "https://www.momaps1.org/sitemap.xml",
+    "url_pattern": "/en/programs/\\d+",
+    "keyword": "MoMA",
+    "langue": "en",
+    "max_per_run": 5,
+    "actif": true
+  },
+  {
+    "name": "louvre-vie-musee",
+    "title": "Louvre — Vie du musée",
+    "base_url": "https://www.louvre.fr",
+    "sitemap_url": "https://www.louvre.fr/sitemap.xml",
+    "url_pattern": "/decouvrir/vie-du-musee/",
+    "keyword": "Louvre",
+    "langue": "fr",
+    "max_per_run": 5,
+    "actif": true
+  }
+]

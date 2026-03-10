@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+"""
+web_watcher.py — Surveillance des sources web sans flux RSS (via sitemap.xml)
+
+Appelé périodiquement par cron (toutes les 2h).
+Pour chaque source active dans config/web_sources.json :
+  - Lit le sitemap.xml pour découvrir les nouvelles URLs (filtrées par url_pattern)
+  - Pour chaque nouvelle URL (non encore traitée, max max_per_run par run) :
+      * Fetch la page HTML
+      * Extrait titre, date, texte, images avec BeautifulSoup
+      * Génère un résumé en français via l'API EurIA
+      * Sauvegarde dans data/articles-from-rss/<keyword>.json (sans doublon)
+      * Met à jour data/articles-from-rss/_WUDD.AI_/48-heures.json
+
+État persisté dans data/web_watcher_state.json :
+  { "source_name": {"processed_urls": ["url1", "url2", ...]} }
+
+Usage:
+    python3 scripts/web_watcher.py
+    python3 scripts/web_watcher.py --dry-run         # Liste les URLs sans appel IA
+    python3 scripts/web_watcher.py --source moma-ps1-programs  # Source unique
+"""
+
+import argparse
+import json
+import re
+import sys
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+from pathlib import Path
+from bs4 import BeautifulSoup
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utils.api_client import get_ai_client
+from utils.logging import print_console
+from utils.quota import get_quota_manager
+
+# ─── Constantes ──────────────────────────────────────────────────────────────
+
+CONFIG_PATH  = PROJECT_ROOT / "config" / "web_sources.json"
+STATE_FILE   = PROJECT_ROOT / "data" / "web_watcher_state.json"
+OUTPUT_DIR   = PROJECT_ROOT / "data" / "articles-from-rss"
+WUDD_DIR     = OUTPUT_DIR / "_WUDD.AI_"
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; WUDD.ai/2.2; +https://wudd.ai)"}
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+WUDD_DIR.mkdir(parents=True, exist_ok=True)
+
+# ─── Utilitaires généraux ────────────────────────────────────────────────────
+
+def _write_atomic(path: Path, data: list | dict) -> None:
+    """Écriture atomique JSON via fichier temporaire."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _load_state() -> dict:
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_state(state: dict) -> None:
+    _write_atomic(STATE_FILE, state)
+
+
+def _normalize_url(url: str) -> str:
+    """Normalise une URL pour déduplication (lowercase + retire slash final)."""
+    return url.strip().rstrip("/").lower()
+
+
+# ─── Gestion des dates ───────────────────────────────────────────────────────
+
+_DATE_FORMATS = [
+    "%Y-%m-%dT%H:%M:%S.%fZ",
+    "%Y-%m-%dT%H:%M:%SZ",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d",
+]
+
+
+def _parse_date(date_str: str) -> datetime:
+    """Parse une date ISO 8601 ou YYYY-MM-DD. Fallback : maintenant."""
+    if not date_str:
+        return datetime.utcnow()
+    clean = re.sub(r"[+-]\d{2}:\d{2}$", "", date_str.strip())
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(clean[:26], fmt)
+        except (ValueError, TypeError):
+            continue
+    return datetime.utcnow()
+
+
+def _fmt_ddmmyyyy(dt: datetime) -> str:
+    return dt.strftime("%d/%m/%Y")
+
+
+# ─── Lecture sitemap ─────────────────────────────────────────────────────────
+
+def _find_el(parent, tag_ns: str, tag_plain: str):
+    """Cherche un élément d'abord avec namespace, puis sans. Évite l'opérateur
+    `or` sur les éléments ElementTree (déprécié depuis Python 3.8)."""
+    el = parent.find(tag_ns)
+    if el is None:
+        el = parent.find(tag_plain)
+    return el
+
+
+def _findall_el(parent, tag_ns: str, tag_plain: str) -> list:
+    """Cherche des éléments d'abord avec namespace, puis sans."""
+    results = parent.findall(tag_ns)
+    if not results:
+        results = parent.findall(tag_plain)
+    return results
+
+
+def _fetch_sitemap(sitemap_url: str, depth: int = 0) -> list[tuple[str, str]]:
+    """Parse un sitemap.xml (ou sitemapindex) et retourne [(url, lastmod), …].
+
+    Gère les sitemapindex récursivement (profondeur max 2).
+    lastmod est '' si absent dans le sitemap.
+    """
+    if depth > 2:
+        return []
+    SM = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    results: list[tuple[str, str]] = []
+    try:
+        resp = requests.get(sitemap_url, timeout=15, headers=HTTP_HEADERS)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+        tag = root.tag  # ex: "{http://...}urlset" ou "{http://...}sitemapindex"
+
+        if "sitemapindex" in tag:
+            for sm in _findall_el(root, f"{{{SM}}}sitemap", "sitemap"):
+                loc = _find_el(sm, f"{{{SM}}}loc", "loc")
+                if loc is not None and loc.text:
+                    results.extend(_fetch_sitemap(loc.text.strip(), depth + 1))
+        else:
+            for url_el in _findall_el(root, f"{{{SM}}}url", "url"):
+                loc = _find_el(url_el, f"{{{SM}}}loc", "loc")
+                lm  = _find_el(url_el, f"{{{SM}}}lastmod", "lastmod")
+                if loc is not None and loc.text:
+                    lastmod = lm.text.strip() if lm is not None and lm.text else ""
+                    results.append((loc.text.strip(), lastmod))
+    except Exception as e:
+        print_console(f"Erreur sitemap {sitemap_url} : {e}", level="error")
+    return results
+
+
+# ─── Extraction de contenu de page ───────────────────────────────────────────
+
+def _extract_page(url: str) -> dict | None:
+    """Fetch une page HTML et extrait : titre, date, texte, images.
+
+    Retourne None en cas d'erreur HTTP ou réseau.
+    """
+    try:
+        resp = requests.get(url, timeout=15, headers=HTTP_HEADERS)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        code = e.response.status_code if e.response is not None else "?"
+        print_console(f"HTTP {code} — {url}", level="warning")
+        return None
+    except Exception as e:
+        print_console(f"Erreur réseau {url} : {e}", level="error")
+        return None
+
+    soup = BeautifulSoup(resp.content, "html.parser")
+
+    # ── Titre ────────────────────────────────────────────────────────────────
+    title = ""
+    og = soup.find("meta", property="og:title")
+    if og:
+        title = og.get("content", "").strip()
+    if not title:
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text(strip=True)
+    if not title:
+        t = soup.find("title")
+        if t:
+            title = t.get_text(strip=True)
+
+    # ── Date de publication ───────────────────────────────────────────────────
+    pub_date_str = ""
+    time_tag = soup.find("time", attrs={"datetime": True})
+    if time_tag:
+        pub_date_str = time_tag["datetime"]
+    if not pub_date_str:
+        for prop in ("article:published_time", "og:updated_time", "article:modified_time"):
+            pmeta = soup.find("meta", property=prop)
+            if pmeta:
+                pub_date_str = pmeta.get("content", "")
+                break
+
+    # ── Texte principal (nettoyé) ─────────────────────────────────────────────
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+        tag.decompose()
+    raw = soup.get_text(separator="\n", strip=True)
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    text = "\n".join(lines)[:10000]
+
+    # ── Image principale (Open Graph) ─────────────────────────────────────────
+    images = []
+    og_img = soup.find("meta", property="og:image")
+    if og_img:
+        img_url = og_img.get("content", "").strip()
+        if img_url.startswith(("http://", "https://")):
+            try:
+                w_tag = soup.find("meta", property="og:image:width")
+                width = int(w_tag.get("content", 1200)) if w_tag else 1200
+            except (ValueError, TypeError):
+                width = 1200
+            images.append({"URL": img_url, "Width": width})
+
+    return {
+        "title": title,
+        "pub_date_str": pub_date_str,
+        "text": text,
+        "images": images,
+    }
+
+
+# ─── Mise à jour 48-heures.json ──────────────────────────────────────────────
+
+def _update_48h(new_articles: list) -> None:
+    """Ajoute les nouveaux articles à 48-heures.json et élague les > 48h."""
+    wudd_path = WUDD_DIR / "48-heures.json"
+    two_days_ago = datetime.utcnow() - timedelta(hours=48)
+
+    existing: list = []
+    if wudd_path.exists():
+        try:
+            existing = json.loads(wudd_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = []
+
+    seen_urls = {a.get("URL", "") for a in existing}
+    for article in new_articles:
+        if article.get("URL", "") not in seen_urls:
+            existing.append(article)
+            seen_urls.add(article["URL"])
+
+    def _dt(a: dict) -> datetime:
+        try:
+            return datetime.strptime(a.get("Date de publication", ""), "%d/%m/%Y")
+        except Exception:
+            return datetime.utcnow()
+
+    fresh = [a for a in existing if _dt(a) >= two_days_ago]
+    fresh.sort(key=_dt, reverse=True)
+    _write_atomic(wudd_path, fresh)
+    print_console(f"48-heures.json : +{len(new_articles)} web | {len(fresh)} total dans la fenêtre 48h")
+
+
+# ─── Traitement d'une source ─────────────────────────────────────────────────
+
+def _process_source(
+    source: dict,
+    state: dict,
+    api_client,
+    quota,
+    dry_run: bool,
+) -> int:
+    """Traite une source : sitemap → nouvelles URLs → extraction → résumé → sauvegarde.
+
+    Retourne le nombre d'articles ajoutés.
+    """
+    name        = source["name"]
+    title_src   = source["title"]
+    sitemap_url = source["sitemap_url"]
+    url_pattern = source["url_pattern"]
+    keyword     = source["keyword"]
+    langue      = source.get("langue", "en")
+    max_per_run = source.get("max_per_run", 5)
+    base_url    = source.get("base_url", "").rstrip("/")
+
+    print_console(f"\n[web_watcher] ── {title_src} ──────────────────────────────")
+
+    # État local de cette source
+    src_state = state.setdefault(name, {"processed_urls": []})
+    processed_set = {_normalize_url(u) for u in src_state["processed_urls"]}
+
+    # Lecture du sitemap
+    all_entries = _fetch_sitemap(sitemap_url)
+    if not all_entries:
+        print_console(f"  Sitemap vide ou inaccessible.", level="warning")
+        return 0
+    print_console(f"  {len(all_entries)} URLs dans le sitemap.")
+
+    # Filtrage par url_pattern + exclusion des déjà traitées
+    pat = re.compile(url_pattern)
+    new_entries: list[tuple[str, str]] = []
+    for url, lastmod in all_entries:
+        full_url = (base_url + url) if url.startswith("/") else url
+        if pat.search(full_url) and _normalize_url(full_url) not in processed_set:
+            new_entries.append((full_url, lastmod))
+
+    print_console(f"  {len(new_entries)} nouvelles URLs correspondant au pattern.")
+
+    if not new_entries:
+        return 0
+
+    # Trier par lastmod décroissant (plus récentes en premier)
+    def _lm_key(entry: tuple) -> datetime:
+        return _parse_date(entry[1]) if entry[1] else datetime.min
+
+    new_entries.sort(key=_lm_key, reverse=True)
+    to_process = new_entries[:max_per_run]
+
+    # Fichier de sortie
+    out_path = OUTPUT_DIR / f"{keyword.replace(' ', '-').lower()}.json"
+    existing_articles: list = []
+    existing_urls: set = set()
+    if out_path.exists():
+        try:
+            existing_articles = json.loads(out_path.read_text(encoding="utf-8"))
+            existing_urls = {a.get("URL", "") for a in existing_articles}
+        except Exception:
+            pass
+
+    added = 0
+    new_for_48h: list = []
+
+    for url, lastmod in to_process:
+        # En dry-run : juste afficher l'URL, pas d'appel API ni de vérification quota
+        if dry_run:
+            print_console(f"  [dry-run] {url[:90]}")
+            continue
+
+        # Vérification quota global
+        if quota.is_global_exhausted():
+            print_console("  Quota global épuisé — arrêt.", level="warning")
+            break
+
+        # Vérification quota par keyword/source
+        if not quota.can_process(keyword, title_src):
+            print_console(f"  Quota '{keyword}' atteint — arrêt.", level="warning")
+            break
+
+        print_console(f"  → {url[:90]}")
+
+        # Doublon tardif (peut arriver si deux runs se chevauchent)
+        if url in existing_urls:
+            src_state["processed_urls"].append(url)
+            processed_set.add(_normalize_url(url))
+            continue
+
+        # Extraction du contenu
+        page = _extract_page(url)
+        if not page:
+            src_state["processed_urls"].append(url)
+            processed_set.add(_normalize_url(url))
+            continue
+
+        # Date : contenu de page > lastmod sitemap > maintenant
+        pub_date_str = page["pub_date_str"] or lastmod
+        pub_dt = _parse_date(pub_date_str)
+        pub_date_fmt = _fmt_ddmmyyyy(pub_dt)
+
+        # Résumé EurIA
+        lang_label = "français" if langue == "fr" else "français (article source en anglais)"
+        context = f"Source : {title_src}\nURL : {url}\n\n{page['text']}"
+        resume = api_client.generate_summary(context, max_lines=15, language=lang_label)
+
+        # Construction de l'article (format standard du projet)
+        article: dict = {
+            "Date de publication": pub_date_fmt,
+            "Sources": title_src,
+            "URL": url,
+            "Résumé": resume,
+            "Images": page["images"],
+        }
+        if page["title"]:
+            article["Titre"] = page["title"]
+
+        existing_articles.append(article)
+        existing_urls.add(url)
+        new_for_48h.append(article)
+        src_state["processed_urls"].append(url)
+        processed_set.add(_normalize_url(url))
+        quota.record_article(keyword, title_src, {})
+        added += 1
+
+        titre_court = (page["title"] or url)[:70]
+        print_console(f"    ✓ {titre_court}")
+
+    # Sauvegarde
+    if added > 0:
+        def _sort_key(a: dict) -> datetime:
+            try:
+                return datetime.strptime(a.get("Date de publication", ""), "%d/%m/%Y")
+            except Exception:
+                return datetime.min
+
+        existing_articles.sort(key=_sort_key, reverse=True)
+        _write_atomic(out_path, existing_articles)
+        _update_48h(new_for_48h)
+        print_console(f"  → {added} article(s) sauvegardé(s) dans {out_path.name}")
+
+    return added
+
+
+# ─── Point d'entrée ──────────────────────────────────────────────────────────
+
+def main(dry_run: bool = False, source_filter: str | None = None) -> None:
+    if not CONFIG_PATH.exists():
+        print_console(f"Config introuvable : {CONFIG_PATH}", level="error")
+        sys.exit(1)
+
+    try:
+        sources: list = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        print_console(f"Erreur lecture config : {e}", level="error")
+        sys.exit(1)
+
+    active = [s for s in sources if s.get("actif", True)]
+    if source_filter:
+        active = [s for s in active if s["name"] == source_filter]
+
+    if not active:
+        print_console("Aucune source active.", level="warning")
+        return
+
+    quota = get_quota_manager()
+    if not dry_run and quota.is_global_exhausted():
+        print_console("Quota global épuisé — web_watcher ignoré.", level="warning")
+        return
+
+    api_client = None if dry_run else get_ai_client()
+    state = _load_state()
+
+    total = 0
+    for source in active:
+        total += _process_source(source, state, api_client, quota, dry_run)
+
+    if not dry_run:
+        _save_state(state)
+
+    print_console(f"\n[web_watcher] Terminé — {total} article(s) ajouté(s) au total.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="WUDD.ai — Surveillance sources web sans RSS (sitemap)"
+    )
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Liste les nouvelles URLs sans appel IA ni sauvegarde")
+    parser.add_argument("--source", metavar="NAME",
+                        help="Traite uniquement la source avec ce nom (ex: anthropic-news)")
+    args = parser.parse_args()
+    main(dry_run=args.dry_run, source_filter=args.source)

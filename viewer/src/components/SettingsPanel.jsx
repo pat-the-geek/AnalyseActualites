@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import {
-  X, Settings, Clock, Tag, Rss, Plus, Trash2, RefreshCw,
+  X, Settings, Clock, Tag, Rss, Globe, Plus, Trash2, RefreshCw,
   CheckCircle2, HelpCircle, Calendar, Check, AlertTriangle, Save,
   Maximize2, Minimize2, ExternalLink, Database, Clipboard, BarChart2,
   ToggleLeft, ToggleRight, RotateCcw,
@@ -145,6 +145,13 @@ function TaskTable({ title, tasks }) {
   )
 }
 
+const CRON_CATEGORIES = [
+  { id: "Surveillance en continu", label: "Surveillance en continu",   desc: "Tâches fréquentes : chaque 5 min, 10 min ou toutes les 2h" },
+  { id: "Enrichissement nocturne", label: "Enrichissement nocturne",   desc: "Pipeline 01h–04h : backup, NER, sentiment, réparation" },
+  { id: "Rapports & digests",      label: "Rapports & digests",        desc: "Digests quotidiens, briefing hebdomadaire et collecte multi-flux" },
+  { id: "Pipeline mensuel",        label: "Pipeline mensuel",          desc: "Radar, Markdown et rapports générés le dernier jour du mois" },
+]
+
 function SchedulerTab() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -163,8 +170,10 @@ function SchedulerTab() {
     .filter(t => t.next_run && new Date(t.next_run) > Date.now())
     .sort((a, b) => new Date(a.next_run) - new Date(b.next_run))[0]
 
-  const systemTasks = data?.tasks.filter(t => !t.flux) ?? []
-  const fluxTasks   = data?.tasks.filter(t => t.flux)  ?? []
+  const tasksByCategory = Object.fromEntries(
+    CRON_CATEGORIES.map(c => [c.id, data?.tasks.filter(t => !t.flux && t.category === c.id) ?? []])
+  )
+  const fluxTasks = data?.tasks.filter(t => t.flux) ?? []
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -192,8 +201,117 @@ function SchedulerTab() {
           </div>
         ) : (
           <>
-            <TaskTable title="Tâches système (cron)" tasks={systemTasks} />
-            {fluxTasks.length > 0 && <TaskTable title="Tâches par flux" tasks={fluxTasks} />}
+            {CRON_CATEGORIES.map(cat => {
+              const tasks = tasksByCategory[cat.id] ?? []
+              if (!tasks.length) return null
+              return (
+                <div key={cat.id}>
+                  <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 px-5 py-2 border-b border-slate-200 dark:border-slate-700 flex items-baseline gap-3">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      {cat.label}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-600 normal-case tracking-normal">{cat.desc}</span>
+                    <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-600">{tasks.length} tâche{tasks.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-700/50">
+                        <th className="text-left px-5 py-2.5">Tâche</th>
+                        <th className="text-left px-4 py-2.5">Fréquence</th>
+                        <th className="text-left px-4 py-2.5">Dernière exécution</th>
+                        <th className="text-left px-4 py-2.5">Prochaine exécution</th>
+                        <th className="text-left px-4 py-2.5">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasks.map((task, i) => (
+                        <tr key={i} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-100/20 dark:hover:bg-slate-700/20 transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">{task.name}</div>
+                            <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{task.script}</div>
+                            {task.detail && <div className="text-[11px] text-blue-500 dark:text-blue-400 mt-1">{task.detail}</div>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-slate-700 dark:text-slate-300 text-sm">{task.label}</div>
+                            <div className="text-[10px] text-slate-400 dark:text-slate-600 font-mono mt-0.5">{task.cron}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {task.last_run ? (
+                              <>
+                                <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.last_run)}</div>
+                                <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.last_run)}</div>
+                              </>
+                            ) : <span className="text-slate-400 dark:text-slate-600 italic text-sm">Jamais</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            {task.next_run ? (
+                              <>
+                                <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.next_run)}</div>
+                                <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.next_run)}</div>
+                              </>
+                            ) : <span className="text-slate-400 dark:text-slate-600 text-sm">—</span>}
+                          </td>
+                          <td className="px-4 py-3"><StatusBadge task={task} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+            {fluxTasks.length > 0 && (
+              <div>
+                <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 px-5 py-2 border-b border-slate-200 dark:border-slate-700 flex items-baseline gap-3">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Tâches par flux
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-600 normal-case tracking-normal">Collecte IA planifiée par flux JSON source</span>
+                  <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-600">{fluxTasks.length} flux</span>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-700/50">
+                      <th className="text-left px-5 py-2.5">Tâche</th>
+                      <th className="text-left px-4 py-2.5">Fréquence</th>
+                      <th className="text-left px-4 py-2.5">Dernière exécution</th>
+                      <th className="text-left px-4 py-2.5">Prochaine exécution</th>
+                      <th className="text-left px-4 py-2.5">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fluxTasks.map((task, i) => (
+                      <tr key={i} className="border-b border-slate-200/40 dark:border-slate-700/40 last:border-0 hover:bg-slate-100/20 dark:hover:bg-slate-700/20 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">{task.name}</div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{task.script}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-slate-700 dark:text-slate-300 text-sm">{task.label}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-600 font-mono mt-0.5">{task.cron}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.last_run ? (
+                            <>
+                              <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.last_run)}</div>
+                              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.last_run)}</div>
+                            </>
+                          ) : <span className="text-slate-400 dark:text-slate-600 italic text-sm">Jamais</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.next_run ? (
+                            <>
+                              <div className="text-slate-700 dark:text-slate-300 text-sm">{formatDateTime(task.next_run)}</div>
+                              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{formatRelative(task.next_run)}</div>
+                            </>
+                          ) : <span className="text-slate-400 dark:text-slate-600 text-sm">—</span>}
+                        </td>
+                        <td className="px-4 py-3"><StatusBadge task={task} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1707,8 +1825,406 @@ function EnvTab() {
 
 // ─── Panneau principal Réglages ───────────────────────────────────────────────
 
+// ─── Onglet Sources Web (sites sans RSS, scraping sitemap) ───────────────────
+
+function WebSourcesTab() {
+  const [sources, setSources]         = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState(null)
+  const [isDirty, setIsDirty]         = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [saveMsg, setSaveMsg]         = useState(null)
+  const [checking, setChecking]       = useState(new Set())  // names en cours de vérif
+  const [results, setResults]         = useState({})         // name → true|false
+  const [checkingAll, setCheckingAll] = useState(false)
+  const [stateInfo, setStateInfo]     = useState({})         // name → nb URLs traitées
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addUrl, setAddUrl]           = useState('')
+  const [addPattern, setAddPattern]   = useState('')
+  const [addKeyword, setAddKeyword]   = useState('')
+  const [addTitle, setAddTitle]       = useState('')
+  const [addSitemap, setAddSitemap]   = useState('')
+  const [addBaseUrl, setAddBaseUrl]   = useState('')
+  const [addMsg, setAddMsg]           = useState(null)  // {state, text}
+  const [resolving, setResolving]     = useState(false)
+  const addUrlRef                     = useRef(null)
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/web-sources').then(r => r.json()),
+      fetch('/api/web-sources/state').then(r => r.json()).catch(() => ({})),
+    ]).then(([srcs, st]) => {
+      setSources(Array.isArray(srcs) ? srcs : [])
+      setStateInfo(typeof st === 'object' && !st.error ? st : {})
+      setLoading(false)
+    }).catch(() => { setError('Impossible de charger les sources web'); setLoading(false) })
+  }, [])
+
+  const removeSource = useCallback((name) => {
+    setSources(prev => prev.filter(s => s.name !== name))
+    setIsDirty(true)
+  }, [])
+
+  const toggleActive = useCallback((name) => {
+    setSources(prev => prev.map(s => s.name === name ? { ...s, actif: !s.actif } : s))
+    setIsDirty(true)
+  }, [])
+
+  const checkOne = useCallback(async (source) => {
+    const url = source.sitemap_url || source.base_url
+    setChecking(prev => new Set([...prev, source.name]))
+    try {
+      const r = await fetch('/api/web-sources/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await r.json()
+      setResults(prev => ({ ...prev, [source.name]: !!data.ok }))
+    } catch {
+      setResults(prev => ({ ...prev, [source.name]: false }))
+    } finally {
+      setChecking(prev => { const s = new Set(prev); s.delete(source.name); return s })
+    }
+  }, [])
+
+  const checkAll = useCallback(async () => {
+    if (!sources || checkingAll) return
+    setCheckingAll(true)
+    setResults({})
+    for (const s of sources) await checkOne(s)
+    setCheckingAll(false)
+  }, [sources, checkingAll, checkOne])
+
+  const handleResolve = useCallback(async () => {
+    const url = addUrl.trim()
+    if (!url.startsWith('http')) {
+      setAddMsg({ state: 'error', text: `URL invalide : "${url.slice(0, 60)}"` })
+      return
+    }
+    setResolving(true)
+    setAddMsg({ state: 'checking', text: `Résolution de ${url}…` })
+    try {
+      const r = await fetch('/api/web-sources/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await r.json()
+      if (data.ok) {
+        setAddTitle(data.title || '')
+        setAddBaseUrl(data.base_url || '')
+        setAddSitemap(data.sitemap_url || '')
+        setAddMsg({ state: 'ok', text: `Site résolu : « ${data.title} »${data.sitemap_url ? '' : ' — sitemap non détecté, à saisir manuellement'}` })
+      } else {
+        setAddMsg({ state: 'error', text: data.error || 'Impossible de résoudre ce site' })
+      }
+    } catch (e) {
+      setAddMsg({ state: 'error', text: String(e) })
+    } finally {
+      setResolving(false)
+    }
+  }, [addUrl])
+
+  const handleAdd = useCallback(() => {
+    if (!addTitle || !addBaseUrl || !addPattern || !addKeyword) {
+      setAddMsg({ state: 'error', text: 'Tous les champs sont requis.' })
+      return
+    }
+    const slug = addTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const newSource = {
+      name: slug,
+      title: addTitle,
+      base_url: addBaseUrl,
+      sitemap_url: addSitemap,
+      url_pattern: addPattern,
+      keyword: addKeyword,
+      langue: 'fr',
+      max_per_run: 5,
+      actif: true,
+    }
+    setSources(prev => [...(prev || []), newSource])
+    setIsDirty(true)
+    setShowAddForm(false)
+    setAddUrl(''); setAddTitle(''); setAddBaseUrl(''); setAddSitemap('')
+    setAddPattern(''); setAddKeyword(''); setAddMsg(null)
+  }, [addTitle, addBaseUrl, addSitemap, addPattern, addKeyword])
+
+  const saveSources = useCallback(async () => {
+    if (!sources || saving) return
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const r = await fetch('/api/web-sources/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sources),
+      })
+      const data = await r.json()
+      if (data.ok) {
+        setSaveMsg({ ok: true, text: `${data.count} source(s) sauvegardée(s) dans web_sources.json` })
+        setIsDirty(false)
+      } else {
+        setSaveMsg({ ok: false, text: data.error || 'Erreur lors de la sauvegarde' })
+      }
+    } catch (e) {
+      setSaveMsg({ ok: false, text: String(e) })
+    } finally {
+      setSaving(false)
+      setTimeout(() => setSaveMsg(null), 4000)
+    }
+  }, [sources, saving])
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Barre d'outils */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-200/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl shrink-0 flex-wrap">
+        <Globe size={12} className="text-slate-400 dark:text-slate-500 shrink-0" />
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex-1 min-w-0">
+          {sources
+            ? <><span className="font-medium text-slate-600 dark:text-slate-300">{sources.length}</span> source{sources.length !== 1 ? 's' : ''} web</>
+            : 'Sources web'}
+        </p>
+        {/* Ajouter */}
+        <button
+          onClick={() => {
+            setShowAddForm(v => !v)
+            setAddMsg(null)
+            setTimeout(() => addUrlRef.current?.focus(), 50)
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors
+            ${showAddForm
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-400/40'
+              : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'}`}
+          title="Ajouter une source web"
+        >
+          <Plus size={11} />
+          <span className="hidden sm:inline">Ajouter</span>
+        </button>
+        {/* Vérifier tout */}
+        <button
+          onClick={checkAll}
+          disabled={checkingAll || !sources?.length}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors disabled:opacity-40
+            bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+          title="Vérifier l'accessibilité de toutes les sources"
+        >
+          {checkingAll ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
+          <span className="hidden sm:inline">Vérifier</span>
+        </button>
+        {/* Sauver */}
+        <button
+          onClick={saveSources}
+          disabled={!isDirty || saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors disabled:opacity-40
+            bg-blue-500 hover:bg-blue-600 text-white"
+          title="Sauvegarder dans config/web_sources.json"
+        >
+          {saving ? <RefreshCw size={11} className="animate-spin" /> : <Save size={11} />}
+          <span className="hidden sm:inline">Sauver</span>
+        </button>
+      </div>
+
+      {/* Formulaire d'ajout */}
+      {showAddForm && (
+        <div className="mx-5 mt-3 p-4 rounded-xl border border-blue-200 dark:border-blue-700/50 bg-blue-50/60 dark:bg-blue-900/10 space-y-2.5 shrink-0">
+          <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+            <Globe size={12} /> Ajouter une source web
+          </p>
+          {/* Étape 1 : URL du site */}
+          <div className="flex gap-2">
+            <input
+              ref={addUrlRef}
+              type="url"
+              value={addUrl}
+              onChange={e => { setAddUrl(e.target.value); setAddMsg(null) }}
+              onKeyDown={e => { if (e.key === 'Enter') handleResolve() }}
+              placeholder="URL du site (ex: https://www.example.com/news)"
+              className="flex-1 min-w-0 px-3 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+            />
+            <button
+              onClick={handleResolve}
+              disabled={!addUrl.trim() || resolving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-200 disabled:opacity-40 transition-colors shrink-0"
+            >
+              {resolving ? <RefreshCw size={11} className="animate-spin" /> : <ExternalLink size={11} />}
+              Résoudre
+            </button>
+          </div>
+
+          {addMsg && (
+            <div className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 ${
+              addMsg.state === 'checking' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+              : addMsg.state === 'ok'     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+              :                             'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
+              {addMsg.state === 'checking' && <RefreshCw size={11} className="animate-spin shrink-0" />}
+              {addMsg.state === 'ok'       && <CheckCircle2 size={11} className="shrink-0" />}
+              {addMsg.state === 'error'    && <AlertTriangle size={11} className="shrink-0" />}
+              <span className="truncate">{addMsg.text}</span>
+            </div>
+          )}
+
+          {/* Étape 2 : détails (visibles après résolution) */}
+          {addBaseUrl && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Titre</label>
+                  <input type="text" value={addTitle} onChange={e => setAddTitle(e.target.value)}
+                    placeholder="Nom affiché"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Mot-clé (bucket)</label>
+                  <input type="text" value={addKeyword} onChange={e => setAddKeyword(e.target.value)}
+                    placeholder="ex: Anthropic, MoMA, Louvre"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">URL sitemap</label>
+                  <input type="url" value={addSitemap} onChange={e => setAddSitemap(e.target.value)}
+                    placeholder="https://…/sitemap.xml"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Pattern URL (regex)</label>
+                  <input type="text" value={addPattern} onChange={e => setAddPattern(e.target.value)}
+                    placeholder="ex: /news/  ou  /en/programs/\d+"
+                    className="w-full px-2.5 py-1.5 text-xs font-mono bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors" />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={() => { setShowAddForm(false); setAddUrl(''); setAddTitle(''); setAddBaseUrl(''); setAddSitemap(''); setAddPattern(''); setAddKeyword(''); setAddMsg(null) }}
+                  className="px-3 py-1.5 text-xs rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                  Annuler
+                </button>
+                <button
+                  onClick={handleAdd}
+                  disabled={!addTitle || !addBaseUrl || !addPattern || !addKeyword}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors"
+                >
+                  <Plus size={11} /> Ajouter la source
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {saveMsg && (
+        <div className={`mx-5 mt-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${saveMsg.ok ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
+          {saveMsg.ok ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+          {saveMsg.text}
+        </div>
+      )}
+
+      <ErrorBanner message={error} />
+
+      {/* Liste des sources */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        {!sources || sources.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-sm">
+            Aucune source web configurée. Cliquez sur «&nbsp;Ajouter&nbsp;» pour commencer.
+          </div>
+        ) : sources.map((src) => {
+          const isChecking = checking.has(src.name)
+          const result = results[src.name]
+          const processed = stateInfo[src.name] ?? null
+          const domain = (() => { try { return new URL(src.base_url || src.html_url || '').hostname.replace(/^www\./, '') } catch { return src.base_url || '' } })()
+          return (
+            <div key={src.name} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors group
+              ${result === false ? 'border-red-200 dark:border-red-700/40 bg-red-50/40 dark:bg-red-900/10'
+                : src.actif ? 'border-slate-200 dark:border-slate-700/50 bg-white/70 dark:bg-slate-800/40'
+                : 'border-slate-200/60 dark:border-slate-700/30 bg-slate-50/60 dark:bg-slate-800/20 opacity-60'}`}>
+              {/* Icône */}
+              <Globe size={14} className={`mt-0.5 shrink-0 ${src.actif ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400'}`} />
+
+              {/* Infos */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{src.title}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium shrink-0">
+                    {src.keyword}
+                  </span>
+                  {!src.actif && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-400 shrink-0">
+                      inactif
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{domain}</div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700/60 px-1.5 py-0.5 rounded">
+                    {src.url_pattern}
+                  </code>
+                  {processed !== null && (
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                      <CheckCircle2 size={9} className="text-green-500" />
+                      {processed} URL{processed !== 1 ? 's' : ''} traité{processed !== 1 ? 'es' : 'e'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 shrink-0">
+                {isChecking && <RefreshCw size={12} className="animate-spin text-blue-400" />}
+                {!isChecking && result === true  && <CheckCircle2 size={12} className="text-green-500" />}
+                {!isChecking && result === false && <AlertTriangle size={12} className="text-red-400" />}
+
+                {/* Toggle actif */}
+                <button
+                  onClick={() => toggleActive(src.name)}
+                  title={src.actif ? 'Désactiver cette source' : 'Activer cette source'}
+                  className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                >
+                  {src.actif ? <ToggleRight size={14} className="text-blue-500" /> : <ToggleLeft size={14} />}
+                </button>
+
+                {/* Vérifier */}
+                {!isChecking && (
+                  <button
+                    onClick={() => checkOne(src)}
+                    title="Vérifier l'accessibilité du sitemap"
+                    className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  >
+                    <Check size={12} />
+                  </button>
+                )}
+
+                {/* Lien externe */}
+                <a href={src.base_url} target="_blank" rel="noopener noreferrer"
+                  className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  title="Ouvrir le site">
+                  <ExternalLink size={12} />
+                </a>
+
+                {/* Supprimer */}
+                <button
+                  onClick={() => removeSource(src.name)}
+                  title="Supprimer cette source"
+                  className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const TABS = [
   { id: 'rss',       label: 'RSS',            short: 'RSS',      Icon: Rss       },
+  { id: 'web',       label: 'Web',            short: 'Web',      Icon: Globe     },
   { id: 'scheduler', label: 'Planification',   short: 'Cron',     Icon: Clock     },
   { id: 'keywords',  label: 'Mots-clés',       short: 'Mots-cl.', Icon: Tag       },
   { id: 'flux',      label: 'Flux Reeder',     short: 'Flux',     Icon: Database  },
@@ -1880,6 +2396,7 @@ export default function SettingsPanel({ onClose, theme, onThemeChange, rssStatus
         {/* ── Contenu de l'onglet actif ── */}
         <div className="flex flex-col flex-1 overflow-hidden">
           {activeTab === 'rss'       && <RssTab />}
+          {activeTab === 'web'       && <WebSourcesTab />}
           {activeTab === 'scheduler' && <SchedulerTab />}
           {activeTab === 'keywords'  && <KeywordsTab />}
           {activeTab === 'flux'      && <FluxTab />}
