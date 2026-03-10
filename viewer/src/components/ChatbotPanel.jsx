@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send, Save, Trash2, FileText, ChevronRight, Loader2, Terminal, RefreshCw, Check } from 'lucide-react'
+import { X, Send, Save, Trash2, FileText, ChevronRight, Loader2, Terminal, RefreshCw, Check, BookOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -21,6 +21,14 @@ const QUICK_COMMANDS = [
   { label: 'Top 10 thématiques',             text: 'Identifie et classe les 10 principales thématiques abordées dans les articles de contexte. Présente le résultat sous forme de tableau avec le nombre d\'articles par thème.' },
   { label: 'Fiche d\'entité principale',     text: 'Génère une fiche structurée sur l\'entité (personne, organisation ou pays) la plus mentionnée dans les articles de contexte : qui est-elle, quel rôle joue-t-elle, quels sont les faits clés ?' },
   { label: 'FAQ sur les données',            text: 'À partir des articles de contexte, génère 5 questions fréquentes (FAQ) avec leurs réponses sur les principaux sujets abordés.' },
+]
+
+// Commandes rapides spécifiques aux notes personnelles
+const NOTES_QUICK_COMMANDS = [
+  { label: 'Notes de la semaine',   period: 'week',  text: 'Quelles sont mes notes personnelles de la semaine ? Liste-les par article avec le titre, la source et ma note pour chacun.' },
+  { label: 'Notes du mois',         period: 'month', text: 'Quelles sont mes notes personnelles du mois ? Regroupe-les par tag et indique l\'article correspondant pour chaque note.' },
+  { label: 'Toutes mes notes',      period: 'all',   text: 'Liste toutes mes notes personnelles, regroupées par tag. Pour chaque note, indique l\'article et la date.' },
+  { label: 'Articles importants ⭐', period: 'week',  text: 'Parmi mes notes de la semaine, lesquels sont marqués comme importants (⭐) ? Présente-les avec leur titre et ma note.' },
 ]
 
 // ── Protection anti-suppression ───────────────────────────────────────────────
@@ -49,6 +57,9 @@ const isDestructiveRequest = (text) => {
   return hasDestructionVerb && hasProtectedObject
 }
 
+// Labels pour les périodes de notes personnelles
+const PERIOD_LABELS = { week: 'semaine', month: 'mois', all: 'toutes' }
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function ChatbotPanel({ onClose, onFileSaved }) {
@@ -61,6 +72,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
   const [fileSearch, setFileSearch]     = useState('')
   const [saving, setSaving]             = useState(false)
   const [savedMsg, setSavedMsg]         = useState(null)
+  const [notesPeriod, setNotesPeriod]   = useState(null)  // null | "week" | "month" | "all"
 
   const ctrlRef   = useRef(null)
   const endRef    = useRef(null)
@@ -91,7 +103,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
 
   // ── Envoi d'un message ────────────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (text) => {
+  const sendMessage = useCallback(async (text, overrideNotesPeriod) => {
     const content = (text || input).trim()
     if (!content || streaming) return
 
@@ -132,6 +144,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
         body: JSON.stringify({
           messages: newMessages,
           context_files: contextFiles,
+          notes_period: overrideNotesPeriod || notesPeriod || undefined,
         }),
         signal: ctrl.signal,
       })
@@ -202,7 +215,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
     } finally {
       setStreaming(false)
     }
-  }, [input, messages, streaming, contextFiles])
+  }, [input, messages, streaming, contextFiles, notesPeriod])
 
   // ── Sauvegarde en Markdown ────────────────────────────────────────────────
 
@@ -373,6 +386,17 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                 {contextFiles.length} fichier{contextFiles.length > 1 ? 's' : ''} en contexte
               </span>
             )}
+            {/* Indicateur de notes personnelles actives */}
+            {notesPeriod && (
+              <button
+                onClick={() => setNotesPeriod(null)}
+                className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-400 bg-amber-900/30 border border-amber-800/50 px-2 py-0.5 rounded hover:bg-amber-900/50 transition-colors"
+                title="Cliquez pour désactiver les notes personnelles"
+              >
+                <BookOpen size={9} />
+                Notes {PERIOD_LABELS[notesPeriod]}
+              </button>
+            )}
             {/* Bouton fermer */}
             <button
               onClick={onClose}
@@ -425,16 +449,56 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                   ))
                 )}
               </div>
+              {/* Notes personnelles (section dans la sidebar) */}
+              <div className="px-3 py-2 border-t border-green-900/30">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <BookOpen size={11} className="text-amber-600" />
+                  <span className="font-mono text-[11px] text-amber-600 uppercase tracking-widest">Notes</span>
+                </div>
+                <div className="space-y-0.5">
+                  {[
+                    { label: 'Cette semaine', value: 'week' },
+                    { label: 'Ce mois', value: 'month' },
+                    { label: 'Toutes', value: 'all' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setNotesPeriod(prev => prev === opt.value ? null : opt.value)}
+                      className={`w-full text-left px-2 py-1 rounded text-[10px] font-mono transition-colors flex items-start gap-1.5 ${
+                        notesPeriod === opt.value
+                          ? 'bg-amber-900/40 text-amber-300'
+                          : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="mt-0.5 shrink-0 text-amber-700">
+                        {notesPeriod === opt.value ? '■' : '□'}
+                      </span>
+                      <span className="truncate leading-tight">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               {/* Actions contexte */}
-              {contextFiles.length > 0 && (
+              {(contextFiles.length > 0 || notesPeriod) && (
                 <div className="px-2 py-2 border-t border-green-900/30">
-                  <button
-                    onClick={() => setContextFiles([])}
-                    className="w-full text-[10px] font-mono text-slate-600 hover:text-red-400 transition-colors text-left flex items-center gap-1"
-                  >
-                    <Trash2 size={9} />
-                    Vider le contexte
-                  </button>
+                  {contextFiles.length > 0 && (
+                    <button
+                      onClick={() => setContextFiles([])}
+                      className="w-full text-[10px] font-mono text-slate-600 hover:text-red-400 transition-colors text-left flex items-center gap-1 mb-1"
+                    >
+                      <Trash2 size={9} />
+                      Vider le contexte
+                    </button>
+                  )}
+                  {notesPeriod && (
+                    <button
+                      onClick={() => setNotesPeriod(null)}
+                      className="w-full text-[10px] font-mono text-slate-600 hover:text-amber-400 transition-colors text-left flex items-center gap-1"
+                    >
+                      <Trash2 size={9} />
+                      Désactiver les notes
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -458,15 +522,28 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                     </p>
                     {/* Fichiers de contexte sur mobile */}
                     <div className="lg:hidden mb-4">
-                      <button
-                        onClick={() => setPickerOpen(v => !v)}
-                        className="inline-flex items-center gap-1.5 text-xs font-mono text-green-600 hover:text-green-400 border border-green-900/40 rounded px-2 py-1 transition-colors"
-                      >
-                        <FileText size={11} />
-                        {contextFiles.length > 0
-                          ? `${contextFiles.length} fichier${contextFiles.length > 1 ? 's' : ''} en contexte`
-                          : 'Ajouter contexte'}
-                      </button>
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => setPickerOpen(v => !v)}
+                          className="inline-flex items-center gap-1.5 text-xs font-mono text-green-600 hover:text-green-400 border border-green-900/40 rounded px-2 py-1 transition-colors"
+                        >
+                          <FileText size={11} />
+                          {contextFiles.length > 0
+                            ? `${contextFiles.length} fichier${contextFiles.length > 1 ? 's' : ''} en contexte`
+                            : 'Ajouter contexte'}
+                        </button>
+                        <button
+                          onClick={() => setNotesPeriod(prev => prev ? null : 'week')}
+                          className={`inline-flex items-center gap-1.5 text-xs font-mono border rounded px-2 py-1 transition-colors ${
+                            notesPeriod
+                              ? 'text-amber-400 border-amber-800/50 bg-amber-900/30'
+                              : 'text-amber-700 border-amber-900/40 hover:text-amber-400'
+                          }`}
+                        >
+                          <BookOpen size={11} />
+                          {notesPeriod ? `Notes (${PERIOD_LABELS[notesPeriod]})` : 'Notes personnelles'}
+                        </button>
+                      </div>
                       {pickerOpen && (
                         <div className="mt-2 border border-green-900/30 rounded p-2 max-h-40 overflow-y-auto">
                           <input
@@ -504,6 +581,27 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                           className="block w-full text-left font-mono text-xs text-slate-500 hover:text-green-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
                         >
                           <ChevronRight size={10} className="inline mr-1 text-green-700" />
+                          {cmd.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Notes personnelles */}
+                    <div className="space-y-1 mt-4">
+                      <p className="font-mono text-[10px] text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        <BookOpen size={9} />
+                        Notes personnelles
+                      </p>
+                      {NOTES_QUICK_COMMANDS.map((cmd, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setNotesPeriod(cmd.period)
+                            sendMessage(cmd.text, cmd.period)
+                          }}
+                          disabled={streaming}
+                          className="block w-full text-left font-mono text-xs text-slate-500 hover:text-amber-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
+                        >
+                          <ChevronRight size={10} className="inline mr-1 text-amber-800" />
                           {cmd.label}
                         </button>
                       ))}

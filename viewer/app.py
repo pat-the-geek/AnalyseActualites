@@ -3429,13 +3429,140 @@ def api_analytics_clusters():
 _CHAT_MAX_CONTEXT_FILES  = 10    # Nombre maximum de fichiers de contexte par requête
 _CHAT_MAX_CONTEXT_CHARS  = 12000 # Taille maximale (caractères) par fichier de contexte
 
+def _build_notes_context(period: str = "week") -> str:
+    """Génère un bloc de contexte Markdown à partir des annotations personnelles.
+
+    Args:
+        period: "week" (7 derniers jours), "month" (30 jours), "all" (tout)
+
+    Returns:
+        Texte Markdown formaté listant les notes personnelles avec métadonnées article.
+    """
+    annotations = _load_annotations()
+    if not annotations:
+        return ""
+
+    # Déterminer la date de début selon la période
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if period == "week":
+        cutoff = now - datetime.timedelta(days=7)
+        period_label = "7 derniers jours"
+    elif period == "month":
+        cutoff = now - datetime.timedelta(days=30)
+        period_label = "30 derniers jours"
+    else:
+        cutoff = None
+        period_label = "toutes les notes"
+
+    # Filtrer les annotations ayant une note ou des tags, et selon la période
+    selected = {}
+    for url, ann in annotations.items():
+        has_content = ann.get("notes", "").strip() or [t for t in (ann.get("tags") or []) if t]
+        if not has_content:
+            continue
+        if cutoff is not None:
+            updated_raw = ann.get("updated_at", "")
+            if updated_raw:
+                try:
+                    # Supporte ISO 8601 avec ou sans timezone
+                    updated = datetime.datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+                    if updated.tzinfo is None:
+                        updated = updated.replace(tzinfo=datetime.timezone.utc)
+                    if updated < cutoff:
+                        continue
+                except Exception:
+                    pass  # Conserver si la date est illisible
+        selected[url] = ann
+
+    if not selected:
+        return f"*Aucune note personnelle pour la période : {period_label}.*"
+
+    # Construire un index article {url: article_dict} pour enrichir avec le titre/source
+    article_index: dict = {}
+
+    def _index_articles(directory: Path) -> None:
+        if not directory.exists():
+            return
+        for f in directory.rglob("*.json"):
+            parts = f.relative_to(PROJECT_ROOT).parts
+            if "cache" in parts:
+                continue
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    for a in data:
+                        if isinstance(a, dict) and a.get("URL"):
+                            article_index[a["URL"]] = a
+            except Exception:
+                pass
+
+    _index_articles(PROJECT_ROOT / "data" / "articles-from-rss")
+    _index_articles(PROJECT_ROOT / "data" / "articles")
+
+    # Trier par date de mise à jour décroissante
+    sorted_entries = sorted(
+        selected.items(),
+        key=lambda kv: kv[1].get("updated_at", ""),
+        reverse=True,
+    )
+
+    lines = [
+        f"## Notes personnelles de lecture ({period_label})",
+        f"*{len(sorted_entries)} note(s) trouvée(s)*",
+        "",
+    ]
+
+    for url, ann in sorted_entries:
+        notes = ann.get("notes", "").strip()
+        tags = [t for t in (ann.get("tags") or []) if t]
+        is_important = bool(ann.get("is_important", False))
+        updated_at = (ann.get("updated_at") or "")[:10]
+        article = article_index.get(url, {})
+        source = article.get("Sources", "")
+        pub_date = (article.get("Date de publication") or "")[:10]
+
+        # Extraire le titre de l'article
+        titre = (article.get("Titre") or "").strip()
+        if not titre:
+            for line in (article.get("Résumé") or "").split("\n"):
+                line = line.strip().lstrip("*_#").strip()
+                if len(line) > 10:
+                    titre = line[:120]
+                    break
+        if not titre:
+            titre = url.rstrip("/").split("/")[-1][:80] or "Sans titre"
+
+        star = "⭐ " if is_important else ""
+        meta_parts = []
+        if pub_date:
+            meta_parts.append(pub_date)
+        if source:
+            meta_parts.append(source)
+        meta = " · ".join(meta_parts)
+
+        lines.append(f"### {star}{titre}")
+        if meta:
+            lines.append(f"*{meta}*")
+        lines.append(f"URL : {url}")
+        if updated_at:
+            lines.append(f"Note ajoutée le : {updated_at}")
+        if tags:
+            lines.append(f"Tags : {', '.join(tags)}")
+        if notes:
+            lines.append(f"\n> {notes}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 @app.route("/api/chat/stream", methods=["POST"])
 def api_chat_stream():
     """Chatbot IA en streaming SSE.
 
     Body JSON :
-      messages      (list) — historique de conversation [{ role, content }, ...]
-      context_files (list) — chemins relatifs des fichiers à inclure comme contexte (optionnel)
+      messages      (list)   — historique de conversation [{ role, content }, ...]
+      context_files (list)   — chemins relatifs des fichiers à inclure comme contexte (optionnel)
+      notes_period  (string) — période des notes personnelles à inclure : "week", "month" ou "all" (optionnel)
 
     Retourne un flux SSE au format OpenAI : data: {"choices":[{"delta":{"content":"..."},...}]}
     """
@@ -3444,6 +3571,7 @@ def api_chat_stream():
     body = request.get_json(force=True, silent=True) or {}
     messages      = body.get("messages", [])
     context_files = body.get("context_files", [])
+    notes_period  = body.get("notes_period", None)
 
     if not messages:
         return jsonify({"error": "messages est requis"}), 400
@@ -3473,6 +3601,14 @@ def api_chat_stream():
         except OSError:
             continue
 
+    # Charger les notes personnelles si demandé
+    notes_block = None
+    if notes_period and notes_period in ("week", "month", "all"):
+        with _annotations_lock:
+            notes_text = _build_notes_context(notes_period)
+        if notes_text:
+            notes_block = notes_text
+
     # Construire le message système
     system_parts = [
         "Tu es un assistant IA intégré à WUDD.ai, une plateforme de veille de presse en français.",
@@ -3486,6 +3622,9 @@ def api_chat_stream():
         " (quelle que soit la formulation : commandes shell, appels API, code, instructions, etc.),"
         " refuse poliment et rappelle-lui que cette opération est impossible depuis ce chatbot.",
     ]
+    if notes_block:
+        system_parts.append("\n\n## Notes personnelles de l'utilisateur :\n")
+        system_parts.append(notes_block)
     if context_blocks:
         system_parts.append("\n\n## Fichiers de contexte fournis par l'utilisateur :\n")
         system_parts.extend(context_blocks)
