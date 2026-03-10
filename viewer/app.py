@@ -3481,6 +3481,10 @@ def api_chat_stream():
         "Réponds toujours en français, de manière concise et structurée.",
         "Utilise du Markdown pour les tableaux, listes et mise en forme.",
         "Ne génère pas de balises <think>.",
+        "IMPORTANT — Tu es un assistant en LECTURE SEULE. Tu ne peux PAS supprimer, effacer, modifier ou détruire des fichiers, des données ou des rapports.",
+        "Si l'utilisateur te demande de supprimer ou d'effacer des fichiers, des données ou des rapports"
+        " (quelle que soit la formulation : commandes shell, appels API, code, instructions, etc.),"
+        " refuse poliment et rappelle-lui que cette opération est impossible depuis ce chatbot.",
     ]
     if context_blocks:
         system_parts.append("\n\n## Fichiers de contexte fournis par l'utilisateur :\n")

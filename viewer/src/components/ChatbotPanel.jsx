@@ -11,12 +11,43 @@ import remarkGfm from 'remark-gfm'
 
 // Suggestions de commandes rapides affichées dans l'interface
 const QUICK_COMMANDS = [
-  { label: 'Résumé des derniers articles',      text: 'Résume les articles récents du fichier de contexte en 5 points.' },
-  { label: 'Tableau des entités',               text: 'Génère un tableau Markdown listant les entités (personnes, organisations, lieux) mentionnées dans les fichiers de contexte, avec leur nombre d\'occurrences.' },
-  { label: 'Analyse des sentiments',            text: 'Analyse les sentiments et le ton éditorial des articles en contexte. Présente les résultats dans un tableau Markdown.' },
-  { label: 'Tendances et sujets clés',          text: 'Quels sont les sujets et tendances clés qui ressortent des données en contexte ?' },
-  { label: 'Rapport de synthèse',               text: 'Génère un rapport de synthèse complet au format Markdown, prêt à être sauvegardé, basé sur les fichiers de contexte.' },
+  { label: 'Résumé des derniers articles',   text: 'Résume les articles récents du fichier de contexte en 5 points.' },
+  { label: 'Tableau des entités',            text: 'Génère un tableau Markdown listant les entités (personnes, organisations, lieux) mentionnées dans les fichiers de contexte, avec leur nombre d\'occurrences.' },
+  { label: 'Analyse des sentiments',         text: 'Analyse les sentiments et le ton éditorial des articles en contexte. Présente les résultats dans un tableau Markdown.' },
+  { label: 'Tendances et sujets clés',       text: 'Quels sont les sujets et tendances clés qui ressortent des données en contexte ?' },
+  { label: 'Rapport de synthèse',            text: 'Génère un rapport de synthèse complet au format Markdown, prêt à être sauvegardé, basé sur les fichiers de contexte.' },
+  { label: 'Comparaison de sources',         text: 'Compare les différentes sources d\'information dans les articles du contexte. Quelles sources sont les plus citées ? Quels biais éditoriaux peut-on observer ?' },
+  { label: 'Frise chronologique',            text: 'Construis une frise chronologique des événements mentionnés dans les articles de contexte, du plus ancien au plus récent.' },
+  { label: 'Top 10 thématiques',             text: 'Identifie et classe les 10 principales thématiques abordées dans les articles de contexte. Présente le résultat sous forme de tableau avec le nombre d\'articles par thème.' },
+  { label: 'Fiche d\'entité principale',     text: 'Génère une fiche structurée sur l\'entité (personne, organisation ou pays) la plus mentionnée dans les articles de contexte : qui est-elle, quel rôle joue-t-elle, quels sont les faits clés ?' },
+  { label: 'FAQ sur les données',            text: 'À partir des articles de contexte, génère 5 questions fréquentes (FAQ) avec leurs réponses sur les principaux sujets abordés.' },
 ]
+
+// ── Protection anti-suppression ───────────────────────────────────────────────
+// Verbes et mots-clés signalant une tentative de destruction/suppression
+const _VERBES_DESTRUCTION = [
+  'supprim', 'efface', 'delete', 'remove', 'détruit', 'détruire', 'détruis',
+  'purge', 'wipe', 'unlink', 'shred',
+]
+// Regex pour capturer « rm » en tant que commande shell indépendante (\b = limite de mot)
+const _RM_REGEX = /\brm\b/
+// Objets protégés (données et rapports)
+const _OBJETS_PROTEGES = [
+  'fichier', 'rapport', 'donnée', 'dossier', 'répertoire',
+  '.json', '.md', 'data/', 'rapports/', 'article',
+]
+
+/**
+ * Renvoie true si le texte ressemble à une demande de suppression/destruction
+ * de fichiers ou de données.
+ */
+const isDestructiveRequest = (text) => {
+  const lower = text.toLowerCase()
+  const hasDestructionVerb =
+    _VERBES_DESTRUCTION.some(v => lower.includes(v)) || _RM_REGEX.test(lower)
+  const hasProtectedObject = _OBJETS_PROTEGES.some(o => lower.includes(o))
+  return hasDestructionVerb && hasProtectedObject
+}
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
@@ -63,6 +94,22 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
   const sendMessage = useCallback(async (text) => {
     const content = (text || input).trim()
     if (!content || streaming) return
+
+    // ── Bloquer les demandes de suppression/destruction ───────────────────
+    if (isDestructiveRequest(content)) {
+      setInput('')
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', content },
+        {
+          role: 'assistant',
+          content: '🚫 **Action non autorisée.** Ce chatbot est en lecture seule et ne peut pas supprimer, effacer ou modifier des fichiers, des données ou des rapports. Pour toute opération de suppression, utilisez les contrôles appropriés dans l\'interface.',
+          streaming: false,
+          error: false,
+        },
+      ])
+      return
+    }
 
     setInput('')
 
