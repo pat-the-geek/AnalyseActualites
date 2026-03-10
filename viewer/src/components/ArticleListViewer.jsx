@@ -108,7 +108,8 @@ function formatTime(raw) {
 
 function firstImage(images) {
   if (!Array.isArray(images)) return null
-  return images.find(i => i?.url)?.url ?? null
+  // Le champ peut être "URL" (majuscule, standard JSON) ou "url" (minuscule)
+  return images.find(i => i?.URL || i?.url)?.URL ?? images.find(i => i?.url)?.url ?? null
 }
 
 function entityCount(article) {

@@ -26,7 +26,7 @@ function formatTime(raw) {
 
 function firstImage(images) {
   if (!Array.isArray(images)) return null
-  return images.find(i => i?.url || i?.URL)?.url ?? images.find(i => i?.URL)?.URL ?? null
+  return images.find(i => i?.URL || i?.url)?.URL ?? images.find(i => i?.url)?.url ?? null
 }
 
 function entityCount(article) {

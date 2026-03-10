@@ -48,6 +48,9 @@ OUTPUT_DIR   = PROJECT_ROOT / "data" / "articles-from-rss"
 WUDD_DIR     = OUTPUT_DIR / "_WUDD.AI_"
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; WUDD.ai/2.2; +https://wudd.ai)"}
 
+# Domaines de stockage générique dont les URLs og:image sont peu fiables
+GENERIC_IMAGE_HOSTS = {"filepicker.io", "filestack.com", "cloudinary.com"}
+
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 WUDD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -212,6 +215,7 @@ def _extract_page(url: str) -> dict | None:
 
     # ── Image principale (Open Graph + twitter:image + fallback <img>) ─────────
     images = []
+    fallback_og = None
     for prop in ("og:image", "twitter:image"):
         meta = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
         if meta:
@@ -223,7 +227,12 @@ def _extract_page(url: str) -> dict | None:
                     width = int(w_tag.get("content", 1200)) if w_tag else 1200
                 except (ValueError, TypeError):
                     width = 1200
-                images.append({"URL": img_url, "Width": width})
+                from urllib.parse import urlparse
+                host = urlparse(img_url).netloc.lower()
+                if any(h in host for h in GENERIC_IMAGE_HOSTS):
+                    fallback_og = {"URL": img_url, "Width": width}
+                else:
+                    images.append({"URL": img_url, "Width": width})
                 break
     # Fallback : première <img> pertinente dans le corps de l'article
     if not images:
@@ -239,6 +248,10 @@ def _extract_page(url: str) -> dict | None:
             if w >= 300 or w == 0:
                 images.append({"URL": src, "Width": w if w > 0 else 800})
                 break
+
+    # Dernier recours : og:image générique si aucune meilleure image trouvée
+    if not images and fallback_og:
+        images.append(fallback_og)
 
     return {
         "title": title,
