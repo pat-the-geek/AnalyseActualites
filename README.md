@@ -42,22 +42,36 @@
 
 ## 1. Présentation
 
-Votre radar de l'actualité, dopé à l'IA.
+# WUDD.ai — Plateforme de veille de presse intelligente
 
-📡 Multi-flux — RSS, JSON, OPML : agrégez toutes vos sources en un seul endroit  
-🤖 Résumés IA — chaque article synthétisé en 20 lignes par Qwen3 / EurIA  
-🏷️ Entités nommées — personnes, orgs, lieux, produits détectés automatiquement  
-📈 Tendances — qui monte, qui redescend, quelles organisations dominent le fil  
-💬 Sentiment & ton éditorial — factuel, alarmiste, laudatif ? L'IA le qualifie  
-📊 Dashboard interactif — graphe de co-occurrences, galerie, carte géographique  
-📬 Rapports automatiques — Markdown, newsletter HTML, Atom, webhook Discord/Slack  
-🐳 Self-hostable — Docker Compose, cron intégré, zéro dépendance externe payante  
+WUDD.ai est une plateforme open-source de **veille de presse automatisée**.  
+Elle collecte des articles depuis des flux JSON et RSS, les enrichit via une API IA  
+(Infomaniak EurIA / Qwen3 ou Claude), et les rend exploitables via une interface web locale.
 
-WUDD.ai est une plateforme de veille intelligente qui agrège et analyse automatiquement des flux d'actualités. À partir de flux JSON accessibles par URL HTTP, le pipeline collecte les articles, extrait leur contenu HTML brut, puis soumet chaque texte à l'API EurIA d'Infomaniak (modèle Qwen3) pour en produire un résumé synthétique en français, limité à vingt lignes. Les résultats sont consolidés dans des fichiers JSON structurés, organisés par flux et par période, avec extraction automatique des trois images les plus représentatives de l'article (largeur supérieure à 500 px, triées par surface).
+## Ce que fait WUDD.ai
 
-Au-delà de la collecte unitaire, WUDD.ai intègre un moteur d'analyse thématique qui classifie les articles selon douze thématiques sociétales prédéfinies (IA, géopolitique, économie, santé, etc.) et produit des statistiques de couverture. Un module d'extraction par mot-clé permet également de surveiller des sujets spécifiques en interrogeant les flux RSS quotidiennement : chaque mot-clé configuré génère son propre rapport JSON enrichi d'un résumé IA. Un extracteur d'**entités nommées (NER)** peut enrichir a posteriori l'ensemble des articles existants en identifiant automatiquement personnes, organisations, pays, produits, événements, montants, etc. (18 types au total). L'ensemble des sorties — JSON, Markdown et PDF — est structuré par flux dans des répertoires dédiés, facilitant l'archivage et la consultation.
+- **Pipeline de résumé automatique** — chaque article est résumé en 20 lignes par l'IA,
+  classé par thématique et exporté en JSON, Markdown ou PDF
+- **Enrichissement sémantique** — extraction d'entités nommées (NER : personnes, orgs,
+  lieux, produits…), analyse de sentiment et ton éditorial
+- **Terminal IA avec RAG explicite** — interface de chat qui injecte dans le contexte du
+  modèle les fichiers d'articles sélectionnés, les notes personnelles de lecture et une
+  recherche web temps réel (EurIA)
+- **Orchestration complète** — pipeline cron Docker : collecte, enrichissement nocturne,
+  digests quotidiens, briefings hebdomadaires, rapports mensuels
+- **Tableau de bord entités** — statistiques agrégées cross-flux, graphe de co-occurrence,
+  synthèse IA par entité (streaming SSE)
 
-L'automatisation complète est assurée par un orchestrateur Docker utilisant des tâches cron internes au conteneur : collecte hebdomadaire des articles, extraction quotidienne par mot-clé, et surveillance régulière de la santé du service. Aucune dépendance n'est requise côté hôte. La configuration des flux, catégories et prompts repose sur des fichiers JSON éditables dans `config/`, et l'ajout d'une nouvelle source de veille ne nécessite qu'une ligne de configuration supplémentaire.
+## Stack technique
+
+Python 3.10+ · Flask · React 18 + Vite + Tailwind · Docker · EurIA (Qwen3) · Claude API  
+Stockage fichier JSON — aucune base de données requise.
+
+## Cas d'usage
+
+Journalistes, chercheurs, équipes de communication ou toute personne souhaitant suivre
+un domaine d'actualité sans dépendre d'un service tiers payant.
+
 
 Un exemple de rapport est disponible dans : [`samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md`](samples/rapport_sommaire_articles_generated_2026-02-01_2026-02-28.md)
 
