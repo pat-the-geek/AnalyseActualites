@@ -3423,6 +3423,193 @@ def api_analytics_clusters():
         return jsonify({"error": str(exc)}), 500
 
 
+# ── Chatbot IA ────────────────────────────────────────────────────────────────
+
+# Paramètres du chatbot
+_CHAT_MAX_CONTEXT_FILES  = 10    # Nombre maximum de fichiers de contexte par requête
+_CHAT_MAX_CONTEXT_CHARS  = 12000 # Taille maximale (caractères) par fichier de contexte
+
+@app.route("/api/chat/stream", methods=["POST"])
+def api_chat_stream():
+    """Chatbot IA en streaming SSE.
+
+    Body JSON :
+      messages      (list) — historique de conversation [{ role, content }, ...]
+      context_files (list) — chemins relatifs des fichiers à inclure comme contexte (optionnel)
+
+    Retourne un flux SSE au format OpenAI : data: {"choices":[{"delta":{"content":"..."},...}]}
+    """
+    import requests as req
+
+    body = request.get_json(force=True, silent=True) or {}
+    messages      = body.get("messages", [])
+    context_files = body.get("context_files", [])
+
+    if not messages:
+        return jsonify({"error": "messages est requis"}), 400
+
+    # Valider et charger les fichiers de contexte
+    context_blocks = []
+    for rel in context_files[:_CHAT_MAX_CONTEXT_FILES]:  # Limite au nombre maximal configuré
+        rel = str(rel).strip()
+        if not rel:
+            continue
+        # Restriction aux répertoires autorisés
+        if not (rel.startswith("data/") or rel.startswith("rapports/") or rel.startswith("samples/")):
+            continue
+        target = (PROJECT_ROOT / rel).resolve()
+        if not str(target).startswith(str(PROJECT_ROOT) + "/"):
+            continue
+        if not target.exists() or not target.is_file():
+            continue
+        try:
+            raw = target.read_text(encoding="utf-8")
+            # Tronquer les fichiers volumineux
+            if len(raw) > _CHAT_MAX_CONTEXT_CHARS:
+                raw = raw[:_CHAT_MAX_CONTEXT_CHARS] + "\n…[tronqué]"
+            ext = target.suffix.lower()
+            lang = "json" if ext == ".json" else "markdown"
+            context_blocks.append(f"### Fichier : {rel}\n```{lang}\n{raw}\n```")
+        except OSError:
+            continue
+
+    # Construire le message système
+    system_parts = [
+        "Tu es un assistant IA intégré à WUDD.ai, une plateforme de veille de presse en français.",
+        "Tu aides l'utilisateur à analyser des articles de presse, des rapports et des données JSON.",
+        "Tu peux produire des tableaux Markdown, des résumés, des analyses comparatives.",
+        "Réponds toujours en français, de manière concise et structurée.",
+        "Utilise du Markdown pour les tableaux, listes et mise en forme.",
+        "Ne génère pas de balises <think>.",
+    ]
+    if context_blocks:
+        system_parts.append("\n\n## Fichiers de contexte fournis par l'utilisateur :\n")
+        system_parts.extend(context_blocks)
+
+    system_prompt = "\n".join(system_parts)
+
+    # Construire les messages complets (système + historique)
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
+
+    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+
+    if provider == "claude":
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        api_url = "https://api.anthropic.com/v1/messages"
+        # Claude ne supporte pas role=system dans messages[], on extrait le system
+        claude_messages = [m for m in full_messages if m["role"] != "system"]
+        payload = {
+            "model": model,
+            "max_tokens": 4096,
+            "stream": True,
+            "system": system_prompt,
+            "messages": claude_messages,
+        }
+        api_headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        def generate_chat():
+            try:
+                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=180)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
+                        if normalized:
+                            yield normalized
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    else:
+        api_url = os.environ.get("URL", "").strip()
+        bearer  = os.environ.get("bearer", "").strip()
+        if not api_url or not bearer:
+            return jsonify({"error": "URL ou bearer manquant dans .env (AI_PROVIDER=euria)"}), 503
+        payload = {
+            "messages": full_messages,
+            "model": "qwen3",
+            "stream": True,
+        }
+        api_headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+        }
+
+        def generate_chat():
+            try:
+                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=180)
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8")
+                        if not decoded.startswith("data:"):
+                            decoded = "data: " + decoded
+                        yield decoded + "\n\n"
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    return Response(
+        stream_with_context(generate_chat()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/chat/save", methods=["POST"])
+def api_chat_save():
+    """Sauvegarde une conversation ou une réponse IA en Markdown dans rapports/.
+
+    Body JSON :
+      content  (str)  — contenu Markdown à sauvegarder
+      filename (str)  — nom de fichier suggéré (sans extension, optionnel)
+      subdir   (str)  — sous-répertoire dans rapports/ (défaut : "_WUDD.AI_/chatbot")
+
+    Retourne : { ok: bool, path: str }
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    content  = (body.get("content") or "").strip()
+    filename = (body.get("filename") or "").strip()
+    subdir   = (body.get("subdir") or "_WUDD.AI_/chatbot").strip()
+
+    if not content:
+        return jsonify({"error": "content est requis"}), 400
+
+    # Sanitiser le sous-répertoire
+    subdir = re.sub(r"[^\w\-/]", "_", subdir).strip("/")
+    if not subdir:
+        subdir = "_WUDD.AI_/chatbot"
+
+    # Sanitiser le nom de fichier
+    if filename:
+        filename = re.sub(r"[^\w\-]", "_", filename)[:80]
+    else:
+        filename = "chat"
+
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = f"{filename}_{ts}.md"
+
+    save_dir = (PROJECT_ROOT / "rapports" / subdir).resolve()
+    # Vérifier que le répertoire cible reste dans rapports/
+    rapports_root = (PROJECT_ROOT / "rapports").resolve()
+    if not str(save_dir).startswith(str(rapports_root)):
+        return jsonify({"error": "Répertoire non autorisé"}), 403
+
+    try:
+        save_dir.mkdir(parents=True, exist_ok=True)
+        out_path = save_dir / safe_name
+        out_path.write_text(content, encoding="utf-8")
+        rel = str(out_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+        return jsonify({"ok": True, "path": rel})
+    except OSError as e:
+        return jsonify({"error": f"Erreur écriture : {e}"}), 500
+
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_app(path):

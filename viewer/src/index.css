@@ -111,3 +111,34 @@ html:not(.dark) .json-string { color: #166534; }
 html:not(.dark) .json-bool   { color: #be123c; }
 html:not(.dark) .json-null   { color: #475569; }
 html:not(.dark) .json-number { color: #1d4ed8; }
+
+/* ── Chatbot terminal — markdown ── */
+.chat-markdown { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace; }
+.chat-markdown p  { margin: 0 0 0.5em; }
+.chat-markdown ul { margin: 0.25em 0 0.5em 1.25em; list-style: disc; }
+.chat-markdown ol { margin: 0.25em 0 0.5em 1.25em; list-style: decimal; }
+.chat-markdown li { margin-bottom: 0.15em; }
+.chat-markdown h1,.chat-markdown h2,.chat-markdown h3 { color: #4ade80; margin: 0.75em 0 0.35em; font-weight: 700; }
+.chat-markdown h1 { font-size: 1em; }
+.chat-markdown h2 { font-size: 0.95em; }
+.chat-markdown h3 { font-size: 0.9em; }
+.chat-markdown code { background: #1a2535; color: #86efac; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.85em; }
+.chat-markdown pre  { background: #111a27; border: 1px solid #1e3a2f; border-radius: 6px; padding: 0.75em 1em; overflow-x: auto; margin: 0.5em 0; }
+.chat-markdown pre code { background: transparent; padding: 0; font-size: 0.8em; }
+.chat-markdown blockquote { border-left: 2px solid #166534; padding-left: 0.75em; color: #6ee7b7; margin: 0.5em 0; font-style: italic; }
+.chat-markdown strong { color: #a7f3d0; font-weight: 700; }
+.chat-markdown em    { color: #6ee7b7; }
+.chat-markdown hr    { border: none; border-top: 1px solid #1a3d2b; margin: 0.75em 0; }
+.chat-markdown a     { color: #34d399; text-decoration: underline; }
+/* Tableaux style terminal */
+.chat-markdown table   { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.8em; }
+.chat-markdown thead   { background: #0f2318; }
+.chat-markdown th      { border: 1px solid #1e4d35; padding: 0.3em 0.6em; color: #4ade80; text-align: left; font-weight: 700; }
+.chat-markdown td      { border: 1px solid #1a3a2a; padding: 0.25em 0.6em; color: #86efac; }
+.chat-markdown tr:nth-child(even) td { background: #0a1a12; }
+
+/* ── Scrollbar fine — style terminal ── */
+.custom-scrollbar::-webkit-scrollbar        { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track  { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb  { background: #1e4d35; border-radius: 2px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #166534; }
