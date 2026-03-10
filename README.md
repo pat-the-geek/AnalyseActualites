@@ -115,6 +115,11 @@ mindmap
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
       Zéro dépendance côté hôte
+    Terminal IA (local AI agent)
+      Interrogation en langage naturel
+      Lecture et modification des JSON locaux
+      RAG · tool-calling agent
+      Compatible Copilot · Claude · Cursor
     Viewer web
       Navigation par flux
       JSON · Markdown · images
@@ -395,6 +400,65 @@ Exemples de présentations générées par Claude à partir des données collect
 Les fichiers Markdown générés (rapports de synthèse, présentations) peuvent être importés directement dans **[NotebookLM](https://notebooklm.google.com/)** comme sources de connaissances. NotebookLM permet ensuite de générer des résumés, des FAQ, des podcasts audio ou des infographies à partir du contenu collecté. Exemples de sorties produites :
 - [Présentation NotebookLM (PDF)](samples/NotebookLM%20-%20Presentation.pdf)
 - [Infographie NotebookLM](samples/NotebookLM%20-%20infographie.png)
+
+### Utilisation avec un terminal IA (local AI agent)
+
+Un **terminal IA** — aussi appelé *local AI agent*, *conversational data agent* ou *assistant IA local* — est un outil qui complète naturellement WUDD.ai. Contrairement à un chatbot classique, un terminal IA dispose d'outils (*tool use* / *function calling*) qui lui permettent de **lire, analyser et modifier des fichiers locaux** en réponse à des questions en langage naturel. Il n'interprète pas seulement vos questions : il agit sur vos données.
+
+Les fichiers JSON structurés, les rapports Markdown, les alertes et les entités nommées générés par WUDD.ai constituent une base de données locale idéale pour ce type d'agent. Au lieu de naviguer dans l'interface Viewer ou d'écrire des requêtes manuelles, vous pouvez interroger votre corpus de veille en langage naturel.
+
+#### Outils compatibles
+
+| Outil | Mode | Accès aux fichiers |
+|---|---|---|
+| **GitHub Copilot** (VS Code — mode Agent) | Tool-calling agent | Lecture/écriture dans le workspace |
+| **Claude Desktop** (MCP Filesystem) | RAG + tool use | Accès direct aux répertoires configurés |
+| **Cursor AI** | Tool-calling agent | Lecture/écriture dans le projet |
+| **Windsurf / Codeium** | Tool-calling agent | Idem |
+
+> **RAG vs Tool-calling :** le mode *RAG (Retrieval-Augmented Generation)* interroge les fichiers via un index vectoriel sémantique ; le mode *tool-calling agent* les lit directement par appels de fonctions. WUDD.ai génère des fichiers JSON et Markdown suffisamment structurés et enrichis (résumés IA, entités NER, sentiment) pour les deux approches.
+
+#### Exemples de questions posées en langage naturel
+
+**Exploration des données**
+```
+"Quelles sont les 5 entités les plus mentionnées cette semaine dans le flux Intelligence-artificielle ?"
+→ Lit data/articles/Intelligence-artificielle/*.json — champ entities
+```
+
+**Analyse des tendances**
+```
+"Quels sujets sont en forte hausse aujourd'hui ? Explique pourquoi."
+→ Lit data/alertes.json + data/articles-from-rss/*.json
+```
+
+**Recherche cross-flux**
+```
+"Trouve tous les articles qui mentionnent à la fois OpenAI et Microsoft."
+→ Parcourt tous les JSON dans data/articles/ — filtrage sur entities.ORG
+```
+
+**Génération de rapport personnalisé**
+```
+"Génère un résumé exécutif des articles de février sur l'IA,
+ en mettant en avant les implications géopolitiques."
+→ Lit articles_generated_2026-02-01_2026-02-28.json + rédige un Markdown structuré
+```
+
+**Modification de configuration**
+```
+"Ajoute le mot-clé 'NVIDIA' avec les synonymes 'Jensen Huang' et 'GPU'
+ dans la configuration de surveillance."
+→ Modifie config/keyword-to-search.json
+```
+
+**Exploration du graphe sémantique**
+```
+"Quelles organisations sont le plus souvent associées à Sam Altman dans mes articles ?"
+→ Analyse les co-occurrences dans les champs entities à travers tout le corpus
+```
+
+Ce pattern — *données locales structurées + terminal IA conversationnel* — transforme WUDD.ai en un **système de veille interrogeable en langage naturel**, sans nécessiter aucune infrastructure supplémentaire. Le Viewer fournit la navigation visuelle et l'édition assistée ; le terminal IA complète avec la capacité d'interaction libre, d'analyse ad hoc et d'automatisation à la demande.
 
 ## 5. Viewer — Interface de visualisation
 

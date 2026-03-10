@@ -811,6 +811,24 @@ flowchart TD
 | Wikipedia pageimages | Portraits de personnes                       | `data/images_cache.json`  |
 | OpenStreetMap        | Fond de carte Leaflet                        | Navigateur (tiles)        |
 
+### Accès par terminal IA (local AI agent)
+
+Les fichiers JSON structurés produits par WUDD.ai (résumés, entités NER, scores de sentiment) peuvent être interrogés directement par un **agent IA conversationnel** disposant d'un accès fichier. Ce pattern — aussi appelé *conversational data agent* ou *local AI agent* — complète le Viewer sans nécessiter aucune infrastructure supplémentaire.
+
+| Outil | Mode | Accès aux données WUDD.ai |
+|---|---|---|
+| **GitHub Copilot** (VS Code — mode Agent) | Tool-calling | Lecture/écriture `data/`, `config/`, `rapports/` |
+| **Claude Desktop** (MCP Filesystem) | RAG + tool use | Répertoires configurés dans `claude_desktop_config.json` |
+| **Cursor / Windsurf** | Tool-calling agent | Workspace du projet |
+
+**Exemples de requêtes supportées :**
+- Agrégation d'entités cross-fichiers (`entities.PERSON`, `entities.ORG`)
+- Filtrage et synthèse libre sur les champs `Résumé`, `sentiment`, `entities`
+- Lecture de `data/alertes.json` pour les tendances du jour
+- Écriture dans `config/keyword-to-search.json` pour ajouter des mots-clés
+
+> Voir [docs/USE_CASES.md — UC15](USE_CASES.md#15-interrogation-par-terminal-ia-local-ai-agent) pour le diagramme de séquence et les exemples détaillés.
+
 ---
 
 ## 9. Infrastructure & Chemins
@@ -953,6 +971,7 @@ quadrantChart
 | **ADR-012** | Cache Wikidata/Wikipedia permanent | Wikipedia évolue peu pour les entités stables | Nécessite invalidation manuelle |
 | **ADR-013** | Enrichissement sentiment Round-Robin (1 fichier/jour) | Évite de surcharger l'API ; progresse automatiquement | Enrichissement progressif (semaines pour 37 fichiers) |
 | **ADR-014** | Double scan virtiofs (200 ms) + union | Compense les listings incomplets de Docker Desktop / macOS | +200 ms de latence sur `/api/files` |
+| **ADR-015** | Stockage JSON structuré compatible local AI agent | Les champs `Résumé`, `entities`, `sentiment` rendent les fichiers directement exploitables par un agent IA (tool-calling) sans couche supplémentaire | Pas de contrôle d'accès — usage local uniquement |
 
 ---
 

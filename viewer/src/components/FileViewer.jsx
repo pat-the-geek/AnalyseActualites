@@ -541,7 +541,7 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
       )}
 
       {scrollTop > 50 && (
-        <div className="fixed bottom-[calc(7.5rem+env(safe-area-inset-bottom))] md:bottom-5 right-5 flex flex-col gap-2 z-50">
+        <div className="fixed bottom-[calc(11rem+env(safe-area-inset-bottom))] md:bottom-5 right-5 flex flex-col gap-2 z-50">
           {hasImages && (
             <button
               onClick={scrollToImages}

@@ -448,6 +448,17 @@ export default function App() {
       })
   }, [])
 
+  // Auto-sélection de 48-heures.json au chargement initial si aucun fichier sélectionné
+  const autoSelectDone = useRef(false)
+  useEffect(() => {
+    if (autoSelectDone.current || selectedFile || files.length === 0) return
+    const file48h = files.find(f => f.name === '48-heures.json')
+    if (file48h) {
+      autoSelectDone.current = true
+      selectFile(file48h)
+    }
+  }, [files, selectedFile, selectFile])
+
   const downloadFile = useCallback(() => {
     if (!selectedFile) return
     const a = document.createElement('a')
@@ -794,7 +805,7 @@ export default function App() {
       {/* ── Bouton flottant Chatbot — mobile ── */}
       <button
         onClick={() => setChatOpen(true)}
-        className="md:hidden fixed bottom-[calc(49px+env(safe-area-inset-bottom)+12px)] right-4 z-40 w-11 h-11 rounded-full bg-green-700 hover:bg-green-600 shadow-lg flex items-center justify-center text-white transition-colors"
+        className="md:hidden fixed bottom-[calc(7.5rem+env(safe-area-inset-bottom))] right-4 z-40 w-11 h-11 rounded-full bg-green-700 hover:bg-green-600 shadow-lg flex items-center justify-center text-white transition-colors"
         title="Chatbot IA"
       >
         <MessageSquare size={18} />

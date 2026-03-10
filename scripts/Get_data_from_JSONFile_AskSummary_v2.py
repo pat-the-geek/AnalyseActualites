@@ -276,7 +276,12 @@ def main():
         
         # Récupérer le texte extrait
         text = texts.get(url, "Failed to retrieve text.")
-        
+
+        # Ignorer les articles inaccessibles (erreur HTTP, timeout, connexion, etc.)
+        if text.startswith("Erreur") or text == "Failed to retrieve text.":
+            logger.warning(f"Article inaccessible ignoré : {url} — {text[:70]}")
+            continue
+
         # Vérifier le cache pour le résumé
         resume_cache_key = f"resume:{url}:{date_published}"
         resume = cache.get(resume_cache_key, ttl=604800)  # 7 jours

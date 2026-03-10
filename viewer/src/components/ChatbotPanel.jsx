@@ -124,6 +124,13 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
     setTimeout(() => inputRef.current?.focus(), 80)
   }, [])
 
+  // Auto-dismiss du message de sauvegarde après 3 secondes
+  useEffect(() => {
+    if (!savedMsg) return
+    const t = setTimeout(() => setSavedMsg(null), 3000)
+    return () => clearTimeout(t)
+  }, [savedMsg])
+
   // Charger les providers IA disponibles (EurIA / Claude)
   useEffect(() => {
     fetch('/api/ai-providers')
@@ -428,16 +435,16 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80]" onClick={onClose} />
 
       {/* Panneau principal */}
-      <div className="fixed inset-0 z-[81] flex items-stretch md:items-center justify-center md:p-4 pointer-events-none">
+      <div className="fixed inset-0 z-[81] flex items-stretch md:items-center justify-center md:p-4 pointer-events-none" style={{ height: '100dvh' }}>
         <div
-          className={`pointer-events-auto w-full flex flex-col overflow-hidden shadow-2xl border border-green-900/40 ${
+          className={`pointer-events-auto w-full h-full md:h-auto md:max-h-[92vh] relative flex flex-col overflow-hidden shadow-2xl border border-green-900/40 ${
             fullscreen
               ? 'rounded-none'
               : 'md:max-w-5xl md:rounded-2xl'
           }`}
           style={{
-            maxHeight: fullscreen ? '100vh' : '92vh',
-            height: fullscreen ? '100vh' : undefined,
+            maxHeight: fullscreen ? '100dvh' : undefined,
+            height: fullscreen ? '100dvh' : undefined,
             background: '#0d1117',
           }}
         >
@@ -446,9 +453,10 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
             className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b border-green-900/40"
             style={{ background: '#161b22' }}
           >
-            <Terminal size={14} className="text-green-500 shrink-0" />
+            <Terminal size={14} className="hidden md:block text-green-500 shrink-0" />
             <span className="font-mono text-sm text-green-400 flex-1 tracking-wider">
-              WUDD.ai ▸ Terminal IA
+              <span className="hidden md:inline">WUDD.ai ▸ Terminal IA</span>
+              <span className="md:hidden">&gt;_</span>
               <span className="animate-pulse ml-1 text-green-500">█</span>
             </span>
             {/* Indicateur de fichiers de contexte */}
@@ -504,6 +512,92 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
               <X size={12} />
             </button>
           </div>
+
+          {/* ── Picker plein écran sur mobile ───────────────────────── */}
+          {pickerOpen && (
+            <div className="lg:hidden absolute inset-0 z-20 flex flex-col" style={{ background: '#0d1117' }}>
+              {/* En-tête */}
+              <div className="flex items-center gap-2 px-3 py-2.5 shrink-0 border-b border-green-900/40" style={{ background: '#161b22' }}>
+                <FileText size={12} className="text-green-500 shrink-0" />
+                <span className="font-mono text-xs text-green-400 flex-1 uppercase tracking-widest">Contexte</span>
+                {contextFiles.length > 0 && (
+                  <span className="font-mono text-[10px] text-green-300 bg-green-900/40 px-2 py-0.5 rounded">
+                    {contextFiles.length} sélectionné{contextFiles.length > 1 ? 's' : ''}
+                  </span>
+                )}
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="w-7 h-7 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-200 ml-1"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              {/* Filtre */}
+              <div className="px-3 py-2 border-b border-green-900/30 shrink-0">
+                <input
+                  type="text"
+                  placeholder="Filtrer les fichiers…"
+                  value={fileSearch}
+                  onChange={e => setFileSearch(e.target.value)}
+                  className="w-full bg-slate-900 border border-green-900/40 rounded px-3 py-2 text-sm font-mono text-green-400 placeholder:text-slate-400 focus:outline-none focus:border-green-600"
+                />
+              </div>
+              {/* Liste */}
+              <div className="flex-1 overflow-y-auto">
+                {groupedFiles.map(([flux, fluxFiles]) => (
+                  <div key={flux}>
+                    <div className="sticky top-0 z-10 flex items-center gap-1.5 px-3 py-2 border-b border-green-900/20" style={{ background: '#0d1117' }}>
+                      <Folder size={10} className="text-green-800 shrink-0" />
+                      <span className="font-mono text-[11px] text-green-700 uppercase tracking-widest truncate flex-1">{flux}</span>
+                      <span className="font-mono text-[10px] text-green-900">{fluxFiles.length}</span>
+                    </div>
+                    {fluxFiles.map(f => (
+                      <button
+                        key={f.path}
+                        onClick={() => toggleContextFile(f.path)}
+                        className={`w-full text-left px-3 py-3 border-b border-green-900/10 flex items-center gap-2.5 transition-colors ${
+                          contextFiles.includes(f.path)
+                            ? 'bg-green-900/30 border-l-2 border-l-green-500 pl-[10px]'
+                            : 'active:bg-slate-800/60'
+                        }`}
+                      >
+                        {f.type === 'json'
+                          ? <FileJson size={15} className="shrink-0 text-amber-500" />
+                          : <FileText size={15} className="shrink-0 text-blue-400" />
+                        }
+                        <span className={`flex-1 text-sm font-mono truncate ${contextFiles.includes(f.path) ? 'text-green-300' : 'text-slate-200'}`}>
+                          {f.name}
+                        </span>
+                        {isToday(f.modified) && (
+                          <span className="shrink-0 text-[9px] font-bold uppercase bg-orange-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        )}
+                        {contextFiles.includes(f.path) && (
+                          <Check size={14} className="shrink-0 text-green-500" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {/* Bouton confirmer */}
+              <div
+                className="shrink-0 px-3 py-3 border-t border-green-900/30"
+                style={{
+                  background: '#161b22',
+                  paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+                }}
+              >
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="w-full bg-green-800 hover:bg-green-700 active:bg-green-600 text-green-100 font-mono text-sm rounded-lg py-3 transition-colors"
+                >
+                  {contextFiles.length > 0
+                    ? `✓ Valider (${contextFiles.length} fichier${contextFiles.length > 1 ? 's' : ''})`
+                    : 'Fermer'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Corps : sidebar contexte + zone chat ────────────────── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -764,16 +858,10 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
               </div>
 
               {/* ── Zone de saisie ───────────────────────────────────── */}
-              <div
-                className="shrink-0 border-t border-green-900/30 px-3 py-2"
-                style={{
-                  background: '#161b22',
-                  paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
-                }}
-              >
-                {/* Statut sauvegarde */}
-                {savedMsg && (
-                  <div className="flex items-center gap-1.5 mb-1.5 font-mono text-[10px]">
+              {/* Toast sauvegarde — flotte au-dessus sans pousser le layout */}
+              {savedMsg && (
+                <div className="shrink-0 px-3 pt-1.5 pb-0" style={{ background: '#161b22' }}>
+                  <div className="flex items-center gap-1.5 font-mono text-[10px] border border-green-900/40 rounded px-2 py-1 bg-slate-900/80">
                     {savedMsg.startsWith('Erreur') ? (
                       <span className="text-red-400">{savedMsg}</span>
                     ) : (
@@ -783,8 +871,15 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                       </span>
                     )}
                   </div>
-                )}
-
+                </div>
+              )}
+              <div
+                className="shrink-0 border-t border-green-900/30 px-3 py-2"
+                style={{
+                  background: '#161b22',
+                  paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+                }}
+              >
                 {/* Saisie */}
                 <div className="flex items-end gap-2">
                   <span className="font-mono text-sm text-amber-500 shrink-0 pb-1.5 select-none">▸</span>
@@ -798,11 +893,11 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                         sendMessage()
                       }
                     }}
-                    rows={1}
+                    rows={3}
                     placeholder="Posez votre question… (Shift+Entrée pour un saut de ligne)"
                     disabled={streaming}
                     className="flex-1 bg-transparent border-none resize-none font-mono text-sm text-amber-200 placeholder:text-slate-400 focus:outline-none leading-relaxed"
-                    style={{ minHeight: '1.75rem', maxHeight: '8rem', overflow: 'auto' }}
+                    style={{ minHeight: '5.25rem', maxHeight: '10rem', overflow: 'auto' }}
                   />
                   <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
                     {/* Effacer la conversation */}

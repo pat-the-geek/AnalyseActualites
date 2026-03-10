@@ -1,6 +1,6 @@
 # Use Cases — WUDD.ai
 
-> Quatorze scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
+> Quinze scénarios typiques d'utilisation de la plateforme, du point de vue de l'utilisateur, dont deux optimisés pour une utilisation sur smartphone en situation de mobilité.
 > Chaque use case est illustré par un diagramme Mermaid.
 
 ---
@@ -21,6 +21,7 @@
 12. [Analyse des biais éditoriaux par source](#12-analyse-des-biais-éditoriaux-par-source)
 13. [Synthèse comparative RAG multi-sources](#13-synthèse-comparative-rag-multi-sources)
 14. [Export et diffusion des résultats](#14-export-et-diffusion-des-résultats)
+15. [Interrogation par terminal IA (local AI agent)](#15-interrogation-par-terminal-ia-local-ai-agent)
 
 ---
 
@@ -609,24 +610,24 @@ python3 scripts/enrich_sentiment.py --all      # Traiter tous les fichiers
 ```mermaid
 sequenceDiagram
     actor U as Utilisateur
-    participant V as Viewer (EntityArticlePanel - onglet RAG)
-    participant A as Flask /api/synthesize-topic
-    participant C as api_client.generate_report()
-    participant AI as EurIA API (Qwen3)
+    participant V as "Viewer (EntityArticlePanel - onglet RAG)"
+    participant A as "Flask /api/synthesize-topic"
+    participant C as "api_client.generate_report()"
+    participant AI as "EurIA API (Qwen3)"
 
-    U->>V: Clique entité → ouvre EntityArticlePanel
-    U->>V: Sélectionne onglet "Synthèse RAG"
-    V->>A: POST /api/synthesize-topic {entity, flux}
-    A->>A: Collecte articles (match NER ou texte)
+    U->>V: Clique entité, ouvre EntityArticlePanel
+    U->>V: Sélectionne onglet Synthèse RAG
+    V->>A: POST /api/synthesize-topic [entity, flux]
+    A->>A: Collecte articles - match NER ou texte
     A->>A: Déduplique par URL
-    A->>A: Construit sources_block (résumés + sources + dates)
-    A->>C: generate_report(prompt, stream=True)
-    C->>AI: POST stream=True {Prompt 6 RAG}
-    AI-->>C: Chunks SSE (text/event-stream)
-    C-->>A: Forwarde chunks normalisés "data: {...}"
+    A->>A: Construit sources_block - résumés, sources, dates
+    A->>C: generate_report - prompt, stream=True
+    C->>AI: POST stream=True [Prompt 6 RAG]
+    AI-->>C: Chunks SSE - text/event-stream
+    C-->>A: Forwarde chunks normalisés data SSE
     A-->>V: SSE stream vers React
-    V-->>U: Texte de synthèse affiché en temps réel (streaming)
-    U->>V: Lit synthèse · peut exporter
+    V-->>U: Texte de synthèse affiché en temps réel
+    U->>V: Lit synthèse, peut exporter
 ```
 
 **Caractéristiques techniques :**
@@ -681,6 +682,67 @@ http://localhost:5050/api/export/atom?flux=Intelligence-artificielle&limit=20
 
 ---
 
+## 15. Interrogation par terminal IA (local AI agent)
+
+**Contexte :** L'utilisateur veut interroger son corpus de veille en langage naturel — sans naviguer dans le Viewer, sans écrire de requêtes manuelles — depuis son éditeur de code ou un outil IA. Le **terminal IA** (aussi appelé *local AI agent* ou *conversational data agent*) dispose d'outils (*tool use* / *function calling*) qui lui permettent de lire, analyser et modifier les fichiers JSON locaux de WUDD.ai directement, en réponse à des questions libres.
+
+**Acteurs :** Utilisateur · Terminal IA (GitHub Copilot, Claude Desktop + MCP Filesystem, Cursor…) · Fichiers JSON / Markdown locaux (`data/`, `rapports/`, `config/`)
+
+**Caractéristique clé :** Le terminal IA n'interprète pas seulement la question — il **agit** sur les données. Les fichiers JSON structurés, enrichis de résumés IA, d'entités NER et de scores de sentiment, constituent une base de connaissances locale idéale pour un agent conversationnel.
+
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant AI as Terminal IA
+    participant FS as Fichiers locaux WUDD.ai
+
+    U->>AI: « Quelles sont les 5 entités les plus mentionnées
+            cette semaine dans le flux Intelligence-artificielle ? »
+    AI->>FS: Lit data/articles/Intelligence-artificielle/*.json
+    FS-->>AI: Articles + champ entities (PERSON, ORG...)
+    AI->>AI: Agrège les entités, compte les occurrences
+    AI-->>U: « 1. OpenAI (12), 2. Sam Altman (9), 3. Mistral (7)... »
+
+    U->>AI: « Génère un résumé exécutif des articles de février
+            sur la géopolitique, en mettant en avant les GPE. »
+    AI->>FS: Lit articles_generated_2026-02-01_2026-02-28.json
+    FS-->>AI: 47 articles + entities.GPE par article
+    AI->>AI: Filtre, analyse, rédige
+    AI-->>U: Markdown structuré (intro + sections + tableau)
+
+    U->>AI: « Ajoute le mot-clé NVIDIA avec les synonymes
+            Jensen Huang et GPU dans la configuration. »
+    AI->>FS: Lit config/keyword-to-search.json
+    AI->>FS: Écrit config/keyword-to-search.json (mise à jour)
+    AI-->>U: « Fait. Entrée ajoutée : {keyword: NVIDIA, or: [...]} »
+```
+
+**Outils compatibles :**
+
+| Outil | Mode d'accès | Compatibilité WUDD.ai |
+|---|---|---|
+| **GitHub Copilot** (VS Code — mode Agent) | Tool-calling, lecture/écriture workspace | ✅ JSON + Markdown + config |
+| **Claude Desktop** (MCP Filesystem) | RAG + tool use sur répertoires configurés | ✅ Lecture directe `data/` et `rapports/` |
+| **Cursor AI** | Tool-calling agent dans l'éditeur | ✅ JSON + config |
+| **Windsurf / Codeium** | Tool-calling agent | ✅ JSON + config |
+
+> **Prérequis :** Aucun. Les fichiers JSON WUDD.ai sont directement lisibles par tout agent disposant d'un accès fichier. Aucune API supplémentaire, aucun serveur à configurer.
+
+**Exemples de requêtes en langage naturel :**
+
+| Question | Fichiers accédés | Opération |
+|---|---|---|
+| « Top 5 entités ce mois » | `data/articles/*/` — champ `entities` | Agrégation |
+| « Articles sur Trump et l'Otan » | `data/articles-from-rss/Trump.json` | Filtrage NER |
+| « Sujets en hausse aujourd'hui » | `data/alertes.json` | Lecture |
+| « Résumé exécutif IA février » | `articles_generated_*.json` | Synthèse libre |
+| « Ajoute le mot-clé Mistral » | `config/keyword-to-search.json` | Écriture |
+| « Quelles ORG sont liées à Sam Altman ? » | Tous les JSON — cross-fichiers | Co-occurrence |
+
+**Complémentarité avec le Viewer :** Le Viewer assure la navigation visuelle et l'édition assistée dans un navigateur ; le terminal IA y ajoute l'interaction libre en langage naturel, l'analyse ad hoc et l'automatisation à la demande — sans infrastructure supplémentaire.
+
+---
+
 ```mermaid
 quadrantChart
     title Use cases - Frequence vs Profondeur d analyse
@@ -704,6 +766,7 @@ quadrantChart
     UC12 Biais editoriaux: [0.18, 0.58]
     UC13 Synthese RAG: [0.22, 0.93]
     UC14 Export diffusion: [0.50, 0.86]
+    UC15 Terminal IA agent: [0.30, 0.35]
 ```
 
 | # | Use Case | Déclencheur | Durée typique | Sortie |
@@ -722,8 +785,9 @@ quadrantChart
 | 12 | Biais éditoriaux par source | Ad hoc (viewer) | 1–2 min | Tableau comparatif sources |
 | 13 | Synthèse RAG multi-sources | Ad hoc (viewer) | 30–60s (streaming) | Analyse comparative Markdown |
 | 14 | Export & diffusion | Ad hoc (viewer / cron) | < 1 min | Atom XML · Newsletter HTML · Webhook |
+| 15 | Terminal IA (local AI agent) | Ad hoc (éditeur / outil IA) | Immédiat | Réponse en langage naturel · lecture / écriture fichiers |
 
 ---
 
 **Maintenu par** : Patrick Ostertag · patrick.ostertag@gmail.com
-**Créé le** : 2 mars 2026 · **Mis à jour le** : 6 mars 2026 (UC10–UC14 — scoring, tendances, biais, RAG, exports)
+**Créé le** : 2 mars 2026 · **Mis à jour le** : 10 mars 2026 (UC15 — terminal IA / local AI agent)

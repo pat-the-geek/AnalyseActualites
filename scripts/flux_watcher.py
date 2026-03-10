@@ -249,7 +249,7 @@ def main(dry_run: bool = False) -> None:
             and_words = kw_obj.get("and", [])
             title_lower = title.lower()
 
-            matched = kw.lower() in title_lower
+            matched = bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', title_lower))
 
             if not matched and or_words:
                 matched = any(
@@ -284,6 +284,9 @@ def main(dry_run: bool = False) -> None:
 
             print_console(f"  Mot-clé '{kw}' — {link[:70]}...")
             text = fetch_and_extract_text(link)
+            if text.startswith("Erreur"):
+                print_console(f"  Article inaccessible ignoré ('{text[:70]}').", level="warning")
+                continue
             try:
                 resume = api_client.generate_summary(text, max_lines=20)
             except RuntimeError as e:

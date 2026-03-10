@@ -3752,14 +3752,14 @@ def api_chat_save():
     Body JSON :
       content  (str)  — contenu Markdown à sauvegarder
       filename (str)  — nom de fichier suggéré (sans extension, optionnel)
-      subdir   (str)  — sous-répertoire dans rapports/ (défaut : "_WUDD.AI_/chatbot")
+      subdir   (str)  — sous-répertoire dans rapports/ (défaut : "_WUDD.AI_")
 
     Retourne : { ok: bool, path: str }
     """
     body = request.get_json(force=True, silent=True) or {}
     content  = (body.get("content") or "").strip()
     filename = (body.get("filename") or "").strip()
-    subdir   = (body.get("subdir") or "_WUDD.AI_/chatbot").strip()
+    subdir   = (body.get("subdir") or "_WUDD.AI_").strip()
 
     if not content:
         return jsonify({"error": "content est requis"}), 400
@@ -3767,7 +3767,7 @@ def api_chat_save():
     # Sanitiser le sous-répertoire
     subdir = re.sub(r"[^\w\-/]", "_", subdir).strip("/")
     if not subdir:
-        subdir = "_WUDD.AI_/chatbot"
+        subdir = "_WUDD.AI_"
 
     # Sanitiser le nom de fichier
     if filename:

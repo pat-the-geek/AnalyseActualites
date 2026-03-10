@@ -193,8 +193,8 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 and_words = kw_obj.get("and", [])
                 title_lower = title.lower()
 
-                # 1. Correspondance sur le mot-clé principal
-                matched = kw.lower() in title_lower
+                # 1. Correspondance sur le mot-clé principal (frontière de mot pour éviter les faux positifs)
+                matched = bool(re.search(r'\b' + re.escape(kw.lower()) + r'\b', title_lower))
 
                 # 2. Si pas trouvé, tester les mots de la collection "or" (frontière de mot)
                 if not matched and or_words:
@@ -225,6 +225,9 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 print_console(f"    [Article {idx}] Mot-clé '{kw}' trouvé dans le titre.")
                 print_console(f"      Extraction du texte de l'article...")
                 text = fetch_and_extract_text(link)
+                if text.startswith("Erreur"):
+                    print_console(f"      Article inaccessible ignoré ('{text[:70]}').", level="warning")
+                    continue
                 print_console(f"      Génération du résumé IA...")
                 try:
                     resume = api_client.generate_summary(text, max_lines=20)
