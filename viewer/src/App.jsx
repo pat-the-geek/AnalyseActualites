@@ -877,7 +877,7 @@ export default function App() {
         <ComparePanel onClose={() => setCompareOpen(false)} />
       )}
       {chatOpen && (
-        <ChatbotPanel onClose={() => setChatOpen(false)} onFileSaved={refreshFiles} />
+        <ChatbotPanel onClose={() => setChatOpen(false)} onFileSaved={refreshFiles} initialFile={selectedFile} />
       )}
       {entitySearch && (
         <EntitySearchModal

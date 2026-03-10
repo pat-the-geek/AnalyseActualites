@@ -81,7 +81,7 @@ function formatDateShort(ts) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function ChatbotPanel({ onClose, onFileSaved }) {
+export default function ChatbotPanel({ onClose, onFileSaved, initialFile }) {
   const WELCOME_MSG = {
     role: 'assistant',
     content: `**Bienvenue dans le terminal IA de WUDD.ai** 👋
@@ -103,7 +103,7 @@ Voici ce que je peux faire pour vous :
   const [messages, setMessages]         = useState([WELCOME_MSG])
   const [input, setInput]               = useState('')
   const [streaming, setStreaming]       = useState(false)
-  const [contextFiles, setContextFiles] = useState([])
+  const [contextFiles, setContextFiles] = useState(() => initialFile?.path ? [initialFile.path] : [])
   const [availableFiles, setAvailableFiles] = useState([])
   const [pickerOpen, setPickerOpen]     = useState(false)
   const [fileSearch, setFileSearch]     = useState('')
@@ -173,11 +173,12 @@ Voici ce que je peux faire pour vous :
       .then(d => {
         const files = Array.isArray(d) ? d : (d.files || [])
         setAvailableFiles(files)
-        // Auto-sélection de 48-heures.json s'il existe et qu'aucun contexte n'est déjà défini
-        const file48h = files.find(f => f.name === '48-heures.json')
-        if (file48h) {
-          setContextFiles(prev => prev.length === 0 ? [file48h.path] : prev)
-        }
+        setContextFiles(prev => {
+          if (prev.length > 0) return prev
+          // Fallback : 48-heures.json si aucun fichier n'est déjà en contexte
+          const file48h = files.find(f => f.name === '48-heures.json')
+          return file48h ? [file48h.path] : prev
+        })
       })
       .catch(() => {})
   }, [])
@@ -962,6 +963,15 @@ Voici ce que je peux faire pour vous :
                     />
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
+                    {/* Sélecteur de fichiers — mobile uniquement */}
+                    <button
+                      onClick={() => setPickerOpen(v => !v)}
+                      title="Ajouter des fichiers en contexte"
+                      className="lg:hidden w-7 h-7 rounded flex items-center justify-center transition-colors"
+                      style={{ color: contextFiles.length > 0 ? '#4ade80' : '#64748b' }}
+                    >
+                      <FileText size={13} />
+                    </button>
                     {/* Effacer la conversation */}
                     {messages.some(m => !m.welcome) && (
                       <button
