@@ -595,8 +595,7 @@ export default function App() {
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-green-50 dark:hover:bg-green-900/20 border border-slate-200 dark:border-slate-600 hover:border-green-300 dark:hover:border-green-700 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-green-700 dark:hover:text-green-400 transition-colors"
           title="Chatbot IA — interrogez vos données et rapports"
         >
-          <MessageSquare size={13} />
-          <span className="hidden xl:inline">Chatbot</span>
+          <span className="font-mono text-sm">&gt;_ IA</span>
         </button>
 
         {/* Menu déroulant Outils : Biais, Export, Clusters, Veille, Comparer */}
@@ -665,10 +664,6 @@ export default function App() {
           title="Recherche plein texte (Ctrl+K)"
         >
           <Search size={13} />
-          <span className="hidden lg:inline">Recherche</span>
-          <kbd className="hidden xl:inline-flex items-center gap-0.5 text-xs bg-slate-200 dark:bg-slate-900 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700">
-            ⌘K
-          </kbd>
         </button>
       </header>
 

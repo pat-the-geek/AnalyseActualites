@@ -1716,7 +1716,7 @@ def api_entities_info():
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
         api_url = "https://api.anthropic.com/v1/messages"
         payload = {
             "model": model,
@@ -1739,6 +1739,14 @@ def api_entities_info():
                         normalized = _normalize_claude_sse_line(line.decode("utf-8"))
                         if normalized:
                             yield normalized
+            except req.exceptions.HTTPError as exc:
+                body = ""
+                try:
+                    body = exc.response.text[:800] if exc.response is not None else ""
+                except Exception:
+                    pass
+                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
+                yield f'data: {json.dumps({"error": error_msg})}\n\n'
             except Exception as exc:
                 yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
@@ -2204,7 +2212,7 @@ def api_synthesize_topic():
     import requests as req
 
     if provider == "claude":
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
         sse_url = "https://api.anthropic.com/v1/messages"
         payload = {
             "model": model,
@@ -2227,6 +2235,14 @@ def api_synthesize_topic():
                         normalized = _normalize_claude_sse_line(line.decode("utf-8"))
                         if normalized:
                             yield normalized
+            except req.exceptions.HTTPError as exc:
+                body = ""
+                try:
+                    body = exc.response.text[:800] if exc.response is not None else ""
+                except Exception:
+                    pass
+                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
+                yield f'data: {json.dumps({"error": error_msg})}\n\n'
             except Exception as exc:
                 yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
@@ -3572,6 +3588,9 @@ def api_chat_stream():
     messages      = body.get("messages", [])
     context_files = body.get("context_files", [])
     notes_period  = body.get("notes_period", None)
+    # Permet au frontend de choisir le provider pour cette requête.
+    # Valeurs acceptées : "euria" | "claude". Sinon, fallback sur AI_PROVIDER env.
+    provider_override = body.get("provider", "").strip().lower()
 
     if not messages:
         return jsonify({"error": "messages est requis"}), 400
@@ -3610,8 +3629,11 @@ def api_chat_stream():
             notes_block = notes_text
 
     # Construire le message système
+    from datetime import datetime as _dt
+    _today = _dt.now().strftime("%A %d %B %Y")
     system_parts = [
         "Tu es un assistant IA intégré à WUDD.ai, une plateforme de veille de presse en français.",
+        f"La date d'aujourd'hui est le {_today}. Tiens-en compte pour contextualiser toutes tes réponses sur l'actualité.",
         "Tu aides l'utilisateur à analyser des articles de presse, des rapports et des données JSON.",
         "Tu peux produire des tableaux Markdown, des résumés, des analyses comparatives.",
         "Réponds toujours en français, de manière concise et structurée.",
@@ -3631,16 +3653,26 @@ def api_chat_stream():
 
     system_prompt = "\n".join(system_parts)
 
-    # Construire les messages complets (système + historique)
-    full_messages = [{"role": "system", "content": system_prompt}] + messages
+    # Nettoyer les messages : ne garder que role + content (strip les champs frontend
+    # comme "streaming" ou "error" qui feraient échouer l'API Anthropic avec 400).
+    # Ignorer aussi les messages avec contenu vide (erreurs mid-stream).
+    clean_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in messages
+        if m.get("role") in ("user", "assistant") and (m.get("content") or "").strip()
+    ]
 
-    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+    # Construire les messages complets (système + historique)
+    full_messages = [{"role": "system", "content": system_prompt}] + clean_messages
+
+    provider = provider_override if provider_override in ("euria", "claude") \
+               else os.environ.get("AI_PROVIDER", "euria").strip().lower()
 
     if provider == "claude":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
         api_url = "https://api.anthropic.com/v1/messages"
         # Claude ne supporte pas role=system dans messages[], on extrait le system
         claude_messages = [m for m in full_messages if m["role"] != "system"]
@@ -3666,6 +3698,14 @@ def api_chat_stream():
                         normalized = _normalize_claude_sse_line(line.decode("utf-8"))
                         if normalized:
                             yield normalized
+            except req.exceptions.HTTPError as exc:
+                body = ""
+                try:
+                    body = exc.response.text[:800] if exc.response is not None else ""
+                except Exception:
+                    pass
+                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
+                yield f'data: {json.dumps({"error": error_msg})}\n\n'
             except Exception as exc:
                 yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
@@ -3678,6 +3718,7 @@ def api_chat_stream():
             "messages": full_messages,
             "model": "qwen3",
             "stream": True,
+            "enable_web_search": True,
         }
         api_headers = {
             "Authorization": f"Bearer {bearer}",

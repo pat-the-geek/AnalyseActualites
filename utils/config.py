@@ -60,7 +60,7 @@ class Config:
         self.ai_provider = os.getenv("AI_PROVIDER", "euria").strip().lower()
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.claude_model_batch = os.getenv("CLAUDE_MODEL_BATCH", "claude-haiku-4-5-20251001")
-        self.claude_model_synthesis = os.getenv("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
+        self.claude_model_synthesis = os.getenv("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
 
         # Paramètres avec valeurs par défaut (clés identiques à celles du .env)
         self.max_attempts = int(os.getenv("max_attempts", "3"))

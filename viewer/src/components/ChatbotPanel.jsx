@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send, Save, Trash2, FileText, ChevronRight, Loader2, Terminal, RefreshCw, Check, BookOpen } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { X, Send, Save, Trash2, FileText, FileJson, Folder, ChevronRight, Loader2, Terminal, RefreshCw, Check, BookOpen, Maximize2, Minimize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -60,6 +60,25 @@ const isDestructiveRequest = (text) => {
 // Labels pour les périodes de notes personnelles
 const PERIOD_LABELS = { week: 'semaine', month: 'mois', all: 'toutes' }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} o`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
+  return `${(bytes / 1024 / 1024).toFixed(1)} Mo`
+}
+
+function formatDateShort(ts) {
+  const d = new Date(ts * 1000)
+  const now = new Date()
+  if (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  ) {
+    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function ChatbotPanel({ onClose, onFileSaved }) {
@@ -73,10 +92,22 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
   const [saving, setSaving]             = useState(false)
   const [savedMsg, setSavedMsg]         = useState(null)
   const [notesPeriod, setNotesPeriod]   = useState(null)  // null | "week" | "month" | "all"
+  const [fullscreen, setFullscreen]     = useState(false)
+  const [aiProviders, setAiProviders]   = useState([])          // providers disponibles
+  const [selectedProvider, setSelectedProvider] = useState(null) // null = env default
 
   const ctrlRef   = useRef(null)
   const endRef    = useRef(null)
   const inputRef  = useRef(null)
+
+  // Détecte si un fichier a été modifié aujourd'hui
+  const isToday = (mtime) => {
+    const d = new Date(mtime * 1000)
+    const now = new Date()
+    return d.getFullYear() === now.getFullYear() &&
+           d.getMonth()    === now.getMonth()    &&
+           d.getDate()     === now.getDate()
+  }
 
   // Auto-scroll vers le bas à chaque nouveau message
   useEffect(() => {
@@ -93,11 +124,34 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
     setTimeout(() => inputRef.current?.focus(), 80)
   }, [])
 
+  // Charger les providers IA disponibles (EurIA / Claude)
+  useEffect(() => {
+    fetch('/api/ai-providers')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.providers) {
+          setAiProviders(d.providers)
+          // Pré-sélectionner le provider actif seulement si les deux sont disponibles
+          if (d.providers.length >= 2) setSelectedProvider(d.active || d.providers[0])
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Charger la liste des fichiers disponibles pour le contexte
+  // et pré-sélectionner 48-heures.json s'il existe
   useEffect(() => {
     fetch('/api/files')
       .then(r => r.ok ? r.json() : [])
-      .then(d => setAvailableFiles(Array.isArray(d) ? d : (d.files || [])))
+      .then(d => {
+        const files = Array.isArray(d) ? d : (d.files || [])
+        setAvailableFiles(files)
+        // Auto-sélection de 48-heures.json s'il existe et qu'aucun contexte n'est déjà défini
+        const file48h = files.find(f => f.name === '48-heures.json')
+        if (file48h) {
+          setContextFiles(prev => prev.length === 0 ? [file48h.path] : prev)
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -145,6 +199,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
           messages: newMessages,
           context_files: contextFiles,
           notes_period: overrideNotesPeriod || notesPeriod || undefined,
+          ...(selectedProvider ? { provider: selectedProvider } : {}),
         }),
         signal: ctrl.signal,
       })
@@ -302,6 +357,17 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
     (f.flux || '').toLowerCase().includes(fileSearch.toLowerCase())
   )
 
+  // Grouper les fichiers disponibles par flux (comme l'explorateur)
+  const groupedFiles = useMemo(() => {
+    const groups = {}
+    filteredFiles.forEach(f => {
+      const key = f.flux || 'Racine'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(f)
+    })
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, 'fr'))
+  }, [filteredFiles])
+
   // ── Rendu d'un message ────────────────────────────────────────────────────
 
   const renderMessage = (msg, idx) => {
@@ -340,7 +406,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
               <div className="flex items-center gap-2 pl-4 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => saveMessage(msg.content)}
-                  className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-green-400 transition-colors font-mono"
+                  className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-green-400 transition-colors font-mono"
                   title="Sauvegarder cette réponse en Markdown"
                 >
                   <Save size={10} />
@@ -364,9 +430,14 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
       {/* Panneau principal */}
       <div className="fixed inset-0 z-[81] flex items-stretch md:items-center justify-center md:p-4 pointer-events-none">
         <div
-          className="pointer-events-auto w-full md:max-w-5xl flex flex-col md:rounded-2xl overflow-hidden shadow-2xl border border-green-900/40"
+          className={`pointer-events-auto w-full flex flex-col overflow-hidden shadow-2xl border border-green-900/40 ${
+            fullscreen
+              ? 'rounded-none'
+              : 'md:max-w-5xl md:rounded-2xl'
+          }`}
           style={{
-            maxHeight: '92vh',
+            maxHeight: fullscreen ? '100vh' : '92vh',
+            height: fullscreen ? '100vh' : undefined,
             background: '#0d1117',
           }}
         >
@@ -382,7 +453,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
             </span>
             {/* Indicateur de fichiers de contexte */}
             {contextFiles.length > 0 && (
-              <span className="font-mono text-[10px] text-slate-500 bg-slate-800/60 px-2 py-0.5 rounded">
+              <span className="font-mono text-[10px] text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
                 {contextFiles.length} fichier{contextFiles.length > 1 ? 's' : ''} en contexte
               </span>
             )}
@@ -397,10 +468,38 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                 Notes {PERIOD_LABELS[notesPeriod]}
               </button>
             )}
+            {/* Toggle EurIA / Claude — visible uniquement si les deux sont configurés */}
+            {aiProviders.length >= 2 && (
+              <div className="flex items-center gap-0.5 bg-slate-800 rounded p-0.5" title="Choisir le moteur IA">
+                {aiProviders.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setSelectedProvider(p)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wide transition-colors ${
+                      selectedProvider === p
+                        ? p === 'claude'
+                          ? 'bg-purple-700 text-white'
+                          : 'bg-green-800 text-green-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {p === 'claude' ? 'Claude' : 'EurIA'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Bouton plein écran */}
+            <button
+              onClick={() => setFullscreen(v => !v)}
+              className="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+              title={fullscreen ? 'Réduire' : 'Plein écran'}
+            >
+              {fullscreen ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+            </button>
             {/* Bouton fermer */}
             <button
               onClick={onClose}
-              className="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors ml-1"
+              className="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition-colors ml-1"
             >
               <X size={12} />
             </button>
@@ -424,28 +523,58 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                   placeholder="Filtrer…"
                   value={fileSearch}
                   onChange={e => setFileSearch(e.target.value)}
-                  className="w-full bg-slate-900 border border-green-900/40 rounded px-2 py-1 text-[11px] font-mono text-green-400 placeholder:text-slate-600 focus:outline-none focus:border-green-600"
+                  className="w-full bg-slate-900 border border-green-900/40 rounded px-2 py-1 text-[11px] font-mono text-green-400 placeholder:text-slate-400 focus:outline-none focus:border-green-600"
                 />
               </div>
-              <div className="flex-1 overflow-y-auto py-1 px-1 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {filteredFiles.length === 0 ? (
-                  <p className="text-[10px] font-mono text-slate-600 px-2 py-2">Aucun fichier disponible</p>
+                  <p className="text-[10px] font-mono text-slate-400 px-3 py-3">Aucun fichier disponible</p>
                 ) : (
-                  filteredFiles.map(f => (
-                    <button
-                      key={f.path}
-                      onClick={() => toggleContextFile(f.path)}
-                      className={`w-full text-left px-2 py-1 rounded text-[10px] font-mono transition-colors flex items-start gap-1.5 ${
-                        contextFiles.includes(f.path)
-                          ? 'bg-green-900/40 text-green-300'
-                          : 'text-slate-500 hover:text-green-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <span className="mt-0.5 shrink-0 text-green-700">
-                        {contextFiles.includes(f.path) ? '■' : '□'}
-                      </span>
-                      <span className="truncate leading-tight">{f.name}</span>
-                    </button>
+                  groupedFiles.map(([flux, fluxFiles]) => (
+                    <div key={flux}>
+                      {/* En-tête de groupe */}
+                      <div className="sticky top-0 z-10 flex items-center gap-1.5 px-3 py-1.5 border-b border-green-900/30" style={{background:'#0d1117'}}>
+                        <Folder size={10} className="text-green-800 shrink-0" />
+                        <span className="font-mono text-[10px] text-green-700 uppercase tracking-widest truncate flex-1">{flux}</span>
+                        <span className="font-mono text-[9px] text-green-900">{fluxFiles.length}</span>
+                      </div>
+                      {/* Fichiers du groupe */}
+                      {fluxFiles.map(f => (
+                        <button
+                          key={f.path}
+                          onClick={() => toggleContextFile(f.path)}
+                          className={`w-full text-left px-3 py-2 border-b border-green-900/20 transition-colors flex items-start gap-2 ${
+                            contextFiles.includes(f.path)
+                              ? 'bg-green-900/30 border-l-2 border-l-green-500 pl-[10px]'
+                              : 'hover:bg-slate-800/60'
+                          }`}
+                        >
+                          {f.type === 'json'
+                            ? <FileJson size={12} className="shrink-0 mt-0.5 text-amber-500" />
+                            : <FileText size={12} className="shrink-0 mt-0.5 text-blue-400" />
+                          }
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1 leading-snug">
+                              <span className={`truncate text-[11px] font-mono ${
+                                contextFiles.includes(f.path) ? 'text-green-300' : 'text-slate-200'
+                              }`}>{f.name}</span>
+                              {isToday(f.modified) && (
+                                <span className="shrink-0 text-[8px] font-bold uppercase tracking-wide px-1 rounded bg-orange-500 text-white leading-tight" style={{paddingTop:'1px',paddingBottom:'1px'}}>new</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className={`text-[9px] px-1 rounded font-mono leading-4 ${
+                                f.type === 'json'
+                                  ? 'bg-amber-900/40 text-amber-600'
+                                  : 'bg-blue-900/40 text-blue-500'
+                              }`}>{f.type === 'json' ? 'JSON' : 'MD'}</span>
+                              <span className="text-[9px] text-slate-500">{formatSize(f.size)}</span>
+                              <span className="text-[9px] text-slate-600 ml-auto">{formatDateShort(f.modified)}</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   ))
                 )}
               </div>
@@ -467,7 +596,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                       className={`w-full text-left px-2 py-1 rounded text-[10px] font-mono transition-colors flex items-start gap-1.5 ${
                         notesPeriod === opt.value
                           ? 'bg-amber-900/40 text-amber-300'
-                          : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800/50'
+                          : 'text-slate-300 hover:text-amber-400 hover:bg-slate-800/50'
                       }`}
                     >
                       <span className="mt-0.5 shrink-0 text-amber-700">
@@ -484,7 +613,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                   {contextFiles.length > 0 && (
                     <button
                       onClick={() => setContextFiles([])}
-                      className="w-full text-[10px] font-mono text-slate-600 hover:text-red-400 transition-colors text-left flex items-center gap-1 mb-1"
+                      className="w-full text-[10px] font-mono text-slate-400 hover:text-red-400 transition-colors text-left flex items-center gap-1 mb-1"
                     >
                       <Trash2 size={9} />
                       Vider le contexte
@@ -493,7 +622,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                   {notesPeriod && (
                     <button
                       onClick={() => setNotesPeriod(null)}
-                      className="w-full text-[10px] font-mono text-slate-600 hover:text-amber-400 transition-colors text-left flex items-center gap-1"
+                      className="w-full text-[10px] font-mono text-slate-400 hover:text-amber-400 transition-colors text-left flex items-center gap-1"
                     >
                       <Trash2 size={9} />
                       Désactiver les notes
@@ -514,10 +643,10 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                 {/* Message de bienvenue */}
                 {messages.length === 0 && (
                   <div className="mb-6">
-                    <p className="font-mono text-xs text-green-600 mb-1">
+                    <p className="font-mono text-xs text-green-400 mb-1">
                       WUDD.ai Terminal IA — prêt.
                     </p>
-                    <p className="font-mono text-xs text-slate-600 mb-4">
+                    <p className="font-mono text-xs text-slate-400 mb-4">
                       Interrogez vos articles et rapports. Sélectionnez des fichiers comme contexte dans la barre latérale.
                     </p>
                     {/* Fichiers de contexte sur mobile */}
@@ -545,32 +674,52 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                         </button>
                       </div>
                       {pickerOpen && (
-                        <div className="mt-2 border border-green-900/30 rounded p-2 max-h-40 overflow-y-auto">
-                          <input
-                            type="text"
-                            placeholder="Filtrer…"
-                            value={fileSearch}
-                            onChange={e => setFileSearch(e.target.value)}
-                            className="w-full bg-slate-900 border border-green-900/40 rounded px-2 py-1 text-[11px] font-mono text-green-400 placeholder:text-slate-600 focus:outline-none focus:border-green-600 mb-2"
-                          />
-                          {filteredFiles.map(f => (
-                            <button
-                              key={f.path}
-                              onClick={() => toggleContextFile(f.path)}
-                              className={`w-full text-left px-1 py-0.5 text-[10px] font-mono flex items-center gap-1.5 ${
-                                contextFiles.includes(f.path) ? 'text-green-300' : 'text-slate-500 hover:text-green-400'
-                              }`}
-                            >
-                              <span>{contextFiles.includes(f.path) ? '■' : '□'}</span>
-                              <span className="truncate">{f.name}</span>
-                            </button>
+                        <div className="mt-2 border border-green-900/30 rounded overflow-hidden max-h-52 overflow-y-auto">
+                          <div className="p-2 border-b border-green-900/30">
+                            <input
+                              type="text"
+                              placeholder="Filtrer…"
+                              value={fileSearch}
+                              onChange={e => setFileSearch(e.target.value)}
+                              className="w-full bg-slate-900 border border-green-900/40 rounded px-2 py-1 text-[11px] font-mono text-green-400 placeholder:text-slate-400 focus:outline-none focus:border-green-600"
+                            />
+                          </div>
+                          {groupedFiles.map(([flux, fluxFiles]) => (
+                            <div key={flux}>
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-900/60 border-b border-green-900/20">
+                                <Folder size={9} className="text-green-800 shrink-0" />
+                                <span className="font-mono text-[9px] text-green-700 uppercase tracking-widest truncate">{flux}</span>
+                              </div>
+                              {fluxFiles.map(f => (
+                                <button
+                                  key={f.path}
+                                  onClick={() => toggleContextFile(f.path)}
+                                  className={`w-full text-left px-2 py-1.5 border-b border-green-900/10 flex items-center gap-1.5 transition-colors ${
+                                    contextFiles.includes(f.path)
+                                      ? 'bg-green-900/30 border-l-2 border-l-green-500'
+                                      : 'hover:bg-slate-800/60'
+                                  }`}
+                                >
+                                  {f.type === 'json'
+                                    ? <FileJson size={10} className="shrink-0 text-amber-500" />
+                                    : <FileText size={10} className="shrink-0 text-blue-400" />
+                                  }
+                                  <span className={`truncate flex-1 text-[10px] font-mono ${
+                                    contextFiles.includes(f.path) ? 'text-green-300' : 'text-slate-200'
+                                  }`}>{f.name}</span>
+                                  {isToday(f.modified) && (
+                                    <span className="shrink-0 text-[8px] font-bold uppercase bg-orange-500 text-white px-1 rounded" style={{paddingTop:'1px',paddingBottom:'1px'}}>new</span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
                           ))}
                         </div>
                       )}
                     </div>
                     {/* Commandes rapides */}
                     <div className="space-y-1">
-                      <p className="font-mono text-[10px] text-slate-600 uppercase tracking-widest mb-2">
+                      <p className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2">
                         Commandes rapides
                       </p>
                       {QUICK_COMMANDS.map((cmd, i) => (
@@ -578,7 +727,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                           key={i}
                           onClick={() => sendMessage(cmd.text)}
                           disabled={streaming}
-                          className="block w-full text-left font-mono text-xs text-slate-500 hover:text-green-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
+                          className="block w-full text-left font-mono text-xs text-slate-300 hover:text-green-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
                         >
                           <ChevronRight size={10} className="inline mr-1 text-green-700" />
                           {cmd.label}
@@ -599,7 +748,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                             sendMessage(cmd.text, cmd.period)
                           }}
                           disabled={streaming}
-                          className="block w-full text-left font-mono text-xs text-slate-500 hover:text-amber-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
+                          className="block w-full text-left font-mono text-xs text-slate-300 hover:text-amber-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
                         >
                           <ChevronRight size={10} className="inline mr-1 text-amber-800" />
                           {cmd.label}
@@ -652,7 +801,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                     rows={1}
                     placeholder="Posez votre question… (Shift+Entrée pour un saut de ligne)"
                     disabled={streaming}
-                    className="flex-1 bg-transparent border-none resize-none font-mono text-sm text-amber-200 placeholder:text-slate-600 focus:outline-none leading-relaxed"
+                    className="flex-1 bg-transparent border-none resize-none font-mono text-sm text-amber-200 placeholder:text-slate-400 focus:outline-none leading-relaxed"
                     style={{ minHeight: '1.75rem', maxHeight: '8rem', overflow: 'auto' }}
                   />
                   <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
