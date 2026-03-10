@@ -82,7 +82,25 @@ function formatDateShort(ts) {
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function ChatbotPanel({ onClose, onFileSaved }) {
-  const [messages, setMessages]         = useState([])
+  const WELCOME_MSG = {
+    role: 'assistant',
+    content: `**Bienvenue dans le terminal IA de WUDD.ai** 👋
+
+Voici ce que je peux faire pour vous :
+- 📊 Analyser et résumer des articles, rapports ou fichiers JSON
+- 🗂 Répondre à des questions sur les données chargées en contexte
+- 📝 Produire des tableaux, synthèses et analyses comparatives en Markdown
+
+**Règles de fonctionnement :**
+- 🔒 **Lecture seule** — je ne peux pas supprimer, modifier ou créer des fichiers
+- 🌐 Les réponses sont générées par l'IA sélectionnée (EurIA / Claude)
+- 📁 Ajoutez des fichiers de contexte via le bouton 📎 pour des analyses ciblées
+- ⬆️ Utilisez la flèche ↑ pour rappeler une commande précédente
+- 💾 Sauvegardez la conversation avec l'icône 💾 en bas à droite`,
+    welcome: true,
+  }
+
+  const [messages, setMessages]         = useState([WELCOME_MSG])
   const [input, setInput]               = useState('')
   const [streaming, setStreaming]       = useState(false)
   const [contextFiles, setContextFiles] = useState([])
@@ -96,9 +114,11 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
   const [aiProviders, setAiProviders]   = useState([])          // providers disponibles
   const [selectedProvider, setSelectedProvider] = useState(null) // null = env default
 
-  const ctrlRef   = useRef(null)
-  const endRef    = useRef(null)
-  const inputRef  = useRef(null)
+  const ctrlRef       = useRef(null)
+  const endRef        = useRef(null)
+  const inputRef      = useRef(null)
+  const historyIdxRef = useRef(-1)   // -1 = pas en navigation historique
+  const historyDraft  = useRef('')   // sauvegarde du texte en cours avant navigation
 
   // Détecte si un fichier a été modifié aujourd'hui
   const isToday = (mtime) => {
@@ -203,7 +223,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newMessages,
+          messages: newMessages.filter(m => !m.welcome),
           context_files: contextFiles,
           notes_period: overrideNotesPeriod || notesPeriod || undefined,
           ...(selectedProvider ? { provider: selectedProvider } : {}),
@@ -277,7 +297,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
     } finally {
       setStreaming(false)
     }
-  }, [input, messages, streaming, contextFiles, notesPeriod])
+  }, [input, messages, streaming, contextFiles, notesPeriod, selectedProvider])
 
   // ── Sauvegarde en Markdown ────────────────────────────────────────────────
 
@@ -882,28 +902,70 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
               >
                 {/* Saisie */}
                 <div className="flex items-end gap-2">
-                  <span className="font-mono text-sm text-amber-500 shrink-0 pb-1.5 select-none">▸</span>
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        sendMessage()
-                      }
-                    }}
-                    rows={3}
-                    placeholder="Posez votre question… (Shift+Entrée pour un saut de ligne)"
-                    disabled={streaming}
-                    className="flex-1 bg-transparent border-none resize-none font-mono text-sm text-amber-200 placeholder:text-slate-400 focus:outline-none leading-relaxed"
-                    style={{ minHeight: '5.25rem', maxHeight: '10rem', overflow: 'auto' }}
-                  />
+                  <div className="flex-1 flex items-start gap-2">
+                    <span className="font-mono text-sm text-amber-500 shrink-0 pt-0.5 select-none">▸</span>
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={e => { setInput(e.target.value); historyIdxRef.current = -1 }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          historyIdxRef.current = -1
+                          historyDraft.current  = ''
+                          sendMessage()
+                          return
+                        }
+                        // Navigation historique : flèche haut/bas (desktop uniquement,
+                        // seulement si le curseur est sur la première/dernière ligne)
+                        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                          const userMsgs = messages
+                            .filter(m => m.role === 'user')
+                            .map(m => m.content)
+                          if (userMsgs.length === 0) return
+                          const ta = e.target
+                          const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0
+                          const atEnd   = ta.selectionStart === ta.value.length
+                          if (e.key === 'ArrowUp' && atStart) {
+                            e.preventDefault()
+                            if (historyIdxRef.current === -1) historyDraft.current = input
+                            const next = Math.min(historyIdxRef.current + 1, userMsgs.length - 1)
+                            historyIdxRef.current = next
+                            const val = userMsgs[userMsgs.length - 1 - next]
+                            setInput(val)
+                            // Place le curseur en fin après le render
+                            requestAnimationFrame(() => {
+                              if (inputRef.current) {
+                                inputRef.current.selectionStart = val.length
+                                inputRef.current.selectionEnd   = val.length
+                              }
+                            })
+                          } else if (e.key === 'ArrowDown' && atEnd) {
+                            if (historyIdxRef.current === -1) return
+                            e.preventDefault()
+                            const next = historyIdxRef.current - 1
+                            if (next < 0) {
+                              historyIdxRef.current = -1
+                              setInput(historyDraft.current)
+                            } else {
+                              historyIdxRef.current = next
+                              setInput(userMsgs[userMsgs.length - 1 - next])
+                            }
+                          }
+                        }
+                      }}
+                      rows={3}
+                      placeholder="Posez votre question… (Shift+Entrée pour un saut de ligne)"
+                      disabled={streaming}
+                      className="flex-1 bg-transparent border-none resize-none font-mono text-sm text-amber-200 placeholder:text-slate-400 focus:outline-none leading-relaxed"
+                      style={{ minHeight: '5.25rem', maxHeight: '10rem', overflow: 'auto' }}
+                    />
+                  </div>
                   <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
                     {/* Effacer la conversation */}
-                    {messages.length > 0 && (
+                    {messages.some(m => !m.welcome) && (
                       <button
-                        onClick={() => { ctrlRef.current?.abort(); setMessages([]); setSavedMsg(null) }}
+                        onClick={() => { ctrlRef.current?.abort(); setMessages([WELCOME_MSG]); setSavedMsg(null) }}
                         title="Effacer la conversation"
                         className="w-7 h-7 rounded flex items-center justify-center text-slate-600 hover:text-red-400 transition-colors"
                       >
@@ -911,7 +973,7 @@ export default function ChatbotPanel({ onClose, onFileSaved }) {
                       </button>
                     )}
                     {/* Sauvegarder la conversation */}
-                    {messages.length > 0 && (
+                    {messages.some(m => !m.welcome) && (
                       <button
                         onClick={saveConversation}
                         disabled={saving}
