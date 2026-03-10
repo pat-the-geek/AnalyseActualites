@@ -7,7 +7,7 @@ This file provides essential context for AI assistants working in this codebase.
 **WUDD.ai** (also called *Analyse Actualités*) is a French-language intelligent news monitoring platform. It fetches articles from JSON feeds accessible via HTTP URL, summarizes them with an AI API (Infomaniak EurIA / Qwen3), and produces structured JSON outputs and Markdown reports.
 
 - **Language:** All configuration keys, prompts, log messages, and output are in **French**
-- **Version:** 2.2.0 (quota adaptatif)
+- **Version:** 2.3.0 (déduplication, crédibilité sources, timeline entités, backup)
 - **License:** MIT — Patrick Ostertag
 - **Python:** 3.10+
 
@@ -70,6 +70,8 @@ Required variables:
 | `MAX_RETRIES` | Max API retry attempts (default: 3) |
 | `TIMEOUT_RESUME` | Timeout for summary generation in seconds (default: 60) |
 | `TIMEOUT_RAPPORT` | Timeout for report generation in seconds (default: 300) |
+| `BACKUP_L1` | Absolute path for primary backup destination (incremental copy of `data/`) |
+| `BACKUP_L2` | Absolute path for secondary backup destination (optional — copy of `BACKUP_L1`) |
 
 **Never commit `.env` to git.** It is listed in `.gitignore`.
 
@@ -141,13 +143,16 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 |---|---|---|
 | Every 5 min | `flux_watcher.py` + `entity_timeline.py` + `cross_flux_analysis.py` + `enrich_reading_time.py` | Round-robin RSS watcher — incremental 48h update, entity timeline & cross-flux analysis |
 | Every 10 min | `check_cron_health.py` | Health monitoring |
+| Every 2h (all day) | `web_watcher.py` | Surveillance sources web sans RSS via sitemap.xml — max 5 articles/source/run |
 | Every 2h 06:00–22:00 (9×/day) | `get-keyword-from-rss.py` | Extract articles by keyword from RSS |
 
 **Nightly pipeline (sequential enrichment)**
 
 | Time | Script | Purpose |
 |---|---|---|
+| 01:00 daily | `backup_data.py` | Incremental backup: `data/` → `BACKUP_L1` → `BACKUP_L2` |
 | 02:00 daily | `enrich_entities.py` | Round-robin NER enrichment — adds `entities` field to articles that don't have it yet |
+| 02:30 daily | `enrich_images.py` | Fetch `og:image`/`twitter:image` for articles without images (HTTP only, no AI) |
 | 03:00 daily | `enrich_sentiment.py` | Round-robin sentiment enrichment — adds `sentiment`, `score_sentiment`, `ton_editorial`, `score_ton` |
 | 04:00 Sunday | `repair_failed_summaries.py` | Weekly maintenance — re-generates summaries containing API error messages |
 
@@ -196,6 +201,9 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `cluster_articles.py` | Thematic clustering of articles (entity-based, no ML deps) — on-demand via UI | `--days`, `--min-size`, `--output`, `--dry-run` |
 | `radar_wudd.py` | Monthly thematic radar — generates end-of-month statistics | (none) |
 | `Get_htmlText_From_JSONFile.py` | Extract raw HTML text from articles | (none; interactive file picker) |
+| `backup_data.py` | Incremental backup of `data/` to `BACKUP_L1` and optionally `BACKUP_L2` | `--dry-run` |
+| `enrich_images.py` | Add `Images` field to articles without images — fetches HTML and extracts `og:image`/`twitter:image` | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
+| `web_watcher.py` | Watch web sources without RSS via sitemap.xml — fetches pages, generates AI summaries, saves to `data/articles-from-rss/` | `--dry-run`, `--source` |
 
 ---
 
@@ -214,6 +222,9 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | `utils/parallel.py` | `ThreadPoolExecutor` wrapper for I/O-bound parallelism |
 | `utils/scoring.py` | `ScoringEngine` — ranks articles by relevance score for Top articles and newsletter |
 | `utils/quota.py` | `QuotaManager` — adaptive daily quota regulation: global cap, per-keyword cap, per-source-per-keyword cap, **per-entity-named cap**, adaptive keyword sorting by consumption ratio. Singleton via `get_quota_manager()`. State in `data/quota_state.json`, config in `config/quota.json`. |
+| `utils/deduplication.py` | `Deduplicator` — detects near-duplicate articles using 3 signals: URL MD5 + résumé MD5 + Jaccard bigrammes (threshold 0.80). Methods: `deduplicate()`, `deduplicate_incremental()`, `is_duplicate()` |
+| `utils/source_credibility.py` | `CredibilityEngine` — source credibility score (0–100) from `config/sources_credibility.json`; influences article ranking via `scoring.py` multiplier. Methods: `get_score()`, `get_multiplier()`, `rate_articles()` |
+| `utils/reading_time.py` | Reading time estimation at 230 wpm (francophone average). Returns `temps_lecture_minutes` (float) and `temps_lecture_label` (str). Functions: `estimate_reading_time()`, `enrich_reading_time()` |
 | `utils/exporters/atom_feed.py` | Atom XML feed generation (`generate_atom_feed()`, `generate_atom_from_flux()`) |
 | `utils/exporters/newsletter.py` | Newsletter HTML generation + SMTP send (`generate_newsletter_html()`, `send_newsletter()`) |
 | `utils/exporters/webhook.py` | Webhook notifications — Discord, Slack, Ntfy (`send_discord()`, `send_slack()`, `send_ntfy()`) |
@@ -240,6 +251,25 @@ Local web interface for browsing, reading and editing generated JSON/Markdown fi
 | `ScriptConsolePanel.jsx` | Modal console to launch `get-keyword-from-rss.py` in the background; real-time SSE log streaming; auto-refreshes the file list on success |
 | `EntityDashboard.jsx` | Aggregate NER stats cross-files; clicking an entity opens EntityArticlePanel |
 | `EntityArticlePanel.jsx` | Draggable/resizable floating window: articles filtered by entity, co-occurrence graph, AI synthesis tab (streaming SSE, cached per entity), "Générer un rapport" and "Exporter JSON" |
+| `AlertsPanel.jsx` | Alert management panel — configurable thresholds, bottom sheet on mobile |
+| `ArticleListViewer.jsx` | Article list with filtering and sorting |
+| `ChatbotPanel.jsx` | Chat interface for AI interactions |
+| `ClusterView.jsx` | Thematic article clustering visualization |
+| `ComparePanel.jsx` | Article comparison interface |
+| `EntityCalendar.jsx` | Calendar view of entity mentions over time |
+| `EntityGallery.jsx` | Gallery view of entity-related images |
+| `EntityGraph.jsx` | Network graph visualization of entity co-occurrences |
+| `EntityHighlighter.jsx` | Inline text highlighting for detected entities |
+| `EntityPanel.jsx` | Generic entity detail panel |
+| `EntitySearchModal.jsx` | Modal for entity search |
+| `EntityTimeline.jsx` | Temporal timeline visualization of entity mentions |
+| `EntityWatchPanel.jsx` | Watch list management for tracked entities |
+| `EntityWorldMap.jsx` | Leaflet map visualization of geographic entities (GPE/LOC) |
+| `ExportPanel.jsx` | Data export interface |
+| `SchedulerPanel.jsx` | Cron job scheduling interface |
+| `SourceBiasPanel.jsx` | Source credibility and editorial bias visualization |
+| `TopArticlesPanel.jsx` | Top articles ranking — podium style (🥇🥈🥉 + numbered circles), mobile bottom sheet |
+| `TTSButton.jsx` | Text-to-speech button for article content |
 
 ### Using Config
 
@@ -266,6 +296,10 @@ Config raises `ValueError` at startup if `URL` or `bearer` are missing.
 | `sites_actualite.json` | 133+ RSS news sources registry |
 | `categories_actualite.json` | 214 article categories for classification |
 | `thematiques_societales.json` | 12-theme classification (IA, economy, health, geopolitics, …) |
+| `alert_rules.json` | Alert rule configuration — thresholds per entity type (modéré/élevé/critique), webhook targets |
+| `sources_credibility.json` | Source credibility scores (0–100) for known media outlets — used by `utils/source_credibility.py` |
+| `web_sources.json` | Web source definitions for `web_watcher.py` (sitemap URL, url_pattern, keyword, max_per_run) |
+| `keyword-to-search.json` | Keywords and their RSS feed targets for `get-keyword-from-rss.py` |
 | `logging.conf` | Python logging configuration |
 
 ### Adding a new flux
@@ -285,9 +319,13 @@ data/
 │       ├── articles_generated_<date_debut>_<date_fin>.json
 │       └── cache/             # API response cache (TTL 24h, MD5 keys)
 ├── articles-from-rss/
-│   └── <keyword>.json         # Keyword-extracted articles
-└── raw/
-    └── all_articles.txt       # Raw extracted HTML text
+│   └── <keyword>.json         # Keyword-extracted + web_watcher articles
+├── raw/
+│   └── all_articles.txt       # Raw extracted HTML text
+├── alertes.json               # Generated by trend_detector.py
+├── entity_timeline.json       # Generated by entity_timeline.py
+├── quota_state.json           # Quota counters (auto-reset at midnight)
+└── web_watcher_state.json     # Processed URL tracking for web_watcher.py
 
 rapports/
 ├── markdown/
@@ -318,16 +356,23 @@ rapports/
     "sentiment": "positif",
     "score_sentiment": 4,
     "ton_editorial": "factuel",
-    "score_ton": 5
+    "score_ton": 5,
+    "temps_lecture_minutes": 2.5,
+    "temps_lecture_label": "2 min 30 s",
+    "score_source": 85
   }
 ]
 ```
 
-Images are filtered to width > 500px (up to 3 per article).
+Images are filtered to width > 500px (up to 3 per article). The `Images` field is also added retroactively by `enrich_images.py` for articles that lack it.
 
 The `entities` field is optional — added by `enrich_entities.py` or `get-keyword-from-rss.py`. It uses 18 NER category types (PERSON, ORG, GPE, LOC, PRODUCT, EVENT, DATE, MONEY, etc.). Absent from older articles until enriched.
 
 The `sentiment` / `score_sentiment` / `ton_editorial` / `score_ton` fields are optional — added by `enrich_sentiment.py` (Round-Robin, 1 file/day on `articles-from-rss/`). Absent from older articles until enriched.
+
+The `temps_lecture_minutes` / `temps_lecture_label` fields are optional — added by `enrich_reading_time.py` using `utils/reading_time.py` (230 wpm).
+
+The `score_source` field is optional — added by `utils/source_credibility.py` based on `config/sources_credibility.json`; influences article ranking.
 
 ---
 
@@ -350,6 +395,7 @@ pytest --cov=utils --cov-report=html tests/
 Test files:
 - `tests/test_date_utils.py` — Date parsing edge cases (184 lines)
 - `tests/test_multi_flux.py` — Multi-flux cache isolation (49 lines)
+- `tests/test_new_features.py` — Deduplication, source credibility, reading time (50 tests)
 
 Coverage targets: `utils/` ≥ 80%, `scripts/` ≥ 60%, critical functions 100%.
 
@@ -372,6 +418,10 @@ Coverage targets: `utils/` ≥ 80%, `scripts/` ≥ 60%, critical functions 100%.
 7. **Headless-first** — Everything runs via CLI and Docker cron. Scripts using `tkinter` (interactive file picker) are legacy patterns; prefer CLI arguments.
 
 8. **Adaptive quota regulation** — `utils/quota.py` enforces four daily ceilings (global, per-keyword, per-source-per-keyword, per-named-entity). Flow: call `quota.can_process(kw, source)` before the EurIA API call, then `quota.can_process_entities(entities)` after NER extraction and before saving the article, then `quota.record_article(kw, source, entities)` to update all counters. Keywords are sorted by consumption ratio so the least-consumed topics are prioritised. The state (including entity counts) auto-resets at midnight (lazy reset on first call after midnight).
+
+9. **3-signal deduplication** — `utils/deduplication.py` detects near-duplicate articles across sources using URL MD5 (exact duplicates), résumé MD5 (same text, different source), and Jaccard similarity on word bigrams (≥ 0.80 threshold for near-duplicates). Always call `dedup.is_duplicate(article, existing)` before appending a new article to a JSON file.
+
+10. **Credibility-weighted scoring** — `utils/source_credibility.py` loads `config/sources_credibility.json` and provides a multiplier (0.0–1.0) per source. `utils/scoring.py` applies this multiplier to relevance scores so that highly-credible sources rank higher. Add new sources to `sources_credibility.json` rather than hardcoding scores in scripts.
 
 ---
 
