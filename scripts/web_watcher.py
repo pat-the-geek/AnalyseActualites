@@ -29,6 +29,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -209,18 +210,35 @@ def _extract_page(url: str) -> dict | None:
     lines = [ln for ln in raw.splitlines() if ln.strip()]
     text = "\n".join(lines)[:10000]
 
-    # ── Image principale (Open Graph) ─────────────────────────────────────────
+    # ── Image principale (Open Graph + twitter:image + fallback <img>) ─────────
     images = []
-    og_img = soup.find("meta", property="og:image")
-    if og_img:
-        img_url = og_img.get("content", "").strip()
-        if img_url.startswith(("http://", "https://")):
+    for prop in ("og:image", "twitter:image"):
+        meta = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+        if meta:
+            img_url = meta.get("content", "").strip()
+            if img_url:
+                img_url = urljoin(url, img_url)  # résout les URLs relatives
+                try:
+                    w_tag = soup.find("meta", property="og:image:width")
+                    width = int(w_tag.get("content", 1200)) if w_tag else 1200
+                except (ValueError, TypeError):
+                    width = 1200
+                images.append({"URL": img_url, "Width": width})
+                break
+    # Fallback : première <img> pertinente dans le corps de l'article
+    if not images:
+        for img_tag in soup.find_all("img", src=True):
+            src = img_tag.get("src", "").strip()
+            if not src or src.startswith("data:"):
+                continue
+            src = urljoin(url, src)
             try:
-                w_tag = soup.find("meta", property="og:image:width")
-                width = int(w_tag.get("content", 1200)) if w_tag else 1200
+                w = int(img_tag.get("width", 0))
             except (ValueError, TypeError):
-                width = 1200
-            images.append({"URL": img_url, "Width": width})
+                w = 0
+            if w >= 300 or w == 0:
+                images.append({"URL": src, "Width": w if w > 0 else 800})
+                break
 
     return {
         "title": title,
@@ -372,6 +390,22 @@ def _process_source(
         context = f"Source : {title_src}\nURL : {url}\n\n{page['text']}"
         resume = api_client.generate_summary(context, max_lines=15, language=lang_label)
 
+        # Extraction des entités nommées (NER) — inline comme get-keyword-from-rss.py
+        print_console(f"    Extraction des entités nommées…")
+        entities = api_client.generate_entities(resume)
+
+        # Vérification quota par entité (après NER, avant sauvegarde)
+        if entities:
+            ok, saturated = quota.can_process_entities(entities)
+            if not ok:
+                print_console(
+                    f"  Quota entités saturé ({', '.join(saturated[:3])}) — article ignoré.",
+                    level="warning",
+                )
+                src_state["processed_urls"].append(url)
+                processed_set.add(_normalize_url(url))
+                continue
+
         # Construction de l'article (format standard du projet)
         article: dict = {
             "Date de publication": pub_date_fmt,
@@ -380,6 +414,8 @@ def _process_source(
             "Résumé": resume,
             "Images": page["images"],
         }
+        if entities:
+            article["entities"] = entities
         if page["title"]:
             article["Titre"] = page["title"]
 
@@ -388,7 +424,7 @@ def _process_source(
         new_for_48h.append(article)
         src_state["processed_urls"].append(url)
         processed_set.add(_normalize_url(url))
-        quota.record_article(keyword, title_src, {})
+        quota.record_article(keyword, title_src, entities)
         added += 1
 
         titre_court = (page["title"] or url)[:70]
