@@ -1,7 +1,7 @@
 {
   "adaptive_sorting": true,
   "enabled": true,
-  "global_daily_limit": 180,
+  "global_daily_limit": 200,
   "per_entity_daily_limit": 15,
   "per_keyword_daily_limit": 30,
   "per_source_daily_limit": 10
