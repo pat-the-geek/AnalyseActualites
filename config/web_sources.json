@@ -3,7 +3,14 @@
     "actif": true,
     "base_url": "https://www.anthropic.com",
     "keyword": "Anthropic",
-    "keyword_filter": ["Anthropic", "Claude", "AI", "model", "safety", "research"],
+    "keyword_filter": [
+      "Anthropic",
+      "Claude",
+      "AI",
+      "model",
+      "safety",
+      "research"
+    ],
     "langue": "en",
     "max_per_run": 5,
     "name": "anthropic-newsroom",
@@ -15,7 +22,14 @@
     "actif": true,
     "base_url": "https://www.momaps1.org",
     "keyword": "MoMA",
-    "keyword_filter": ["MoMA", "PS1", "art", "exhibition", "program", "artist"],
+    "keyword_filter": [
+      "MoMA",
+      "PS1",
+      "art",
+      "exhibition",
+      "program",
+      "artist"
+    ],
     "langue": "en",
     "max_per_run": 5,
     "name": "moma-ps1-programs",
@@ -27,12 +41,30 @@
     "actif": true,
     "base_url": "https://www.louvre.fr",
     "keyword": "Louvre",
-    "keyword_filter": ["Louvre", "musée", "exposition", "oeuvre", "collection", "art"],
+    "keyword_filter": [
+      "Louvre",
+      "musée",
+      "exposition",
+      "oeuvre",
+      "collection",
+      "art"
+    ],
     "langue": "fr",
     "max_per_run": 5,
     "name": "louvre-vie-musee",
     "sitemap_url": "https://www.louvre.fr/sitemap.xml",
     "title": "Louvre — Vie du musée",
     "url_pattern": "/decouvrir/vie-du-musee/"
+  },
+  {
+    "name": "nature-news-comment",
+    "title": "Nature News & Comment",
+    "base_url": "https://www.nature.com",
+    "sitemap_url": "https://www.nature.com/sitemap.xml",
+    "url_pattern": "/articles/",
+    "keyword": "Nature",
+    "langue": "fr",
+    "max_per_run": 5,
+    "actif": true
   }
 ]
