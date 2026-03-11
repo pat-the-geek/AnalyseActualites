@@ -1849,6 +1849,48 @@ function WebSourcesTab() {
   const [resolving, setResolving]     = useState(false)
   const addUrlRef                     = useRef(null)
 
+  // — Édition inline d'une source existante —
+  const [editingName, setEditingName] = useState(null)   // name de la source en cours d'édition
+  const [editFields, setEditFields]   = useState({})     // champs éditables
+
+  const startEdit = useCallback((src) => {
+    setEditingName(src.name)
+    setEditFields({
+      title:       src.title       || '',
+      base_url:    src.base_url    || '',
+      sitemap_url: src.sitemap_url || '',
+      url_pattern: src.url_pattern || '',
+      keyword:     src.keyword     || '',
+    })
+  }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingName(null)
+    setEditFields({})
+  }, [])
+
+  const saveEdit = useCallback(() => {
+    if (!editingName) return
+    setSources(prev => prev.map(s => {
+      if (s.name !== editingName) return s
+      const newSlug = editFields.title
+        ? editFields.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : s.name
+      return {
+        ...s,
+        name:        newSlug,
+        title:       editFields.title,
+        base_url:    editFields.base_url,
+        sitemap_url: editFields.sitemap_url,
+        url_pattern: editFields.url_pattern,
+        keyword:     editFields.keyword,
+      }
+    }))
+    setIsDirty(true)
+    setEditingName(null)
+    setEditFields({})
+  }, [editingName, editFields])
+
   useEffect(() => {
     Promise.all([
       fetch('/api/web-sources').then(r => r.json()),
@@ -2135,83 +2177,176 @@ function WebSourcesTab() {
           const result = results[src.name]
           const processed = stateInfo[src.name] ?? null
           const domain = (() => { try { return new URL(src.base_url || src.html_url || '').hostname.replace(/^www\./, '') } catch { return src.base_url || '' } })()
+          const isEditing = editingName === src.name
           return (
-            <div key={src.name} className={`flex items-start gap-3 p-3 rounded-xl border transition-colors group
+            <div key={src.name} className={`rounded-xl border transition-colors group
               ${result === false ? 'border-red-200 dark:border-red-700/40 bg-red-50/40 dark:bg-red-900/10'
+                : isEditing ? 'border-blue-300 dark:border-blue-600/60 bg-blue-50/40 dark:bg-blue-900/10'
                 : src.actif ? 'border-slate-200 dark:border-slate-700/50 bg-white/70 dark:bg-slate-800/40'
                 : 'border-slate-200/60 dark:border-slate-700/30 bg-slate-50/60 dark:bg-slate-800/20 opacity-60'}`}>
-              {/* Icône */}
-              <Globe size={14} className={`mt-0.5 shrink-0 ${src.actif ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400'}`} />
 
-              {/* Infos */}
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{src.title}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium shrink-0">
-                    {src.keyword}
-                  </span>
-                  {!src.actif && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-400 shrink-0">
-                      inactif
+              {/* Ligne principale */}
+              <div className="flex items-start gap-3 p-3">
+                {/* Icône */}
+                <Globe size={14} className={`mt-0.5 shrink-0 ${src.actif ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400'}`} />
+
+                {/* Infos */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{src.title}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium shrink-0">
+                      {src.keyword}
                     </span>
-                  )}
+                    {!src.actif && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-400 shrink-0">
+                        inactif
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{domain}</div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700/60 px-1.5 py-0.5 rounded">
+                      {src.url_pattern}
+                    </code>
+                    {processed !== null && (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                        <CheckCircle2 size={9} className="text-green-500" />
+                        {processed} URL{processed !== 1 ? 's' : ''} traité{processed !== 1 ? 'es' : 'e'}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{domain}</div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <code className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-700/60 px-1.5 py-0.5 rounded">
-                    {src.url_pattern}
-                  </code>
-                  {processed !== null && (
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
-                      <CheckCircle2 size={9} className="text-green-500" />
-                      {processed} URL{processed !== 1 ? 's' : ''} traité{processed !== 1 ? 'es' : 'e'}
-                    </span>
-                  )}
-                </div>
-              </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-1 shrink-0">
-                {isChecking && <RefreshCw size={12} className="animate-spin text-blue-400" />}
-                {!isChecking && result === true  && <CheckCircle2 size={12} className="text-green-500" />}
-                {!isChecking && result === false && <AlertTriangle size={12} className="text-red-400" />}
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {isChecking && <RefreshCw size={12} className="animate-spin text-blue-400" />}
+                  {!isChecking && result === true  && <CheckCircle2 size={12} className="text-green-500" />}
+                  {!isChecking && result === false && <AlertTriangle size={12} className="text-red-400" />}
 
-                {/* Toggle actif */}
-                <button
-                  onClick={() => toggleActive(src.name)}
-                  title={src.actif ? 'Désactiver cette source' : 'Activer cette source'}
-                  className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  {src.actif ? <ToggleRight size={14} className="text-blue-500" /> : <ToggleLeft size={14} />}
-                </button>
-
-                {/* Vérifier */}
-                {!isChecking && (
+                  {/* Toggle actif */}
                   <button
-                    onClick={() => checkOne(src)}
-                    title="Vérifier l'accessibilité du sitemap"
-                    className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                    onClick={() => toggleActive(src.name)}
+                    title={src.actif ? 'Désactiver cette source' : 'Activer cette source'}
+                    className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                   >
-                    <Check size={12} />
+                    {src.actif ? <ToggleRight size={14} className="text-blue-500" /> : <ToggleLeft size={14} />}
                   </button>
-                )}
 
-                {/* Lien externe */}
-                <a href={src.base_url} target="_blank" rel="noopener noreferrer"
-                  className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
-                  title="Ouvrir le site">
-                  <ExternalLink size={12} />
-                </a>
+                  {/* Éditer */}
+                  <button
+                    onClick={() => isEditing ? cancelEdit() : startEdit(src)}
+                    title={isEditing ? 'Annuler la modification' : 'Modifier cette source'}
+                    className={`p-1.5 rounded-lg transition-all
+                      ${isEditing
+                        ? 'text-blue-500 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-300'
+                        : 'opacity-40 group-hover:opacity-100 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                  >
+                    <Pencil size={12} />
+                  </button>
 
-                {/* Supprimer */}
-                <button
-                  onClick={() => removeSource(src.name)}
-                  title="Supprimer cette source"
-                  className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
-                >
-                  <Trash2 size={12} />
-                </button>
+                  {/* Vérifier */}
+                  {!isChecking && (
+                    <button
+                      onClick={() => checkOne(src)}
+                      title="Vérifier l'accessibilité du sitemap"
+                      className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                    >
+                      <Check size={12} />
+                    </button>
+                  )}
+
+                  {/* Lien externe */}
+                  <a href={src.base_url} target="_blank" rel="noopener noreferrer"
+                    className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                    title="Ouvrir le site">
+                    <ExternalLink size={12} />
+                  </a>
+
+                  {/* Supprimer */}
+                  <button
+                    onClick={() => removeSource(src.name)}
+                    title="Supprimer cette source"
+                    className="opacity-40 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
+
+              {/* Formulaire d'édition inline */}
+              {isEditing && (
+                <div className="px-3 pb-3 pt-0 space-y-2 border-t border-blue-200 dark:border-blue-700/40">
+                  <p className="pt-2.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide flex items-center gap-1">
+                    <Pencil size={10} /> Modifier la source
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Titre</label>
+                      <input
+                        type="text"
+                        value={editFields.title}
+                        onChange={e => setEditFields(f => ({ ...f, title: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Mot-clé (bucket)</label>
+                      <input
+                        type="text"
+                        value={editFields.keyword}
+                        onChange={e => setEditFields(f => ({ ...f, keyword: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">URL de base</label>
+                    <input
+                      type="url"
+                      value={editFields.base_url}
+                      onChange={e => setEditFields(f => ({ ...f, base_url: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">URL sitemap</label>
+                      <input
+                        type="url"
+                        value={editFields.sitemap_url}
+                        onChange={e => setEditFields(f => ({ ...f, sitemap_url: e.target.value }))}
+                        placeholder="https://…/sitemap.xml"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Pattern URL (regex)</label>
+                      <input
+                        type="text"
+                        value={editFields.url_pattern}
+                        onChange={e => setEditFields(f => ({ ...f, url_pattern: e.target.value }))}
+                        placeholder="ex: /news/  ou  /en/programs/\d+"
+                        className="w-full px-2.5 py-1.5 text-xs font-mono bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={cancelEdit}
+                      className="px-3 py-1.5 text-xs rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      disabled={!editFields.title || !editFields.base_url || !editFields.url_pattern || !editFields.keyword}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors"
+                    >
+                      <Save size={11} /> Enregistrer
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
