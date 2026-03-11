@@ -1,35 +1,38 @@
 [
   {
-    "name": "anthropic-news",
-    "title": "Anthropic Newsroom",
+    "actif": true,
     "base_url": "https://www.anthropic.com",
-    "sitemap_url": "https://www.anthropic.com/sitemap.xml",
-    "url_pattern": "/news/[a-z0-9]",
     "keyword": "Anthropic",
+    "keyword_filter": ["Anthropic", "Claude", "AI", "model", "safety", "research"],
     "langue": "en",
     "max_per_run": 5,
-    "actif": true
+    "name": "anthropic-newsroom",
+    "sitemap_url": "https://www.anthropic.com/sitemap.xml",
+    "title": "Anthropic Newsroom",
+    "url_pattern": "/news/[a-z0-9]"
   },
   {
-    "name": "moma-ps1-programs",
-    "title": "MoMA PS1 — Programs",
+    "actif": true,
     "base_url": "https://www.momaps1.org",
-    "sitemap_url": "https://www.momaps1.org/sitemap.xml",
-    "url_pattern": "/en/programs/\\d+",
     "keyword": "MoMA",
+    "keyword_filter": ["MoMA", "PS1", "art", "exhibition", "program", "artist"],
     "langue": "en",
     "max_per_run": 5,
-    "actif": true
+    "name": "moma-ps1-programs",
+    "sitemap_url": "https://www.momaps1.org/sitemap.xml",
+    "title": "MoMA PS1 — Programs",
+    "url_pattern": "/en/programs/\\d+"
   },
   {
-    "name": "louvre-vie-musee",
-    "title": "Louvre — Vie du musée",
+    "actif": true,
     "base_url": "https://www.louvre.fr",
-    "sitemap_url": "https://www.louvre.fr/sitemap.xml",
-    "url_pattern": "/decouvrir/vie-du-musee/",
     "keyword": "Louvre",
+    "keyword_filter": ["Louvre", "musée", "exposition", "oeuvre", "collection", "art"],
     "langue": "fr",
     "max_per_run": 5,
-    "actif": true
+    "name": "louvre-vie-musee",
+    "sitemap_url": "https://www.louvre.fr/sitemap.xml",
+    "title": "Louvre — Vie du musée",
+    "url_pattern": "/decouvrir/vie-du-musee/"
   }
 ]

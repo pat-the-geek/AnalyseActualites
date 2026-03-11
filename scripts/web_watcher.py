@@ -393,6 +393,16 @@ def _process_source(
             processed_set.add(_normalize_url(url))
             continue
 
+        # Filtre par mot-clé sur le contenu (optionnel, défini dans web_sources.json)
+        keyword_filter = source.get("keyword_filter", [])
+        if keyword_filter:
+            combined = (page["title"] + " " + page["text"]).lower()
+            if not any(kw.lower() in combined for kw in keyword_filter):
+                print_console(f"    ✗ Hors sujet (aucun mot-clé trouvé parmi {keyword_filter}) — ignoré")
+                src_state["processed_urls"].append(url)
+                processed_set.add(_normalize_url(url))
+                continue
+
         # Date : contenu de page > lastmod sitemap > maintenant
         pub_date_str = page["pub_date_str"] or lastmod
         pub_dt = _parse_date(pub_date_str)

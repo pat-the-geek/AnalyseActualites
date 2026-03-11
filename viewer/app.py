@@ -478,6 +478,14 @@ def api_scheduler():
             "log_file": PROJECT_ROOT / "rapports" / "cron_enrich_entities.log",
         },
         {
+            "name": "Enrichissement images",
+            "script": "enrich_images.py",
+            "cron": "30 2 * * *",
+            "category": "Enrichissement nocturne",
+            "data_dir": None,
+            "log_file": PROJECT_ROOT / "rapports" / "cron_enrich_images.log",
+        },
+        {
             "name": "Enrichissement sentiment",
             "script": "enrich_sentiment.py",
             "cron": "0 3 * * *",
