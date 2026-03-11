@@ -64,8 +64,8 @@ export default function Sidebar({
           <X size={16} />
         </button>
       </div>
-      {/* ── Filtres ── masqués sur mobile pour économiser l'espace */}
-      <div className="hidden md:block p-3 border-b border-slate-200 dark:border-slate-700 space-y-2.5">
+      {/* ── Filtres ── visibles sur mobile et desktop */}
+      <div className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2.5">
         {/* Boutons type */}
         <div className="flex gap-1">
           {[
