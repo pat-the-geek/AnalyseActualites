@@ -2477,8 +2477,11 @@ def api_export_atom():
         keyword = request.args.get("keyword", "").strip()
         max_entries = min(int(request.args.get("max_entries", 50)), 200)
 
+        # URL canonique dynamique : utilise l'URL réelle de la requête (évite localhost vs IP réseau)
+        actual_self_url = request.url
+
         if flux:
-            xml = generate_atom_from_flux(PROJECT_ROOT, flux, max_entries)
+            xml = generate_atom_from_flux(PROJECT_ROOT, flux, max_entries, self_url=actual_self_url)
             feed_title = f"WUDD.ai · {flux}"
         elif keyword:
             kw_file = PROJECT_ROOT / "data" / "articles-from-rss" / f"{keyword}.json"
@@ -2490,6 +2493,7 @@ def api_export_atom():
             xml = generate_atom_feed(
                 articles, feed_title=f"WUDD.ai · {keyword}",
                 feed_id=f"{_FEED_ID_BASE}keyword-{keyword.lower()}",
+                self_url=actual_self_url,
                 max_entries=max_entries,
             )
         else:
@@ -2509,6 +2513,7 @@ def api_export_atom():
                         continue
             all_articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
             xml = generate_atom_feed(all_articles, feed_title="WUDD.ai · Veille complète",
+                                     self_url=actual_self_url,
                                      max_entries=max_entries)
 
         return Response(xml, mimetype="application/atom+xml; charset=utf-8")

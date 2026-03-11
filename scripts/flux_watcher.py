@@ -301,6 +301,8 @@ def main(dry_run: bool = False) -> None:
                     print_console(f"  Quota entité atteint pour '{saturated}', article ignoré.", level="debug")
                     continue
             images   = extract_top_n_largest_images(link, n=1, min_width=500)
+            if not isinstance(images, list):
+                images = []
 
             article = {
                 "Titre": title,

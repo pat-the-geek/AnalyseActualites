@@ -234,10 +234,10 @@ def extract_top_n_largest_images(
 
     except requests.exceptions.Timeout:
         default_logger.error(f"Timeout lors de l'extraction d'images de {url}")
-        return {"error": f"Timeout après {timeout}s"}
+        return []
     except requests.exceptions.RequestException as e:
         default_logger.error(f"Erreur réseau lors de l'extraction d'images: {e}")
-        return {"error": f"Erreur réseau: {str(e)}"}
+        return []
     except Exception as e:
         default_logger.error(f"Erreur inattendue lors de l'extraction d'images: {e}")
-        return {"error": str(e)}
+        return []
