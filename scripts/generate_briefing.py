@@ -347,6 +347,135 @@ def generate_ai_synthesis(
         return ""
 
 
+# ── Génération du texte podcast ──────────────────────────────────────────────
+
+def build_podcast_markdown(
+    period_label: str,
+    date_debut: str,
+    date_fin: str,
+    articles: list[dict],
+    top_articles: list[dict],
+    top_entities: list[tuple],
+    alerts: list[dict],
+    ai_synthesis: str = "",
+) -> str:
+    """Génère un texte Markdown fluide adapté à la synthèse vocale (TTS)."""
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y à %H:%M UTC")
+    total = len(articles)
+    sentiment = _sentiment_stats(articles)
+
+    pos = sentiment.get("positif", 0)
+    neu = sentiment.get("neutre", 0)
+    neg = sentiment.get("négatif", 0)
+    sent_total = pos + neu + neg
+    def _pct(n): return f"{n * 100 // sent_total} pour cent" if sent_total else "non disponible"
+
+    lines = [
+        f"# Podcast WUDD point AI — Briefing {period_label} du {date_fin}",
+        "",
+        f"Bonjour. Voici votre briefing {period_label} WUDD point AI, généré le {now_str}.",
+        f"Cette édition couvre la période du {date_debut} au {date_fin}",
+        f"et synthétise {total} articles analysés par l'intelligence artificielle.",
+        "",
+        "---",
+        "",
+    ]
+
+    # ── Synthèse IA ──────────────────────────────────────────────────────────
+    if ai_synthesis:
+        lines += [
+            "## Synthèse de la semaine",
+            "",
+            ai_synthesis.strip(),
+            "",
+            "---",
+            "",
+        ]
+
+    # ── Alertes ──────────────────────────────────────────────────────────────
+    if alerts:
+        lines += [
+            "## Tendances et alertes",
+            "",
+            f"Cette semaine, {len(alerts[:5])} tendances ont été détectées.",
+            "",
+        ]
+        for a in alerts[:5]:
+            niveau = a.get("niveau", "modéré")
+            lines.append(
+                f"{a['entity_value']}, de type {a['entity_type']}, "
+                f"présente un niveau d'alerte {niveau} avec {a['count_24h']} mentions sur les dernières 24 heures."
+            )
+        lines += ["", "---", ""]
+
+    # ── Top Entités ──────────────────────────────────────────────────────────
+    if top_entities:
+        lines += [
+            "## Les sujets les plus mentionnés",
+            "",
+            f"Voici les {len(top_entities)} entités qui ont le plus retenu l'attention cette semaine.",
+            "",
+        ]
+        for i, (etype, name, count) in enumerate(top_entities, 1):
+            mention_str = "mention" if count == 1 else "mentions"
+            lines.append(f"{i}. {name}, avec {count} {mention_str}.")
+        lines += ["", "---", ""]
+
+    # ── Top Articles ─────────────────────────────────────────────────────────
+    if top_articles:
+        lines += [
+            "## Les articles à la une",
+            "",
+            "Voici les cinq articles les plus pertinents de la période.",
+            "",
+        ]
+        for i, article in enumerate(top_articles[:5], 1):
+            source = article.get("Sources") or article.get("source") or "Source inconnue"
+            date   = article.get("Date de publication") or ""
+            resume = (article.get("Résumé") or "")[:500]
+            titre  = article.get("Titre") or ""
+
+            header = f"**Article {i}"
+            if titre:
+                header += f" — {titre}"
+            header += f"** — {source}"
+            if date:
+                header += f", publié le {date}"
+            header += "."
+
+            lines += [
+                header,
+                "",
+                resume + ("…" if len(article.get("Résumé") or "") > 500 else ""),
+                "",
+            ]
+        lines += ["---", ""]
+
+    # ── Statistiques ─────────────────────────────────────────────────────────
+    lines += [
+        "## En bref",
+        "",
+        f"Sur la période, {total} articles ont été analysés.",
+    ]
+    if sent_total:
+        lines.append(
+            f"La tonalité globale est {_pct(pos)} positive, "
+            f"{_pct(neu)} neutre, et {_pct(neg)} négative."
+        )
+    sources = _source_stats(articles, top_n=3)
+    if sources:
+        src_str = ", ".join(f"{s}" for s, _ in sources)
+        lines.append(f"Les sources les plus actives sont : {src_str}.")
+    lines += [
+        "",
+        "---",
+        "",
+        f"Ce briefing a été généré automatiquement par WUDD point AI le {now_str}. À bientôt.",
+    ]
+
+    return "\n".join(lines)
+
+
 # ── Point d'entrée ────────────────────────────────────────────────────────────
 
 def parse_args():
@@ -423,14 +552,43 @@ def main():
     if args.dry_run:
         print_console("[DRY-RUN] Briefing non sauvegardé.")
         print(briefing_md)
+        print_console("[DRY-RUN] --- Texte podcast ---")
+        podcast_md = build_podcast_markdown(
+            period_label=period_label,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            articles=articles,
+            top_articles=top_articles,
+            top_entities=top_entities,
+            alerts=alerts,
+            ai_synthesis=ai_synthesis,
+        )
+        print(podcast_md)
         return
 
     # Sauvegarde
     _BRIEFING_DIR.mkdir(parents=True, exist_ok=True)
+
     filename = f"briefing_{date_fin}_{args.period}.md"
     output_path = _BRIEFING_DIR / filename
     output_path.write_text(briefing_md, encoding="utf-8")
     print_console(f"Briefing sauvegardé : {output_path}")
+
+    # Texte podcast (TTS)
+    podcast_md = build_podcast_markdown(
+        period_label=period_label,
+        date_debut=date_debut,
+        date_fin=date_fin,
+        articles=articles,
+        top_articles=top_articles,
+        top_entities=top_entities,
+        alerts=alerts,
+        ai_synthesis=ai_synthesis,
+    )
+    podcast_filename = f"podcast_{date_fin}_{args.period}.md"
+    podcast_path = _BRIEFING_DIR / podcast_filename
+    podcast_path.write_text(podcast_md, encoding="utf-8")
+    print_console(f"Texte podcast sauvegardé : {podcast_path}")
 
 
 if __name__ == "__main__":
