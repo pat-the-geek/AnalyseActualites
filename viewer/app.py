@@ -3992,8 +3992,12 @@ def serve_app(path):
     target = dist / path
     if path and target.exists() and target.is_file():
         return send_from_directory(str(dist), path)
-    # SPA fallback : toutes les routes renvoient index.html
-    return send_from_directory(str(dist), "index.html")
+    # SPA fallback : toutes les routes renvoient index.html (sans cache)
+    response = send_from_directory(str(dist), "index.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 if __name__ == "__main__":

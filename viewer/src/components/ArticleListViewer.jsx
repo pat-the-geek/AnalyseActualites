@@ -702,8 +702,8 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
         )}
       </div>
 
-      {/* ── Toolbar : recherche + tri + vue + export ── */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-4 sticky top-0 z-10 -mx-6 px-6 py-3 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/30">
+      {/* ── Toolbar : recherche + tri + vue + export — masqué sur mobile ── */}
+      <div className="hidden md:flex md:flex-row gap-2 mb-4 sticky top-0 z-10 -mx-6 px-6 py-3 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/30">
         {/* Recherche */}
         <div className="relative flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
@@ -776,9 +776,9 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
         </div>
       </div>
 
-      {/* ── Panel filtre : types d'entités ── */}
+      {/* ── Panel filtre : types d'entités — masqué sur mobile ── */}
       {availableTypes.length > 0 && (
-        <div className="mb-3 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
+        <div className="hidden md:block mb-3 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
           <button
             onClick={() => setTypesOpen(v => !v)}
             className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
@@ -819,9 +819,9 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
         </div>
       )}
 
-      {/* ── Panel filtre : sources ── */}
+      {/* ── Panel filtre : sources — masqué sur mobile ── */}
       {availableSources.length > 1 && (
-        <div className="mb-5 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
+        <div className="hidden md:block mb-5 bg-white/70 dark:bg-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/60 rounded-xl overflow-hidden">
           <button
             onClick={() => setSourcesOpen(v => !v)}
             className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"

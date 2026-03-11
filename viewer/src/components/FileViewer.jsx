@@ -358,8 +358,8 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
 
         {/* ── Export : dropdown sur mobile, boutons séparés sur desktop ── */}
 
-        {/* Mobile : dropdown unique regroupant tous les exports */}
-        <div ref={exportRef} className="relative md:hidden shrink-0">
+        {/* Mobile : dropdown unique regroupant tous les exports — masqué sur mobile */}
+        <div ref={exportRef} className="hidden shrink-0">
           <button
             onClick={() => setExportOpen(v => !v)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
