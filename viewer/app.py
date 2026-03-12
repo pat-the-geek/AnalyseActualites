@@ -1219,17 +1219,94 @@ def api_entities_articles():
     return jsonify(results)
 
 
+def _call_ai_blocking(prompt: str, timeout: int = 90,
+                      enable_web_search: bool = False) -> str:
+    """Appel synchrone bloquant à l'API IA configurée (EurIA ou Claude).
+
+    Consomme le stream SSE en interne et retourne le texte complet généré.
+    Filtre les blocs <think>…</think> (Qwen3 chain-of-thought).
+    Retourne "" en cas d'erreur ou de configuration manquante.
+    """
+    import requests as _req
+    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+    chunks: list[str] = []
+
+    if provider == "claude":
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return ""
+        try:
+            from utils.api_client import ClaudeClient as _CC
+            _claude = _CC(api_key=api_key)
+            for chunk in _claude.stream(prompt=prompt, timeout=timeout):
+                chunk = chunk.strip()
+                if not chunk or chunk == "data: [DONE]":
+                    continue
+                raw = chunk[6:] if chunk.startswith("data: ") else chunk
+                try:
+                    d = json.loads(raw)
+                    content = (d.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                    if content:
+                        chunks.append(content)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    else:
+        api_url = os.environ.get("URL", "")
+        bearer  = os.environ.get("bearer", "")
+        if not api_url or not bearer:
+            return ""
+        payload: dict = {
+            "messages": [{"role": "user", "content": prompt}],
+            "model": "qwen3",
+            "stream": True,
+        }
+        if enable_web_search:
+            payload["enable_web_search"] = True
+        api_headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+        }
+        try:
+            r = _req.post(api_url, json=payload, headers=api_headers,
+                          stream=True, timeout=timeout)
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                decoded = line.decode("utf-8")
+                raw = decoded[5:].strip() if decoded.startswith("data:") else decoded.strip()
+                if raw == "[DONE]":
+                    break
+                try:
+                    d = json.loads(raw)
+                    content = (d.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                    if content:
+                        chunks.append(content)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    full_text = "".join(chunks)
+    # Supprimer les blocs <think>…</think> (chain-of-thought Qwen3)
+    full_text = re.sub(r"<think>.*?</think>", "", full_text, flags=re.DOTALL).strip()
+    return full_text
+
+
 @app.route("/api/entity-context")
 def api_entity_context():
-    """Construit un bloc de contexte structuré pour une entité donnée.
+    """Construit le contexte complet d'une entité pour le Terminal IA.
 
-    Utilisé par le Terminal IA pour pré-charger toutes les informations
-    disponibles sur une entité : articles, co-occurrences, calendrier.
+    Retourne un flux SSE avec des événements de progression, puis un
+    événement "done" contenant le contexte assemblé (articles, co-occurrences,
+    calendrier, synthèse encyclopédique IA, analyse comparative RAG).
 
     Query params :
       type  — type NER (ex. "ORG", "PERSON", "GPE")
       value — valeur de l'entité (ex. "OpenAI", "Emmanuel Macron")
-      n     — nombre max d'articles à inclure dans le contexte (défaut 20)
+      n     — nombre max d'articles dans le contexte (défaut 20, max 50)
     """
     entity_type  = request.args.get("type",  "").strip()
     entity_value = request.args.get("value", "").strip()
@@ -1238,155 +1315,229 @@ def api_entity_context():
     if not entity_type or not entity_value:
         return jsonify({"error": "Paramètres type et value requis"}), 400
 
-    # ── 1. Articles ────────────────────────────────────────────────────────────
-    seen_urls: set = set()
-    articles: list[dict] = []
-    for data_dir in [PROJECT_ROOT / "data" / "articles",
-                     PROJECT_ROOT / "data" / "articles-from-rss"]:
-        if not data_dir.exists():
-            continue
-        for json_file in sorted(data_dir.rglob("*.json")):
-            if "cache" in json_file.relative_to(data_dir).parts:
+    def _evt(payload: dict) -> str:
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def generate():  # noqa: C901
+        from collections import Counter as _Counter, defaultdict as _defaultdict
+
+        # ── Étape 1 : collecte des données locales ─────────────────────────
+        yield _evt({"type": "progress", "step": "data",
+                    "message": f"Collecte des articles pour « {entity_value} »…"})
+
+        seen_urls: set = set()
+        articles: list[dict] = []
+        for data_dir in [PROJECT_ROOT / "data" / "articles",
+                         PROJECT_ROOT / "data" / "articles-from-rss"]:
+            if not data_dir.exists():
                 continue
-            try:
-                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(arts, list):
+            for json_file in sorted(data_dir.rglob("*.json")):
+                if "cache" in json_file.relative_to(data_dir).parts:
                     continue
-            except (json.JSONDecodeError, OSError):
+                try:
+                    arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(arts, list):
+                        continue
+                except (json.JSONDecodeError, OSError):
+                    continue
+                for article in arts:
+                    ents = article.get("entities", {})
+                    if not isinstance(ents, dict):
+                        continue
+                    values = ents.get(entity_type, [])
+                    if not (isinstance(values, list) and entity_value in values):
+                        continue
+                    url = (article.get("URL") or "").strip()
+                    rkey = article.get("Résumé", "")[:150].strip()
+                    if (url and url in seen_urls) or (rkey and rkey in seen_urls):
+                        continue
+                    if url:
+                        seen_urls.add(url)
+                    if rkey:
+                        seen_urls.add(rkey)
+                    articles.append(article)
+
+        articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+        top_articles = articles[:n_articles]
+
+        yield _evt({"type": "progress", "step": "data",
+                    "message": f"{len(articles)} article(s) trouvé(s). Calcul des relations…"})
+
+        # Co-occurrences L1
+        cooc: _Counter = _Counter()
+        for article in articles:
+            ents = article.get("entities", {})
+            if not isinstance(ents, dict):
                 continue
-            for article in arts:
-                entities = article.get("entities", {})
-                if not isinstance(entities, dict):
+            for etype, evals in ents.items():
+                if not isinstance(evals, list):
                     continue
-                values = entities.get(entity_type, [])
-                if not (isinstance(values, list) and entity_value in values):
-                    continue
-                url = (article.get("URL") or "").strip()
-                resume_key = article.get("Résumé", "")[:150].strip()
-                if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
-                    continue
+                for ev in evals:
+                    if not (etype == entity_type and ev == entity_value):
+                        cooc[(etype, ev)] += 1
+        top_cooc = cooc.most_common(15)
+
+        # Calendrier mensuel
+        monthly: dict[str, int] = _defaultdict(int)
+        for article in articles:
+            date_str = article.get("Date de publication", "")
+            if date_str and len(date_str) >= 7:
+                if "/" in date_str:
+                    parts = date_str.split("/")
+                    if len(parts) == 3:
+                        monthly[f"{parts[2]}-{parts[1]}"] += 1
+                elif "-" in date_str:
+                    monthly[date_str[:7]] += 1
+
+        # ── Étape 2 : synthèse encyclopédique IA ──────────────────────────
+        yield _evt({"type": "progress", "step": "info",
+                    "message": "Synthèse encyclopédique IA en cours…"})
+
+        type_labels_fr = {
+            "PERSON": "personne physique", "ORG": "organisation ou entreprise",
+            "GPE": "lieu géopolitique", "LOC": "lieu géographique",
+            "PRODUCT": "produit ou technologie", "EVENT": "événement",
+        }
+        label_fr = type_labels_fr.get(entity_type, entity_type.lower())
+        info_prompt = (
+            f"Fournis une synthèse encyclopédique en français sur « {entity_value} » ({label_fr}).\n\n"
+            "Structure ta réponse en Markdown avec des sections pertinentes "
+            "(présentation, rôle, contexte, actualité récente, chiffres clés, "
+            "liens avec d'autres acteurs…).\n"
+            "Sois factuel et concis. Génère uniquement le contenu Markdown, "
+            "sans balises <think>."
+        )
+        info_text = _call_ai_blocking(info_prompt, timeout=90, enable_web_search=True)
+
+        # ── Étape 3 : analyse RAG multi-sources ───────────────────────────
+        yield _evt({"type": "progress", "step": "rag",
+                    "message": "Analyse comparative multi-sources (RAG)…"})
+
+        rag_text = ""
+        if top_articles:
+            sources_block = ""
+            for i, a in enumerate(top_articles[:15], 1):
+                src    = a.get("Sources", "Source inconnue")
+                date   = a.get("Date de publication", "")
+                resume = (a.get("Résumé") or "")[:600]
+                sources_block += f"\n--- Article {i} ({src}, {date}) ---\n{resume}\n"
+
+            rag_prompt = (
+                f"Tu es un analyste de presse. Voici {min(len(top_articles), 15)} articles "
+                f"de sources différentes traitant de : **{entity_value}**.\n\n"
+                "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+                "1. **Résumé de la situation** (2-3 phrases)\n"
+                "2. **Points de convergence** entre les sources\n"
+                "3. **Points de divergence ou contradictions**\n"
+                "4. **Positionnement éditorial** : sources favorables, neutres ou critiques\n"
+                "5. **Éléments clés manquants**\n\n"
+                "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n"
+                "Génère uniquement le contenu Markdown, sans balises <think>.\n\n"
+                f"Articles :\n{sources_block}"
+            )
+            rag_text = _call_ai_blocking(rag_prompt, timeout=120)
+
+        # ── Étape 4 : assemblage du contexte final ─────────────────────────
+        yield _evt({"type": "progress", "step": "build",
+                    "message": "Assemblage du contexte…"})
+
+        type_labels = {
+            "PERSON": "Personne", "ORG": "Organisation", "GPE": "Pays/Région",
+            "LOC": "Lieu", "PRODUCT": "Produit", "EVENT": "Événement",
+            "DATE": "Date", "MONEY": "Montant",
+        }
+        type_label = type_labels.get(entity_type, entity_type)
+
+        ctx_lines: list[str] = [
+            f"# Contexte entité : {entity_value} ({type_label})",
+            f"Total articles trouvés : {len(articles)}",
+            "",
+        ]
+
+        # Calendrier
+        cal_lines = [f"  {m} : {c} article(s)"
+                     for m, c in sorted(monthly.items(), reverse=True)[:12]]
+        if cal_lines:
+            ctx_lines.append("## Calendrier des mentions (derniers 12 mois)")
+            ctx_lines.extend(cal_lines)
+            ctx_lines.append("")
+
+        # Co-occurrences
+        if top_cooc:
+            ctx_lines.append("## Entités co-occurrentes principales")
+            for (etype, ev), count in top_cooc:
+                lbl = type_labels.get(etype, etype)
+                ctx_lines.append(f"  - {ev} ({lbl}) : {count} co-occurrence(s)")
+            ctx_lines.append("")
+
+        # Sentiments agrégés
+        sentiments: _Counter = _Counter()
+        sources_ctr: _Counter = _Counter()
+        for art in articles:
+            s = art.get("sentiment")
+            if s:
+                sentiments[s] += 1
+            src = art.get("Sources")
+            if src:
+                sources_ctr[src] += 1
+        if sentiments:
+            ctx_lines.append("## Tonalité éditoriale")
+            for sent, cnt in sentiments.most_common():
+                ctx_lines.append(f"  - {sent} : {cnt} article(s)")
+            ctx_lines.append("")
+        if sources_ctr:
+            ctx_lines.append("## Sources principales")
+            for src, cnt in sources_ctr.most_common(8):
+                ctx_lines.append(f"  - {src} : {cnt} article(s)")
+            ctx_lines.append("")
+
+        # Synthèse encyclopédique IA
+        if info_text:
+            ctx_lines.append("## Synthèse encyclopédique (IA)")
+            ctx_lines.append(info_text)
+            ctx_lines.append("")
+
+        # Analyse comparative RAG
+        if rag_text:
+            ctx_lines.append("## Analyse comparative multi-sources (RAG)")
+            ctx_lines.append(rag_text)
+            ctx_lines.append("")
+
+        # Articles (résumés tronqués)
+        if top_articles:
+            ctx_lines.append(f"## Articles récents ({len(top_articles)} sur {len(articles)})")
+            for i, art in enumerate(top_articles, 1):
+                date   = art.get("Date de publication", "?")
+                src    = art.get("Sources", "?")
+                url    = art.get("URL", "")
+                resume = (art.get("Résumé") or "").strip()
+                if len(resume) > 500:
+                    resume = resume[:500] + "…"
+                header = f"### {i}. [{date}] {src}"
                 if url:
-                    seen_urls.add(url)
-                if resume_key:
-                    seen_urls.add(resume_key)
-                articles.append(article)
+                    header += f" — {url}"
+                ctx_lines.append(header)
+                if resume:
+                    ctx_lines.append(resume)
+                ctx_lines.append("")
 
-    articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
-    top_articles = articles[:n_articles]
+        context_text = "\n".join(ctx_lines)
 
-    # ── 2. Co-occurrences L1 ──────────────────────────────────────────────────
-    from collections import Counter as _Counter, defaultdict as _defaultdict
-    cooc: _Counter = _Counter()
-    for article in articles:
-        ents = article.get("entities", {})
-        if not isinstance(ents, dict):
-            continue
-        others: list[tuple[str, str]] = []
-        for etype, evals in ents.items():
-            if not isinstance(evals, list):
-                continue
-            for ev in evals:
-                if not (etype == entity_type and ev == entity_value):
-                    others.append((etype, ev))
-        for pair in others:
-            cooc[pair] += 1
+        yield _evt({
+            "type":          "done",
+            "entity_type":   entity_type,
+            "entity_value":  entity_value,
+            "article_count": len(articles),
+            "has_info":      bool(info_text),
+            "has_rag":       bool(rag_text),
+            "context_text":  context_text,
+        })
 
-    top_cooc = cooc.most_common(15)
-
-    # ── 3. Calendrier (fréquence mensuelle) ───────────────────────────────────
-    monthly: dict[str, int] = _defaultdict(int)
-    for article in articles:
-        date_str = article.get("Date de publication", "")
-        if date_str and len(date_str) >= 7:
-            # "JJ/MM/AAAA" → "AAAA-MM" ou "AAAA-MM-JJ" ISO → "AAAA-MM"
-            if "/" in date_str:
-                parts = date_str.split("/")
-                if len(parts) == 3:
-                    monthly[f"{parts[2]}-{parts[1]}"] += 1
-            elif "-" in date_str:
-                monthly[date_str[:7]] += 1
-
-    calendar_lines = [f"  {month} : {count} article(s)"
-                      for month, count in sorted(monthly.items(), reverse=True)[:12]]
-
-    # ── 4. Construction du bloc texte ─────────────────────────────────────────
-    type_labels = {
-        "PERSON": "Personne", "ORG": "Organisation", "GPE": "Pays/Région",
-        "LOC": "Lieu", "PRODUCT": "Produit", "EVENT": "Événement",
-        "DATE": "Date", "MONEY": "Montant",
-    }
-    type_label = type_labels.get(entity_type, entity_type)
-
-    lines: list[str] = [
-        f"# Contexte entité : {entity_value} ({type_label})",
-        f"Total articles trouvés : {len(articles)}",
-        "",
-    ]
-
-    # Calendrier
-    if calendar_lines:
-        lines.append("## Calendrier des mentions (derniers 12 mois)")
-        lines.extend(calendar_lines)
-        lines.append("")
-
-    # Co-occurrences
-    if top_cooc:
-        lines.append("## Entités co-occurrentes principales")
-        for (etype, ev), count in top_cooc:
-            lbl = type_labels.get(etype, etype)
-            lines.append(f"  - {ev} ({lbl}) : {count} co-occurrence(s)")
-        lines.append("")
-
-    # Sentiments agrégés
-    sentiments: _Counter = _Counter()
-    for art in articles:
-        s = art.get("sentiment")
-        if s:
-            sentiments[s] += 1
-    if sentiments:
-        lines.append("## Tonalité éditoriale")
-        for sent, cnt in sentiments.most_common():
-            lines.append(f"  - {sent} : {cnt} article(s)")
-        lines.append("")
-
-    # Sources
-    sources: _Counter = _Counter()
-    for art in articles:
-        src = art.get("Sources")
-        if src:
-            sources[src] += 1
-    if sources:
-        lines.append("## Sources principales")
-        for src, cnt in sources.most_common(8):
-            lines.append(f"  - {src} : {cnt} article(s)")
-        lines.append("")
-
-    # Articles (résumés tronqués)
-    if top_articles:
-        lines.append(f"## Articles récents ({len(top_articles)} sur {len(articles)})")
-        for i, art in enumerate(top_articles, 1):
-            date  = art.get("Date de publication", "?")
-            src   = art.get("Sources", "?")
-            url   = art.get("URL", "")
-            resume = (art.get("Résumé") or "").strip()
-            if len(resume) > 500:
-                resume = resume[:500] + "…"
-            header = f"### {i}. [{date}] {src}"
-            if url:
-                header += f" — {url}"
-            lines.append(header)
-            if resume:
-                lines.append(resume)
-            lines.append("")
-
-    context_text = "\n".join(lines)
-
-    return jsonify({
-        "entity_type":   entity_type,
-        "entity_value":  entity_value,
-        "article_count": len(articles),
-        "context_text":  context_text,
-    })
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/entities/cooccurrences")
