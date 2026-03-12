@@ -4,5 +4,6 @@
   "global_daily_limit": 200,
   "per_entity_daily_limit": 12,
   "per_keyword_daily_limit": 30,
-  "per_source_daily_limit": 10
+  "per_source_daily_limit": 10,
+  "summary_max_lines": 20
 }

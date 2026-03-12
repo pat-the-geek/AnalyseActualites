@@ -17,7 +17,8 @@ from .config import get_config
 
 # ── Extraction d'entités nommées (NER) ───────────────────────────────────────
 
-_PROMPT_ENTITIES = """Tu es un extracteur d'entités nommées (NER). Analyse le texte suivant et extrait toutes les entités nommées.
+# Partie statique (instructions) — mise en cache côté Claude via cache_control
+_NER_SYSTEM_INSTRUCTIONS = """Tu es un extracteur d'entités nommées (NER).
 
 Retourne UNIQUEMENT un objet JSON valide, sans aucun commentaire ni texte avant ou après.
 Omets les catégories qui ne contiennent aucune entité.
@@ -41,10 +42,21 @@ Catégories :
 - MONEY : montants monétaires
 - QUANTITY : quantités mesurables
 - ORDINAL : ordinaux (premier, troisième…)
-- CARDINAL : nombres cardinaux significatifs
+- CARDINAL : nombres cardinaux significatifs"""
 
-Texte à analyser :
-{resume}"""
+# Partie statique sentiment (mise en cache côté Claude)
+_SENTIMENT_SYSTEM_INSTRUCTIONS = (
+    "Tu es un analyseur de ton éditorial journalistique. "
+    "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
+    "Champs attendus :\n"
+    '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
+    '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
+    '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
+    '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)'
+)
+
+# Prompt EurIA complet (NER + sentiment) — instructions + variable dans un seul bloc
+_PROMPT_ENTITIES = _NER_SYSTEM_INSTRUCTIONS + "\n\nTexte à analyser :\n{resume}"
 
 _ENTITY_TYPES = [
     "PERSON", "NORP", "ORG", "GPE", "LOC", "FAC",
@@ -106,6 +118,8 @@ def _parse_entities_response(raw: str) -> dict:
 
 _SENTIMENT_VALUES = {"positif", "neutre", "négatif"}
 _TON_VALUES = {"factuel", "alarmiste", "promotionnel", "critique", "analytique"}
+
+_PROMPT_SENTIMENT_TEMPLATE = _SENTIMENT_SYSTEM_INSTRUCTIONS + "\n\nTexte :\n{resume}"
 
 
 def _parse_sentiment_response(raw: str) -> dict:
@@ -311,21 +325,24 @@ class EurIAClient:
     def generate_summary(
         self,
         text: str,
-        max_lines: int = 20,
+        max_lines: Optional[int] = None,
         language: str = "français",
         timeout: int = 60
     ) -> str:
         """Génère un résumé d'un texte via l'API IA.
-        
+
         Args:
             text: Le texte à résumer
-            max_lines: Nombre maximal de lignes pour le résumé (défaut: 20)
+            max_lines: Nombre maximal de lignes pour le résumé.
+                       Si None, utilise config.summary_max_lines (quota.json), défaut 20.
             language: Langue du résumé (défaut: français)
             timeout: Timeout en secondes (défaut: 60)
-        
+
         Returns:
             Le résumé généré par l'IA
         """
+        if max_lines is None:
+            max_lines = get_config().summary_max_lines
         # Tronquer le texte à 15 000 chars pour rester dans les limites de l'API
         text_truncated = text[:15000]
         prompt = (
@@ -386,16 +403,7 @@ class EurIAClient:
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
 
-        prompt = (
-            "Analyse le ton et le sentiment de ce texte journalistique. "
-            "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
-            "Champs attendus :\n"
-            '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
-            '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
-            '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
-            '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)\n\n'
-            f"Texte :\n{resume.strip()[:3000]}"
-        )
+        prompt = _PROMPT_SENTIMENT_TEMPLATE.format(resume=resume.strip()[:3000])
         try:
             raw = self.ask(prompt, max_attempts=2, timeout=timeout, max_tokens=150)
             return _parse_sentiment_response(raw)
@@ -483,6 +491,7 @@ File contents:
 # ── Client Anthropic Claude ───────────────────────────────────────────────────
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+CLAUDE_API_VERSION = "2024-07-01"
 
 
 class ClaudeClient:
@@ -496,13 +505,21 @@ class ClaudeClient:
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        config = get_config()
-        self.api_key = api_key or config.anthropic_api_key
-        self.model_batch = config.claude_model_batch
-        self.model_synthesis = config.claude_model_synthesis
+        import os as _os
+        # Lire directement depuis os.environ pour refléter les mises à jour dynamiques
+        # (l'UI peut modifier .env et os.environ sans recharger le singleton Config).
+        self.api_key = api_key or _os.environ.get("ANTHROPIC_API_KEY", "") or get_config().anthropic_api_key
+        self.model_batch = (
+            _os.environ.get("CLAUDE_MODEL_BATCH", "").strip()
+            or get_config().claude_model_batch
+        )
+        self.model_synthesis = (
+            _os.environ.get("CLAUDE_MODEL_SYNTHESIS", "").strip()
+            or get_config().claude_model_synthesis
+        )
         self.headers = {
             "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": CLAUDE_API_VERSION,
             "Content-Type": "application/json",
         }
         if not self.api_key:
@@ -603,14 +620,105 @@ class ClaudeClient:
 
         raise RuntimeError(f"Échec Claude après {max_attempts} tentatives. {last_error}")
 
+    def ask_with_cached_system(
+        self,
+        system_text: str,
+        user_text: str,
+        model: Optional[str] = None,
+        max_attempts: int = 3,
+        timeout: int = 60,
+        max_tokens: int = 800,
+    ) -> str:
+        """Envoie un appel Claude avec le system prompt mis en cache (prompt caching).
+
+        La partie `system_text` est marquée avec cache_control ephemeral :
+        Anthropic la cache pendant 5 minutes, facturée à ~10% du prix normal
+        en lecture de cache. Idéal pour les instructions NER/sentiment répétées.
+
+        Args:
+            system_text : Instructions statiques à mettre en cache
+            user_text   : Contenu variable (texte à analyser)
+            model       : Modèle à utiliser (None = model_batch)
+            max_attempts: Nombre maximal de tentatives
+            timeout     : Timeout en secondes
+            max_tokens  : Tokens maximum en sortie
+
+        Returns:
+            Réponse texte nettoyée.
+        """
+        active_model = model or self.model_batch
+        data = {
+            "model": active_model,
+            "max_tokens": max_tokens,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system_text,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            "messages": [{"role": "user", "content": user_text}],
+        }
+        headers = dict(self.headers)
+        # Le prompt caching nécessite le header beta
+        headers["anthropic-beta"] = "prompt-caching-2024-07-31"
+
+        last_error = None
+        for attempt in range(max_attempts):
+            try:
+                default_logger.info(
+                    f"[Claude/{active_model}] Appel avec cache system (tentative {attempt + 1}/{max_attempts})"
+                )
+                response = requests.post(CLAUDE_API_URL, json=data, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                json_data = response.json()
+                content_blocks = json_data.get("content", [])
+                if not content_blocks:
+                    raise ValueError("Réponse Claude vide (aucun bloc content)")
+                content = content_blocks[0].get("text", "")
+                if not content:
+                    raise ValueError("Texte Claude vide")
+                default_logger.info(f"[Claude] Réponse reçue : {len(content)} caractères")
+                return content.strip()
+            except requests.exceptions.Timeout:
+                last_error = f"Timeout après {timeout}s"
+                default_logger.warning(f"[Claude] Timeout tentative {attempt + 1}/{max_attempts}")
+            except requests.exceptions.HTTPError as e:
+                status_code = e.response.status_code if e.response is not None else "inconnu"
+                last_error = f"Erreur HTTP {status_code}"
+                default_logger.error(f"[Claude] Erreur HTTP {status_code}")
+                if status_code in [400, 401, 403]:
+                    break
+            except requests.exceptions.ConnectionError as e:
+                last_error = "Erreur de connexion"
+                default_logger.error(f"[Claude] Erreur de connexion : {e}")
+            except (ValueError, KeyError, TypeError) as e:
+                last_error = f"Erreur de format : {e}"
+                default_logger.error(f"[Claude] Erreur parsing : {e}")
+            except Exception as e:
+                last_error = f"Erreur inattendue: {type(e).__name__}: {e}"
+                default_logger.error(f"[Claude] Erreur inattendue : {e}")
+            if attempt < max_attempts - 1:
+                wait_time = 2.0 ** attempt
+                default_logger.info(f"[Claude] Attente {wait_time:.1f}s…")
+                time.sleep(wait_time)
+
+        raise RuntimeError(f"Échec Claude (cached system) après {max_attempts} tentatives. {last_error}")
+
     def generate_summary(
         self,
         text: str,
-        max_lines: int = 20,
+        max_lines: Optional[int] = None,
         language: str = "français",
         timeout: int = 60,
     ) -> str:
-        """Résumé d'article — utilise Haiku (tâche batch)."""
+        """Résumé d'article — utilise Haiku (tâche batch).
+
+        Args:
+            max_lines: Nombre maximal de lignes. Si None, utilise config.summary_max_lines.
+        """
+        if max_lines is None:
+            max_lines = get_config().summary_max_lines
         text_truncated = text[:15000]
         prompt = (
             f"Faire un résumé de ce texte sur maximum {max_lines} lignes en {language}, "
@@ -622,13 +730,16 @@ class ClaudeClient:
         return result
 
     def generate_entities(self, resume: str, timeout: int = 60) -> dict:
-        """Extraction NER — utilise Haiku (tâche batch)."""
+        """Extraction NER — utilise Haiku avec prompt caching sur les instructions."""
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
-        prompt = _PROMPT_ENTITIES.format(resume=resume.strip())
         try:
-            raw = self.ask(
-                prompt, model=self.model_batch, max_attempts=3, timeout=timeout, max_tokens=800
+            raw = self.ask_with_cached_system(
+                system_text=_NER_SYSTEM_INSTRUCTIONS,
+                user_text=f"Texte à analyser :\n{resume.strip()}",
+                max_attempts=3,
+                timeout=timeout,
+                max_tokens=800,
             )
             return _parse_entities_response(raw)
         except Exception as e:
@@ -636,22 +747,16 @@ class ClaudeClient:
             return {}
 
     def generate_sentiment(self, resume: str, timeout: int = 30) -> dict:
-        """Sentiment & ton éditorial — utilise Haiku (tâche batch)."""
+        """Sentiment & ton éditorial — utilise Haiku avec prompt caching sur les instructions."""
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
-        prompt = (
-            "Analyse le ton et le sentiment de ce texte journalistique. "
-            "Réponds UNIQUEMENT avec un objet JSON valide, sans commentaire ni texte autour.\n\n"
-            "Champs attendus :\n"
-            '- "sentiment" : une des valeurs exactes : "positif", "neutre", "négatif"\n'
-            '- "score_sentiment" : entier entre 1 (très négatif) et 5 (très positif), 3=neutre\n'
-            '- "ton_editorial" : une des valeurs exactes : "factuel", "alarmiste", "promotionnel", "critique", "analytique"\n'
-            '- "score_ton" : entier entre 1 (très biaisé/sensationnaliste) et 5 (très factuel/neutre)\n\n'
-            f"Texte :\n{resume.strip()[:3000]}"
-        )
         try:
-            raw = self.ask(
-                prompt, model=self.model_batch, max_attempts=2, timeout=timeout, max_tokens=150
+            raw = self.ask_with_cached_system(
+                system_text=_SENTIMENT_SYSTEM_INSTRUCTIONS,
+                user_text=f"Texte :\n{resume.strip()[:3000]}",
+                max_attempts=2,
+                timeout=timeout,
+                max_tokens=150,
             )
             return _parse_sentiment_response(raw)
         except Exception as e:
@@ -698,7 +803,92 @@ File contents:
 {json_content}
 ----- END FILE CONTENTS -----
 """
-        return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=16000)
+        return self.ask(prompt, model=self.model_synthesis, max_attempts=3, timeout=timeout, max_tokens=4096)
+
+    def stream(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        max_tokens: int = 2048,
+        timeout: int = 120,
+        messages: Optional[list] = None,
+    ):
+        """Envoie un appel Claude en streaming et yield les événements SSE normalisés.
+
+        Centralise la logique SSE pour les routes viewer (entities/info,
+        synthesize-topic, chatbot). Chaque yield est une ligne SSE complète
+        au format OpenAI (compatible avec le frontend React existant) :
+          data: {"choices": [{"delta": {"content": "..."}, "finish_reason": null}]}
+        ou la ligne de fin :
+          data: [DONE]
+
+        Args:
+            prompt   : Prompt utilisateur (ignoré si messages est fourni)
+            model    : Modèle à utiliser (None = model_synthesis)
+            system   : Contenu du system prompt (optionnel)
+            max_tokens: Tokens maximum en sortie
+            timeout  : Timeout en secondes
+            messages : Liste complète de messages [{"role":..,"content":..}].
+                       Si fourni, remplace prompt.
+
+        Yields:
+            str — lignes SSE normalisées (terminées par \\n\\n)
+        """
+        active_model = model or self.model_synthesis
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
+
+        data: dict = {
+            "model": active_model,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "messages": messages,
+        }
+        if system:
+            data["system"] = system
+
+        headers = dict(self.headers)
+
+        try:
+            r = requests.post(CLAUDE_API_URL, json=data, headers=headers, stream=True, timeout=timeout)
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                decoded = line.decode("utf-8")
+                # Ignorer les lignes event:
+                if decoded.startswith("event:"):
+                    continue
+                if not decoded.startswith("data:"):
+                    continue
+                raw = decoded[5:].strip()
+                if not raw:
+                    continue
+                try:
+                    evt = json.loads(raw)
+                    evt_type = evt.get("type", "")
+                    if evt_type == "content_block_delta":
+                        text = evt.get("delta", {}).get("text", "")
+                        if text:
+                            normalized = json.dumps({
+                                "choices": [{"delta": {"content": text}, "finish_reason": None}]
+                            })
+                            yield f"data: {normalized}\n\n"
+                    elif evt_type == "message_stop":
+                        yield "data: [DONE]\n\n"
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        except requests.exceptions.HTTPError as exc:
+            body = ""
+            try:
+                body = exc.response.text[:800] if exc.response is not None else ""
+            except Exception:
+                pass
+            error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
+            yield f'data: {json.dumps({"error": error_msg})}\n\n'
+        except Exception as exc:
+            yield f'data: {json.dumps({"error": str(exc)})}\n\n'
 
 
 # ── Fallback Client ───────────────────────────────────────────────────────────

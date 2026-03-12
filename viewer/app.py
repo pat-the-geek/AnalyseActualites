@@ -41,6 +41,8 @@ import sys as _sys
 if str(PROJECT_ROOT) not in _sys.path:
     _sys.path.insert(0, str(PROJECT_ROOT))
 
+from utils.api_client import CLAUDE_API_VERSION
+
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 
@@ -1000,13 +1002,20 @@ def api_save_quota_config():
     if not isinstance(data, dict):
         abort(400, "Format invalide : objet attendu")
     # Validation basique des types
-    for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit", "per_entity_daily_limit"):
+    for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit",
+                    "per_entity_daily_limit", "summary_max_lines"):
         if int_key in data:
             try:
                 data[int_key] = max(1, int(data[int_key]))
             except (ValueError, TypeError):
                 abort(400, f"Valeur invalide pour {int_key}")
     get_quota_manager().save_config(data)
+    # Invalider le singleton Config pour que summary_max_lines soit rechargé
+    try:
+        from utils.config import get_config as _get_config
+        _get_config(force_reload=True)
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
@@ -1827,36 +1836,6 @@ def api_entities_images():
     return jsonify({e["name"]: cache.get(e["name"]) for e in entities})
 
 
-def _normalize_claude_sse_line(decoded: str):
-    """Convertit un événement SSE Claude au format OpenAI attendu par le frontend.
-
-    Claude envoie : data: {"type": "content_block_delta", "delta": {"text": "..."}}
-    Le frontend lit : data: {"choices": [{"delta": {"content": "..."}, "finish_reason": null}]}
-
-    Retourne la ligne normalisée (str) ou None si la ligne doit être ignorée.
-    """
-    if decoded.startswith("event:"):
-        return None
-    if not decoded.startswith("data:"):
-        return None
-    raw = decoded[5:].strip()
-    if not raw:
-        return None
-    try:
-        evt = json.loads(raw)
-        evt_type = evt.get("type", "")
-        if evt_type == "content_block_delta":
-            text = evt.get("delta", {}).get("text", "")
-            if text:
-                normalized = json.dumps({
-                    "choices": [{"delta": {"content": text}, "finish_reason": None}]
-                })
-                return f"data: {normalized}\n\n"
-        elif evt_type == "message_stop":
-            return "data: [DONE]\n\n"
-    except (json.JSONDecodeError, KeyError):
-        pass
-    return None
 
 
 @app.route("/api/entities/info")
@@ -1896,39 +1875,11 @@ def api_entities_info():
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
-        api_url = "https://api.anthropic.com/v1/messages"
-        payload = {
-            "model": model,
-            "max_tokens": 2048,
-            "stream": True,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        api_headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
+        from utils.api_client import ClaudeClient as _ClaudeClient
+        _claude = _ClaudeClient(api_key=api_key)
 
         def generate():
-            try:
-                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=90)
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
-                        if normalized:
-                            yield normalized
-            except req.exceptions.HTTPError as exc:
-                body = ""
-                try:
-                    body = exc.response.text[:800] if exc.response is not None else ""
-                except Exception:
-                    pass
-                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
-                yield f'data: {json.dumps({"error": error_msg})}\n\n'
-            except Exception as exc:
-                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+            yield from _claude.stream(prompt=prompt, timeout=90)
 
     else:
         api_url = os.environ.get("URL", "")
@@ -2392,39 +2343,11 @@ def api_synthesize_topic():
     import requests as req
 
     if provider == "claude":
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
-        sse_url = "https://api.anthropic.com/v1/messages"
-        payload = {
-            "model": model,
-            "max_tokens": 2048,
-            "stream": True,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        api_headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
+        from utils.api_client import ClaudeClient as _ClaudeClient
+        _claude = _ClaudeClient(api_key=api_key)
 
         def generate_synthesis():
-            try:
-                r = req.post(sse_url, json=payload, headers=api_headers, stream=True, timeout=120)
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
-                        if normalized:
-                            yield normalized
-            except req.exceptions.HTTPError as exc:
-                body = ""
-                try:
-                    body = exc.response.text[:800] if exc.response is not None else ""
-                except Exception:
-                    pass
-                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
-                yield f'data: {json.dumps({"error": error_msg})}\n\n'
-            except Exception as exc:
-                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+            yield from _claude.stream(prompt=prompt, timeout=120)
 
     else:
         payload = {
@@ -3391,6 +3314,14 @@ def api_env_post():
     # Recharger dans l'environnement courant du processus Flask
     os.environ[key] = value
 
+    # Invalider le singleton Config pour que les prochains appels get_config()
+    # voient les nouvelles valeurs (ANTHROPIC_API_KEY, CLAUDE_MODEL_*, etc.)
+    try:
+        from utils.config import get_config as _get_config
+        _get_config(force_reload=True)
+    except Exception:
+        pass
+
     return jsonify({"ok": True, "key": key})
 
 
@@ -3408,6 +3339,11 @@ def api_env_delete(key: str):
     tmp.replace(_ENV_FILE)
 
     os.environ.pop(key, None)
+    try:
+        from utils.config import get_config as _get_config
+        _get_config(force_reload=True)
+    except Exception:
+        pass
     return jsonify({"ok": True, "key": key})
 
 
@@ -3497,8 +3433,24 @@ def api_article_refresh_resume():
     if article is None:
         return jsonify({"error": "Article non trouvé dans le fichier"}), 404
 
-    # Récupérer le texte source (Résumé existant ou titre + source)
-    source_text = article.get("Résumé") or article.get("Titre") or ""
+    # Récupérer le texte source : tenter de re-fetcher l'article original depuis son URL,
+    # fallback sur le résumé existant (re-résumer un résumé dégrade la qualité mais reste utile).
+    source_text = ""
+    original_url = article.get("URL", "").strip()
+    if original_url:
+        try:
+            import requests as _req
+            from bs4 import BeautifulSoup as _BS
+            resp = _req.get(original_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            soup = _BS(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header"]):
+                tag.decompose()
+            source_text = " ".join(soup.get_text(separator=" ").split())[:15000]
+        except Exception:
+            pass  # fallback ci-dessous
+    if not source_text.strip():
+        source_text = article.get("Résumé") or article.get("Titre") or ""
     if not source_text.strip():
         return jsonify({"error": "Aucun texte source disponible pour générer un résumé"}), 400
 
@@ -3857,42 +3809,28 @@ def api_chat_stream():
         api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
-        model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
-        api_url = "https://api.anthropic.com/v1/messages"
+        # Routage Haiku/Sonnet selon la taille du contexte :
+        # - contexte court (< 3 000 chars) → Haiku (5-8× moins cher, suffisant pour Q&R simples)
+        # - contexte long ou analyse multi-articles → Sonnet
+        total_context_chars = sum(len(m.get("content", "")) for m in clean_messages)
+        if total_context_chars < 3000:
+            model = os.environ.get("CLAUDE_MODEL_BATCH", "claude-haiku-4-5-20251001")
+        else:
+            model = os.environ.get("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
         # Claude ne supporte pas role=system dans messages[], on extrait le system
         claude_messages = [m for m in full_messages if m["role"] != "system"]
-        payload = {
-            "model": model,
-            "max_tokens": 4096,
-            "stream": True,
-            "system": system_prompt,
-            "messages": claude_messages,
-        }
-        api_headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
+        from utils.api_client import ClaudeClient as _ClaudeClient
+        _claude = _ClaudeClient(api_key=api_key)
 
         def generate_chat():
-            try:
-                r = req.post(api_url, json=payload, headers=api_headers, stream=True, timeout=180)
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        normalized = _normalize_claude_sse_line(line.decode("utf-8"))
-                        if normalized:
-                            yield normalized
-            except req.exceptions.HTTPError as exc:
-                body = ""
-                try:
-                    body = exc.response.text[:800] if exc.response is not None else ""
-                except Exception:
-                    pass
-                error_msg = f"{exc}" + (f" — Détail API: {body}" if body else "")
-                yield f'data: {json.dumps({"error": error_msg})}\n\n'
-            except Exception as exc:
-                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+            yield from _claude.stream(
+                prompt="",
+                model=model,
+                system=system_prompt,
+                max_tokens=4096,
+                timeout=180,
+                messages=claude_messages,
+            )
 
     else:
         api_url = os.environ.get("URL", "").strip()

@@ -1232,6 +1232,25 @@ function QuotaTab() {
               </div>
             </div>
 
+            {/* Taille du résumé IA */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-700 dark:text-slate-300">Taille du résumé IA</label>
+                <span className="text-xs text-slate-400">lignes max</span>
+              </div>
+              <input
+                type="range" min="5" max="50" step="5"
+                value={config.summary_max_lines ?? 20}
+                onChange={e => setConfig(c => ({ ...c, summary_max_lines: +e.target.value }))}
+                className="w-full accent-cyan-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>5</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">⬦ {config.summary_max_lines ?? 20} lignes</span>
+                <span>50</span>
+              </div>
+            </div>
+
             {/* Par mot-clé */}
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">

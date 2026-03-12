@@ -9,6 +9,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./.env:/app/.env
       - ./data:/app/data
       - ./rapports:/app/rapports
       - ./samples:/app/samples

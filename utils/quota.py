@@ -30,6 +30,7 @@ DEFAULT_CONFIG: dict = {
     "per_source_daily_limit": 5,
     "per_entity_daily_limit": 10,
     "adaptive_sorting": True,
+    "summary_max_lines": 20,
 }
 
 
@@ -257,10 +258,12 @@ class QuotaManager:
         allowed_keys = {
             "enabled", "global_daily_limit", "per_keyword_daily_limit",
             "per_source_daily_limit", "per_entity_daily_limit", "adaptive_sorting",
+            "summary_max_lines",
         }
         config = {k: v for k, v in new_config.items() if k in allowed_keys}
         # Validation des entiers
-        for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit", "per_entity_daily_limit"):
+        for int_key in ("global_daily_limit", "per_keyword_daily_limit", "per_source_daily_limit",
+                        "per_entity_daily_limit", "summary_max_lines"):
             if int_key in config:
                 config[int_key] = max(1, int(config[int_key]))
         QUOTA_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)

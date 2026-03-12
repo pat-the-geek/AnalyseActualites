@@ -60,7 +60,7 @@ class Config:
         self.ai_provider = os.getenv("AI_PROVIDER", "euria").strip().lower()
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.claude_model_batch = os.getenv("CLAUDE_MODEL_BATCH", "claude-haiku-4-5-20251001")
-        self.claude_model_synthesis = os.getenv("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-5")
+        self.claude_model_synthesis = os.getenv("CLAUDE_MODEL_SYNTHESIS", "claude-sonnet-4-6")
 
         # Paramètres avec valeurs par défaut (clés identiques à celles du .env)
         self.max_attempts = int(os.getenv("max_attempts", "3"))
@@ -71,6 +71,10 @@ class Config:
             "Aucune information disponible"
         )
         
+        # Taille des résumés IA — lue depuis config/quota.json (summary_max_lines)
+        # Fallback sur la variable d'env SUMMARY_MAX_LINES, puis sur 20 par défaut
+        self.summary_max_lines = self._load_summary_max_lines()
+
         # Chemins des répertoires
         self.data_articles_dir = self.project_root / "data" / "articles"
         self.data_raw_dir = self.project_root / "data" / "raw"
@@ -78,6 +82,24 @@ class Config:
         self.rapports_pdf_dir = self.project_root / "rapports" / "pdf"
         self.config_dir = self.project_root / "config"
     
+    def _load_summary_max_lines(self) -> int:
+        """Lit summary_max_lines depuis config/quota.json.
+        Fallback sur SUMMARY_MAX_LINES env var, puis sur 20."""
+        import json as _json
+        quota_path = self.project_root / "config" / "quota.json"
+        try:
+            if quota_path.exists():
+                data = _json.loads(quota_path.read_text(encoding="utf-8"))
+                val = data.get("summary_max_lines")
+                if isinstance(val, int) and val > 0:
+                    return val
+        except Exception:
+            pass
+        try:
+            return max(1, int(os.getenv("SUMMARY_MAX_LINES", "20")))
+        except (ValueError, TypeError):
+            return 20
+
     def _validate_config(self):
         """Valide que les variables obligatoires sont présentes."""
         errors = []
