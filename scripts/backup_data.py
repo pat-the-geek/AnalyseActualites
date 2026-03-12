@@ -42,13 +42,13 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
-# ── Copie incrémentale (purge + copie) ────────────────────────────────────────
+# ── Copie complète (purge + remplacement total) ───────────────────────────────
 
 def sync_dirs(src: Path, dst: Path, dry_run: bool = False) -> dict:
     """
-    Copie src → dst en remplaçant le contenu existant.
+    Remplace dst par une copie exacte de src (remplacement complet, non incrémental).
     - Supprime les fichiers dans dst absents de src (purge)
-    - Copie les nouveaux fichiers et les fichiers modifiés
+    - Copie TOUS les fichiers de src vers dst
     Retourne un dict { copied, deleted, errors }.
     """
     stats = {"copied": 0, "deleted": 0, "errors": 0}
@@ -58,15 +58,9 @@ def sync_dirs(src: Path, dst: Path, dry_run: bool = False) -> dict:
         stats["errors"] += 1
         return stats
 
-    if not dry_run:
-        dst.mkdir(parents=True, exist_ok=True)
-
-    # Index des fichiers sources
-    src_files: dict[Path, Path] = {}
-    for f in src.rglob("*"):
-        if f.is_file():
-            rel = f.relative_to(src)
-            src_files[rel] = f
+    # Index des fichiers sources (relatifs)
+    src_files: set[Path] = {f.relative_to(src) for f in src.rglob("*") if f.is_file()}
+    stats["copied"] = len(src_files)
 
     # Purge : supprimer dans dst ce qui n'est plus dans src
     if dst.exists():
@@ -85,30 +79,15 @@ def sync_dirs(src: Path, dst: Path, dry_run: bool = False) -> dict:
                     else:
                         stats["deleted"] += 1
 
-    # Copie : nouveaux fichiers et fichiers modifiés
-    for rel, src_f in src_files.items():
-        dst_f = dst / rel
-        need_copy = True
-        if dst_f.exists():
-            # Ne re-copier que si la taille ou la date diffère
-            src_stat = src_f.stat()
-            dst_stat = dst_f.stat()
-            if (src_stat.st_size == dst_stat.st_size
-                    and abs(src_stat.st_mtime - dst_stat.st_mtime) < 2):
-                need_copy = False
-
-        if need_copy:
-            log(f"  + Copie : {rel}")
-            if not dry_run:
-                try:
-                    dst_f.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src_f, dst_f)
-                    stats["copied"] += 1
-                except OSError as e:
-                    log(f"  ✗ Erreur copie {rel} : {e}")
-                    stats["errors"] += 1
-            else:
-                stats["copied"] += 1
+    if not dry_run:
+        # Copie complète src → dst (tous les fichiers, sans vérification incrémentale)
+        try:
+            dst.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        except Exception as e:
+            log(f"  ✗ Erreur lors de la copie : {e}")
+            stats["errors"] += 1
+            stats["copied"] = 0
 
     return stats
 
