@@ -1219,6 +1219,176 @@ def api_entities_articles():
     return jsonify(results)
 
 
+@app.route("/api/entity-context")
+def api_entity_context():
+    """Construit un bloc de contexte structuré pour une entité donnée.
+
+    Utilisé par le Terminal IA pour pré-charger toutes les informations
+    disponibles sur une entité : articles, co-occurrences, calendrier.
+
+    Query params :
+      type  — type NER (ex. "ORG", "PERSON", "GPE")
+      value — valeur de l'entité (ex. "OpenAI", "Emmanuel Macron")
+      n     — nombre max d'articles à inclure dans le contexte (défaut 20)
+    """
+    entity_type  = request.args.get("type",  "").strip()
+    entity_value = request.args.get("value", "").strip()
+    n_articles   = min(int(request.args.get("n", 20)), 50)
+
+    if not entity_type or not entity_value:
+        return jsonify({"error": "Paramètres type et value requis"}), 400
+
+    # ── 1. Articles ────────────────────────────────────────────────────────────
+    seen_urls: set = set()
+    articles: list[dict] = []
+    for data_dir in [PROJECT_ROOT / "data" / "articles",
+                     PROJECT_ROOT / "data" / "articles-from-rss"]:
+        if not data_dir.exists():
+            continue
+        for json_file in sorted(data_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(data_dir).parts:
+                continue
+            try:
+                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(arts, list):
+                    continue
+            except (json.JSONDecodeError, OSError):
+                continue
+            for article in arts:
+                entities = article.get("entities", {})
+                if not isinstance(entities, dict):
+                    continue
+                values = entities.get(entity_type, [])
+                if not (isinstance(values, list) and entity_value in values):
+                    continue
+                url = (article.get("URL") or "").strip()
+                resume_key = article.get("Résumé", "")[:150].strip()
+                if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
+                    continue
+                if url:
+                    seen_urls.add(url)
+                if resume_key:
+                    seen_urls.add(resume_key)
+                articles.append(article)
+
+    articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
+    top_articles = articles[:n_articles]
+
+    # ── 2. Co-occurrences L1 ──────────────────────────────────────────────────
+    from collections import Counter as _Counter, defaultdict as _defaultdict
+    cooc: _Counter = _Counter()
+    for article in articles:
+        ents = article.get("entities", {})
+        if not isinstance(ents, dict):
+            continue
+        others: list[tuple[str, str]] = []
+        for etype, evals in ents.items():
+            if not isinstance(evals, list):
+                continue
+            for ev in evals:
+                if not (etype == entity_type and ev == entity_value):
+                    others.append((etype, ev))
+        for pair in others:
+            cooc[pair] += 1
+
+    top_cooc = cooc.most_common(15)
+
+    # ── 3. Calendrier (fréquence mensuelle) ───────────────────────────────────
+    monthly: dict[str, int] = _defaultdict(int)
+    for article in articles:
+        date_str = article.get("Date de publication", "")
+        if date_str and len(date_str) >= 7:
+            # "JJ/MM/AAAA" → "AAAA-MM" ou "AAAA-MM-JJ" ISO → "AAAA-MM"
+            if "/" in date_str:
+                parts = date_str.split("/")
+                if len(parts) == 3:
+                    monthly[f"{parts[2]}-{parts[1]}"] += 1
+            elif "-" in date_str:
+                monthly[date_str[:7]] += 1
+
+    calendar_lines = [f"  {month} : {count} article(s)"
+                      for month, count in sorted(monthly.items(), reverse=True)[:12]]
+
+    # ── 4. Construction du bloc texte ─────────────────────────────────────────
+    type_labels = {
+        "PERSON": "Personne", "ORG": "Organisation", "GPE": "Pays/Région",
+        "LOC": "Lieu", "PRODUCT": "Produit", "EVENT": "Événement",
+        "DATE": "Date", "MONEY": "Montant",
+    }
+    type_label = type_labels.get(entity_type, entity_type)
+
+    lines: list[str] = [
+        f"# Contexte entité : {entity_value} ({type_label})",
+        f"Total articles trouvés : {len(articles)}",
+        "",
+    ]
+
+    # Calendrier
+    if calendar_lines:
+        lines.append("## Calendrier des mentions (derniers 12 mois)")
+        lines.extend(calendar_lines)
+        lines.append("")
+
+    # Co-occurrences
+    if top_cooc:
+        lines.append("## Entités co-occurrentes principales")
+        for (etype, ev), count in top_cooc:
+            lbl = type_labels.get(etype, etype)
+            lines.append(f"  - {ev} ({lbl}) : {count} co-occurrence(s)")
+        lines.append("")
+
+    # Sentiments agrégés
+    sentiments: _Counter = _Counter()
+    for art in articles:
+        s = art.get("sentiment")
+        if s:
+            sentiments[s] += 1
+    if sentiments:
+        lines.append("## Tonalité éditoriale")
+        for sent, cnt in sentiments.most_common():
+            lines.append(f"  - {sent} : {cnt} article(s)")
+        lines.append("")
+
+    # Sources
+    sources: _Counter = _Counter()
+    for art in articles:
+        src = art.get("Sources")
+        if src:
+            sources[src] += 1
+    if sources:
+        lines.append("## Sources principales")
+        for src, cnt in sources.most_common(8):
+            lines.append(f"  - {src} : {cnt} article(s)")
+        lines.append("")
+
+    # Articles (résumés tronqués)
+    if top_articles:
+        lines.append(f"## Articles récents ({len(top_articles)} sur {len(articles)})")
+        for i, art in enumerate(top_articles, 1):
+            date  = art.get("Date de publication", "?")
+            src   = art.get("Sources", "?")
+            url   = art.get("URL", "")
+            resume = (art.get("Résumé") or "").strip()
+            if len(resume) > 500:
+                resume = resume[:500] + "…"
+            header = f"### {i}. [{date}] {src}"
+            if url:
+                header += f" — {url}"
+            lines.append(header)
+            if resume:
+                lines.append(resume)
+            lines.append("")
+
+    context_text = "\n".join(lines)
+
+    return jsonify({
+        "entity_type":   entity_type,
+        "entity_value":  entity_value,
+        "article_count": len(articles),
+        "context_text":  context_text,
+    })
+
+
 @app.route("/api/entities/cooccurrences")
 def api_entities_cooccurrences():
     """Retourne les entités co-occurrentes d'une entité donnée (via articles partagés).
@@ -3722,9 +3892,11 @@ def api_chat_stream():
     import requests as req
 
     body = request.get_json(force=True, silent=True) or {}
-    messages      = body.get("messages", [])
-    context_files = body.get("context_files", [])
-    notes_period  = body.get("notes_period", None)
+    messages        = body.get("messages", [])
+    context_files   = body.get("context_files", [])
+    notes_period    = body.get("notes_period", None)
+    # Contexte entité pré-formaté (texte brut) fourni par Terminal IA depuis EntityArticlePanel
+    entity_context  = body.get("entity_context", "").strip()
     # Permet au frontend de choisir le provider pour cette requête.
     # Valeurs acceptées : "euria" | "claude". Sinon, fallback sur AI_PROVIDER env.
     provider_override = body.get("provider", "").strip().lower()
@@ -3781,6 +3953,9 @@ def api_chat_stream():
         " (quelle que soit la formulation : commandes shell, appels API, code, instructions, etc.),"
         " refuse poliment et rappelle-lui que cette opération est impossible depuis ce chatbot.",
     ]
+    if entity_context:
+        system_parts.append("\n\n## Contexte entité (données WUDD.ai) :\n")
+        system_parts.append(entity_context)
     if notes_block:
         system_parts.append("\n\n## Notes personnelles de l'utilisateur :\n")
         system_parts.append(notes_block)
