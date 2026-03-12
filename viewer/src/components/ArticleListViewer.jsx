@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useCallback, useEffect } from 'react'
 import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
-  Download, LayoutGrid, AlignLeft, Maximize2, Clock,
+  Download, LayoutGrid, AlignLeft, LayoutList, Maximize2, Clock,
   Star, Eye, Pencil, Check, RefreshCw,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
@@ -297,8 +297,8 @@ function IAPickerModal({ providers, onPick, onClose }) {
   )
 }
 
-/** Carte article complète (vue grille) — style Liquid Glass. */
-function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders, isFirstUnread }) {
+/** Carte article complète (vue grille / large) — style Liquid Glass. */
+function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders, isFirstUnread, isLarge }) {
   const [expanded, setExpanded]           = useState(index < 3)
   const [lightbox, setLightbox]           = useState(false)
   const [noteOpen, setNoteOpen]           = useState(false)
@@ -363,7 +363,7 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
         <button
           type="button"
           onClick={() => setLightbox(true)}
-          className="group relative w-full h-44 sm:h-52 overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left"
+          className={`group relative w-full ${isLarge ? 'h-[432px] sm:h-[576px]' : 'h-44 sm:h-52'} overflow-hidden bg-slate-100 dark:bg-slate-900 block text-left`}
           title="Agrandir l'image"
         >
           <img src={imgUrl} alt={(titre || article['Sources']) ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -543,7 +543,7 @@ function TimelineItem({ article }) {
 export default function ArticleListViewer({ content, annotations, onAnnotate, filePath, availableProviders }) {
   const [searchQuery, setSearchQuery]         = useState('')
   const [sortBy, setSortBy]                   = useState('date-desc')
-  const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'timeline'
+  const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'large' | 'timeline'
   const [selectedTypes, setSelectedTypes]     = useState(new Set())
   const [selectedSources, setSelectedSources] = useState(new Set())
   const [selectedEntity, setSelectedEntity]   = useState(null) // { type, value }
@@ -553,9 +553,11 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
   const searchRef = useRef(null)
 
   // ── Défilement vers le premier article non lu ─────────────────────────────
-  const gridRef             = useRef(null)
-  const firstUnreadUrlRef   = useRef(null)   // URL du premier non-lu, calculée à l'ouverture
-  const hasScrolledRef      = useRef(false)  // a-t-on déjà défilé pour ce fichier ?
+  const gridRef        = useRef(null)
+  const hasScrolledRef = useRef(false)  // a-t-on déjà défilé pour ce fichier ?
+  // Capture le snapshot des annotations au moment du chargement du fichier
+  const annotationsRef = useRef(annotations)
+  useEffect(() => { annotationsRef.current = annotations })
 
   // Parse JSON
   const articles = useMemo(() => {
@@ -649,26 +651,32 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
   // Calcule l'URL du premier article non lu à l'ouverture du fichier.
   // Intentionnellement limité à [articles] : on ne recalcule PAS quand les annotations changent
   // pour éviter un nouveau défilement automatique à chaque marque-lu.
-  useEffect(() => {
-    hasScrolledRef.current = false
-    if (!articles) { firstUnreadUrlRef.current = null; return }
+  // useMemo (synchrone) garantit que la valeur est disponible dès le rendu courant,
+  // ce qui permet à ArticleCard d'appliquer data-first-unread avant que les effets de scroll s'exécutent.
+  const firstUnreadUrl = useMemo(() => {
+    if (!articles) return null
     const sorted = [...articles].sort(
       (a, b) => toTimestamp(b['Date de publication']) - toTimestamp(a['Date de publication'])
     )
-    const first = sorted.find(a => !annotations?.[a['URL']]?.is_read)
-    firstUnreadUrlRef.current = first?.['URL'] ?? null
+    const first = sorted.find(a => !annotationsRef.current?.[a['URL']]?.is_read)
+    return first?.['URL'] ?? null
   }, [articles]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Réinitialise le flag de scroll chaque fois qu'un nouveau fichier est ouvert
+  useEffect(() => {
+    hasScrolledRef.current = false
+  }, [articles])
 
   // Défile vers le premier article non lu après le rendu de la liste
   useEffect(() => {
-    if (hasScrolledRef.current || !firstUnreadUrlRef.current) return
+    if (hasScrolledRef.current || !firstUnreadUrl) return
     const el = gridRef.current?.querySelector('[data-first-unread]')
     if (!el) return
     hasScrolledRef.current = true
     requestAnimationFrame(() => {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
-  }, [displayedArticles])
+  }, [displayedArticles, firstUnreadUrl])
 
   const toggleType   = type => setSelectedTypes(prev => { const s = new Set(prev); s.has(type) ? s.delete(type) : s.add(type); return s })
   const toggleSource = src  => setSelectedSources(prev => { const s = new Set(prev); s.has(src)  ? s.delete(src)  : s.add(src);  return s })
@@ -790,6 +798,10 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
             <button onClick={() => setViewStyle('grid')} title="Vue grille"
               className={`px-2.5 py-2 transition-colors ${viewStyle === 'grid' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
               <LayoutGrid size={13} />
+            </button>
+            <button onClick={() => setViewStyle('large')} title="Vue large (1 article / ligne)"
+              className={`px-2.5 py-2 transition-colors ${viewStyle === 'large' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+              <LayoutList size={13} />
             </button>
             <button onClick={() => setViewStyle('timeline')} title="Vue timeline"
               className={`px-2.5 py-2 transition-colors ${viewStyle === 'timeline' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
@@ -927,6 +939,23 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
             </div>
           ))}
         </div>
+      ) : viewStyle === 'large' ? (
+        /* Vue large — 1 article/ligne, centré à 80% */
+        <div ref={gridRef} className="flex flex-col items-center gap-6">
+          {displayedArticles.map((article, i) => (
+            <div key={article['URL'] ?? i} className="w-full" style={{ maxWidth: '80%' }}>
+              <ArticleCard article={article} index={i} highlight={searchQuery.trim()}
+                onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                annotation={annotations?.[article['URL']] ?? null}
+                onAnnotate={onAnnotate}
+                filePath={filePath}
+                availableProviders={availableProviders}
+                isFirstUnread={!hasScrolledRef.current && article['URL'] === firstUnreadUrl}
+                isLarge
+              />
+            </div>
+          ))}
+        </div>
       ) : (
         /* Vue grille */
         <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -937,7 +966,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
               onAnnotate={onAnnotate}
               filePath={filePath}
               availableProviders={availableProviders}
-              isFirstUnread={!hasScrolledRef.current && article['URL'] === firstUnreadUrlRef.current}
+              isFirstUnread={!hasScrolledRef.current && article['URL'] === firstUnreadUrl}
             />
           ))}
         </div>

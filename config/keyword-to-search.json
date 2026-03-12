@@ -65,6 +65,11 @@
   },
   {
     "and": [],
+    "keyword": "éternité ",
+    "or": []
+  },
+  {
+    "and": [],
     "keyword": "Fribourg",
     "or": [
       "Freiburg"
@@ -133,14 +138,6 @@
     "keyword": "Microsoft"
   },
   {
-    "keyword": "MoMA",
-    "or": [
-      "MoMA PS1",
-      "PS1",
-      "Queens Museum"
-    ]
-  },
-  {
     "and": [
       "AI",
       "IA"
@@ -148,6 +145,14 @@
     "keyword": "Mistral",
     "or": [
       "Le Chat"
+    ]
+  },
+  {
+    "keyword": "MoMA",
+    "or": [
+      "MoMA PS1",
+      "PS1",
+      "Queens Museum"
     ]
   },
   {
@@ -214,6 +219,11 @@
     ]
   },
   {
+    "and": [],
+    "keyword": "transhumanisme",
+    "or": []
+  },
+  {
     "keyword": "Trump"
   },
   {
@@ -259,5 +269,10 @@
       "Visual Studio Code",
       "Multi-Agent Development"
     ]
+  },
+  {
+    "keyword": "Perplexity",
+    "or": [],
+    "and": []
   }
 ]
