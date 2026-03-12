@@ -84,24 +84,62 @@ def _normalize_url(url: str) -> str:
 
 # ─── Gestion des dates ───────────────────────────────────────────────────────
 
-_DATE_FORMATS = [
+# Formats ISO 8601 non-ambigus — testés en priorité pour toutes les langues
+_DATE_FORMATS_ISO = [
     "%Y-%m-%dT%H:%M:%S.%fZ",
     "%Y-%m-%dT%H:%M:%SZ",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%d",
+    "%Y/%m/%d",
+]
+
+# Formats locale-dépendants pour les sites en anglais (MM/DD/YYYY en priorité)
+_DATE_FORMATS_EN = [
+    "%m/%d/%Y",   # 03/09/2026 → March 9, 2026
+    "%m-%d-%Y",   # 03-09-2026 → March 9, 2026
+    "%B %d, %Y",  # March 9, 2026
+    "%b %d, %Y",  # Mar 9, 2026
+    "%d/%m/%Y",   # 09/03/2026 — fallback si le site utilise le format européen
+]
+
+# Formats locale-dépendants pour les sites en français (DD/MM/YYYY en priorité)
+_DATE_FORMATS_FR = [
+    "%d/%m/%Y",   # 09/03/2026 → 9 mars 2026 (format français)
+    "%d-%m-%Y",   # 09-03-2026 → 9 mars 2026
+    "%d.%m.%Y",   # 09.03.2026 → 9 mars 2026
+    "%m/%d/%Y",   # fallback si le site utilise le format américain
 ]
 
 
-def _parse_date(date_str: str) -> datetime:
-    """Parse une date ISO 8601 ou YYYY-MM-DD. Fallback : maintenant."""
+def _parse_date(date_str: str, langue: str = "en") -> datetime:
+    """Parse une date selon la langue de la source.
+
+    Tente d'abord les formats ISO 8601 non-ambigus (valables quelle que soit
+    la langue), puis les formats locale-dépendants dans l'ordre approprié :
+    - langue='en' : MM/DD/YYYY prioritaire (format américain)
+    - langue='fr' : DD/MM/YYYY prioritaire (format français)
+
+    Fallback : maintenant (datetime.utcnow()).
+    """
     if not date_str:
         return datetime.utcnow()
     clean = re.sub(r"[+-]\d{2}:\d{2}$", "", date_str.strip())
-    for fmt in _DATE_FORMATS:
+
+    # Formats ISO (non-ambigus) — priorité maximale
+    for fmt in _DATE_FORMATS_ISO:
         try:
             return datetime.strptime(clean[:26], fmt)
         except (ValueError, TypeError):
             continue
+
+    # Formats locale-dépendants selon la langue de la source
+    locale_formats = _DATE_FORMATS_FR if langue == "fr" else _DATE_FORMATS_EN
+    for fmt in locale_formats:
+        try:
+            return datetime.strptime(clean, fmt)
+        except (ValueError, TypeError):
+            continue
+
     return datetime.utcnow()
 
 
@@ -344,7 +382,7 @@ def _process_source(
 
     # Trier par lastmod décroissant (plus récentes en premier)
     def _lm_key(entry: tuple) -> datetime:
-        return _parse_date(entry[1]) if entry[1] else datetime.min
+        return _parse_date(entry[1], langue=langue) if entry[1] else datetime.min
 
     new_entries.sort(key=_lm_key, reverse=True)
     to_process = new_entries[:max_per_run]
@@ -404,8 +442,11 @@ def _process_source(
             continue
 
         # Date : contenu de page > lastmod sitemap > maintenant
+        # La langue de la source détermine l'interprétation des dates ambiguës :
+        # - 'en' : MM/DD/YYYY prioritaire (ex. 03/09 → mars 9)
+        # - 'fr' : DD/MM/YYYY prioritaire (ex. 03/09 → 3 septembre)
         pub_date_str = page["pub_date_str"] or lastmod
-        pub_dt = _parse_date(pub_date_str)
+        pub_dt = _parse_date(pub_date_str, langue=langue)
         pub_date_fmt = _fmt_ddmmyyyy(pub_dt)
 
         # Résumé EurIA
