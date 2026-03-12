@@ -298,7 +298,7 @@ function IAPickerModal({ providers, onPick, onClose }) {
 }
 
 /** Carte article complète (vue grille) — style Liquid Glass. */
-function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders }) {
+function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders, isFirstUnread }) {
   const [expanded, setExpanded]           = useState(index < 3)
   const [lightbox, setLightbox]           = useState(false)
   const [noteOpen, setNoteOpen]           = useState(false)
@@ -355,7 +355,7 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
   }, [availableProviders, handleRefreshResume])
 
   return (
-    <article ref={cardRef} className="bg-white/60 dark:bg-slate-800/50 backdrop-blur-2xl border border-white/70 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/8 dark:shadow-black/30 hover:shadow-2xl hover:shadow-black/12 dark:hover:shadow-black/40 transition-all duration-300">
+    <article ref={cardRef} {...(isFirstUnread ? { 'data-first-unread': '' } : {})} className="bg-white/60 dark:bg-slate-800/50 backdrop-blur-2xl border border-white/70 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/8 dark:shadow-black/30 hover:shadow-2xl hover:shadow-black/12 dark:hover:shadow-black/40 transition-all duration-300">
       {showIAPicker && (
         <IAPickerModal providers={availableProviders} onPick={handleRefreshResume} onClose={() => setShowIAPicker(false)} />
       )}
@@ -552,6 +552,11 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
   const [annotFilter, setAnnotFilter]         = useState('tous') // 'tous' | 'importants' | 'non-lus'
   const searchRef = useRef(null)
 
+  // ── Défilement vers le premier article non lu ─────────────────────────────
+  const gridRef             = useRef(null)
+  const firstUnreadUrlRef   = useRef(null)   // URL du premier non-lu, calculée à l'ouverture
+  const hasScrolledRef      = useRef(false)  // a-t-on déjà défilé pour ce fichier ?
+
   // Parse JSON
   const articles = useMemo(() => {
     try {
@@ -640,6 +645,30 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
     }
     return groups
   }, [displayedArticles, viewStyle])
+
+  // Calcule l'URL du premier article non lu à l'ouverture du fichier.
+  // Intentionnellement limité à [articles] : on ne recalcule PAS quand les annotations changent
+  // pour éviter un nouveau défilement automatique à chaque marque-lu.
+  useEffect(() => {
+    hasScrolledRef.current = false
+    if (!articles) { firstUnreadUrlRef.current = null; return }
+    const sorted = [...articles].sort(
+      (a, b) => toTimestamp(b['Date de publication']) - toTimestamp(a['Date de publication'])
+    )
+    const first = sorted.find(a => !annotations?.[a['URL']]?.is_read)
+    firstUnreadUrlRef.current = first?.['URL'] ?? null
+  }, [articles]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Défile vers le premier article non lu après le rendu de la liste
+  useEffect(() => {
+    if (hasScrolledRef.current || !firstUnreadUrlRef.current) return
+    const el = gridRef.current?.querySelector('[data-first-unread]')
+    if (!el) return
+    hasScrolledRef.current = true
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [displayedArticles])
 
   const toggleType   = type => setSelectedTypes(prev => { const s = new Set(prev); s.has(type) ? s.delete(type) : s.add(type); return s })
   const toggleSource = src  => setSelectedSources(prev => { const s = new Set(prev); s.has(src)  ? s.delete(src)  : s.add(src);  return s })
@@ -900,7 +929,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
         </div>
       ) : (
         /* Vue grille */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div ref={gridRef} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {displayedArticles.map((article, i) => (
             <ArticleCard key={article['URL'] ?? i} article={article} index={i} highlight={searchQuery.trim()}
               onEntityClick={(type, value) => setSelectedEntity({ type, value })}
@@ -908,6 +937,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
               onAnnotate={onAnnotate}
               filePath={filePath}
               availableProviders={availableProviders}
+              isFirstUnread={!hasScrolledRef.current && article['URL'] === firstUnreadUrlRef.current}
             />
           ))}
         </div>
