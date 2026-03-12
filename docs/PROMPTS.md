@@ -1,13 +1,13 @@
 # Prompts EurIA — WUDD.ai
 
-> Documentation complète des prompts utilisés avec l'API EurIA (Qwen3)
-> Dernière mise à jour : 7 mars 2026
+> Documentation complète des prompts utilisés avec l'API EurIA (Qwen3) et Claude (Anthropic)
+> Dernière mise à jour : 12 mars 2026
 
 ---
 
 ## Vue d'ensemble
 
-Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour sept opérations :
+Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) — et optionnellement Claude d'Anthropic — pour **douze opérations** :
 
 1. **Résumé d'article** — synthèse d'un texte HTML extrait, max 20 lignes
 2. **Rapport synthétique** — rapport Markdown structuré à partir d'un JSON d'articles
@@ -16,10 +16,16 @@ Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) pour sept opérations
 5. **Synthèse encyclopédique** — fiche Markdown sur une entité (personne, org, lieu…) avec web search
 6. **Synthèse RAG multi-sources** — analyse comparative de N articles sur un sujet, en streaming
 7. **Rapport d'occurrence d'entité** — document de synthèse complet (articles + graphe L1 + info + RAG) généré via le bouton « Rapport » du panneau entité
+8. **Morning Digest IA** — synthèse analytique de 150–200 mots sur l'actualité du jour
+9. **Rapport de veille 48h** — rapport structuré Top 10 entités des 48 dernières heures
+10. **Briefing exécutif** — résumé exécutif hebdomadaire 200–350 mots avec top entités et alertes
+11. **Radar thématique** — évaluation comparative de la présence de 12 thèmes sur deux périodes (T0/T1)
+12. **Chatbot IA** — assistant de veille conversationnel en streaming, avec contexte de fichiers et notes personnelles
 
 Les opérations 1–4 passent par `utils/api_client.py` via la méthode centrale `ask()`.
-Les opérations 5–6 sont implémentées directement dans `viewer/app.py` (routes SSE streaming).
+Les opérations 5–6 et 12 sont implémentées directement dans `viewer/app.py` (routes SSE streaming).
 L'opération 7 est entièrement côté client dans `EntityArticlePanel.jsx` — elle orchestre les appels 5 et 6 puis construit le Markdown localement.
+Les opérations 8–11 sont dans les scripts de rapport (`generate_morning_digest.py`, `generate_48h_report.py`, `generate_briefing.py`, `radar_wudd.py`).
 
 ---
 
@@ -737,6 +743,316 @@ Exemple : `rapport_ORG_OpenAI_2026-03-07.md`
 
 ---
 
+## Prompt 8 : Morning Digest IA
+
+### Contexte d'utilisation
+
+- **Script** : `scripts/generate_morning_digest.py` — fonction `generate_ai_synthesis()`
+- **Méthode** : `EurIAClient.ask(prompt, max_attempts=2, timeout=90)`
+- **Appelé par** : cron quotidien `generate_morning_digest.py --ai` (07:30)
+- **Objectif** : Générer une synthèse analytique de 150–200 mots sur l'actualité du jour à partir des 5 meilleurs articles du digest
+
+### Template du prompt
+
+```python
+snippets = []
+for a in top_articles[:5]:
+    resume = a.get("Résumé", "")[:600]
+    source = a.get("Sources", "")
+    snippets.append(f"[{source}] {resume}")
+
+payload = "\n\n".join(snippets)
+prompt = f"""En te basant sur les extraits d'articles suivants, rédige une synthèse analytique de 150 à 200 mots sur l'actualité du jour. Ton factuel et journalistique. Mets en gras les points clés. Pas de liste à puces.
+
+--- ARTICLES ---
+{payload}
+--- FIN ---
+
+Synthèse (150-200 mots, français, ton journalistique) :"""
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 90s | Synthèse courte mais articles concaténés |
+| **Max attempts** | 2 | Limite de quota |
+| **Max articles** | 5 | Les top articles du digest |
+| **Troncature résumé** | 600 chars/article | ~3 000 chars total |
+
+### Sortie attendue
+
+Paragraphe unique de 150–200 mots, en gras les points clés, ton journalistique factuel, sans liste à puces.
+
+---
+
+## Prompt 9 : Rapport de veille 48h
+
+### Contexte d'utilisation
+
+- **Script** : `scripts/generate_48h_report.py` — fonction `build_prompt()`
+- **Méthode** : `EurIAClient.ask(prompt, max_attempts=3, timeout=300, max_tokens=16000)`
+- **Appelé par** : cron quotidien `generate_48h_report.py` (23:00)
+- **Objectif** : Générer un rapport structuré sur le Top 10 des entités les plus mentionnées dans les 48 dernières heures
+
+### Template du prompt
+
+```python
+prompt = f"""Tu es un analyste média expert. Tu vas rédiger un rapport de veille d'actualité basé sur les articles des 48 dernières heures (rapport du {today_str}).
+
+---
+## TOP 10 ENTITÉS PRÉ-CALCULÉES
+
+{entities_block}              # Entités pré-calculées avec types et comptages
+
+---
+## INSTRUCTIONS
+
+### SECTION 1 — Analyse par entité (une section H2 par entité du Top 10)
+## [Rang]. [Nom de l'entité] *(type — X article(s))*
+**Contexte :** Qui ou qu'est-ce que c'est ? (1-2 phrases encyclopédiques)
+**Actualité des 48h :** Synthèse avec citations *(Source, date)* inline.
+**Analyse :** Tendances, implications, signaux faibles.
+
+### SECTION 2 — Corrélations inter-entités
+3 à 5 liens significatifs entre entités du Top 10.
+
+### SECTION 3 — Constatations générales
+- Sujets dominants, dynamiques en cours, signaux faibles, absences notables.
+
+### SECTION 4 — Tableau de références
+| Date | Source | URL |
+
+---
+## CONTRAINTES DE FORMAT
+- Français, ton journalistique analytique
+- Markdown brut compatible iA Writer (pas de HTML, pas de ```)
+- Frontmatter YAML obligatoire (title, date, période, articles_analysés)
+- Images au format `![](URL)`, une par section entité, pas de doublon
+
+## DONNÉES JSON
+{json_str}
+"""
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 300s | Rapport complet sur 10 entités |
+| **Max attempts** | 3 | Retry avec backoff |
+| **max_tokens** | 16 000 | Rapport long structuré en 4 sections |
+| **Troncature JSON** | Articles allégés (slim_articles) | Limite tokens |
+
+### Format de sortie attendu
+
+```markdown
+---
+title: "Rapport de veille — Top 10 entités · 2026-03-12"
+date: 2026-03-12
+période: 48 dernières heures
+articles_analysés: 142
+---
+
+## 1. OpenAI *(ORG — 27 articles)*
+**Contexte :** …
+**Actualité des 48h :** …
+**Analyse :** …
+
+…
+
+## Corrélations inter-entités
+…
+## Constatations générales
+…
+| Date | Source | URL |
+```
+
+---
+
+## Prompt 10 : Briefing exécutif
+
+### Contexte d'utilisation
+
+- **Script** : `scripts/generate_briefing.py` — fonction `_build_ai_prompt()`
+- **Méthode** : `EurIAClient.ask(prompt, timeout=120, max_tokens=8192)`
+- **Appelé par** : cron hebdomadaire `generate_briefing.py --period weekly` (lundi 06:30)
+- **Objectif** : Générer un résumé exécutif narratif 200–350 mots à intégrer dans le briefing Markdown + podcast TTS
+
+### Template du prompt
+
+```python
+return f"""Tu es un analyste senior en veille informationnelle pour WUDD.ai.
+
+Rédige en français un résumé exécutif synthétique (200–350 mots) de l'actualité du {period_label}.
+Adopte un ton factuel, neutre et professionnel. Structure ton texte en 2–3 paragraphes.
+Mets en gras les entités et événements importants.
+
+## Entités les plus mentionnées
+{entity_lines}               # Top N entités avec type et comptage
+
+## Alertes de tendance
+{alert_lines}                # Alertes actives depuis alertes.json
+
+## Extraits d'articles représentatifs
+{resumes}                    # Jusqu'à 10 articles : Source — date\nRésumé[:400]
+
+Rédige maintenant le résumé exécutif :"""
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 120s | Synthèse avec contexte étendu |
+| **max_tokens** | 8 192 | Marge pour 350 mots |
+| **Max articles** | 10 (sample) | Représentatifs de la période |
+| **Troncature résumé** | 400 chars/article | Balance densité/tokens |
+
+### Intégration dans le briefing
+
+Le texte généré est inséré sous `## 🤖 Synthèse intelligente` dans le rapport `.md` et sous `## Synthèse de la semaine` dans la version podcast TTS.
+
+---
+
+## Prompt 11 : Radar thématique
+
+### Contexte d'utilisation
+
+- **Script** : `scripts/radar_wudd.py` — fonction `call_api()`
+- **Méthode** : `EurIAClient.ask(prompt, max_attempts=3, timeout=120, max_tokens=16000)`
+- **Appelé par** : cron mensuel `radar_wudd.py` (fin de mois 05:00)
+- **Objectif** : Évaluer la présence comparative de 12 thèmes sociétaux sur deux corpus (mois courant T0 vs mois précédent T1), et calculer un score de vélocité
+
+### Template du prompt
+
+```python
+prompt = (
+    "Tu es un analyste média expert. Évalue la présence de chaque thème dans deux corpus d'articles.\n\n"
+    "RÈGLES STRICTES :\n"
+    "- freqT0 : proportion d'articles du CORPUS T0 qui traitent ce thème (0.0 à 1.0)\n"
+    "- freqT1 : proportion d'articles du CORPUS T1 qui traitent ce thème (0.0 à 1.0)\n"
+    "- vel    : score de vélocité. 0.0=forte baisse, 0.5=stable, 1.0=forte hausse.\n"
+    "           Si freqT1=0, vel=0.8 si freqT0>0.1, sinon 0.5.\n"
+    "- art    : nombre entier d'articles de T0 concernés par ce thème\n"
+    "- Un thème absent des deux corpus : freqT0=0.05, freqT1=0.05, vel=0.5\n"
+    "- TOUS les thèmes doivent être présents dans la réponse.\n\n"
+    f"THEMES ({len(THEMES)}) : {', '.join(THEMES)}\n\n"
+    f"CORPUS T1 — référence ({t1_label}, {t1_count} articles) :\n"
+    + "\n".join(corpus_t1)           # Format: "Source: Résumé (ASCII, max 120 chars)"
+    + f"\n\nCORPUS T0 — actuel ({t0_label}, {t0_count} articles) :\n"
+    + "\n".join(corpus_t0)
+    + "\n\nRéponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ni après.\n"
+    "Format exact : [{\"theme\":\"...\",\"freqT0\":0.0,\"freqT1\":0.0,\"vel\":0.0,\"art\":0}]"
+)
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 120s | Deux corpus concaténés |
+| **Max attempts** | 3 | Retry |
+| **max_tokens** | 16 000 | 12 objets JSON |
+| **Max articles par corpus** | 35 | Limite `format_corpus(articles, limit=35)` |
+| **Troncature résumé** | ~120 chars après conversion ASCII | Corpus compact |
+| **enable_web_search** | False (implicite) | Corpus local uniquement |
+
+### Format de sortie attendu
+
+```json
+[
+  {"theme": "Intelligence artificielle", "freqT0": 0.62, "freqT1": 0.55, "vel": 0.65, "art": 21},
+  {"theme": "Géopolitique",              "freqT0": 0.40, "freqT1": 0.45, "vel": 0.45, "art": 14},
+  ...
+]
+```
+
+### Post-traitement
+
+Les blocs `<think>…</think>` de Qwen3 et les balises ` ```json ` sont supprimés avant `json.loads()`.
+
+---
+
+## Prompt 12 : Chatbot IA
+
+### Contexte d'utilisation
+
+- **Route Flask** : `POST /api/chat/stream`
+- **Fichier** : `viewer/app.py` — fonction `api_chat_stream()`
+- **Déclenché par** : composant `ChatbotPanel.jsx` — envoi d'un message utilisateur
+- **Objectif** : Assistant de veille conversationnel en streaming, avec accès aux fichiers JSON/Markdown et aux notes personnelles de lecture
+
+### System prompt
+
+```python
+system_parts = [
+    "Tu es un assistant IA intégré à WUDD.ai, une plateforme de veille de presse en français.",
+    f"La date d'aujourd'hui est le {_today}.",
+    "Tu aides l'utilisateur à analyser des articles de presse, des rapports et des données JSON.",
+    "Tu peux produire des tableaux Markdown, des résumés, des analyses comparatives.",
+    "Réponds toujours en français, de manière concise et structurée.",
+    "Utilise du Markdown pour les tableaux, listes et mise en forme.",
+    "Ne génère pas de balises <think>.",
+    "IMPORTANT — Tu es un assistant en LECTURE SEULE. Tu ne peux PAS supprimer, modifier ou détruire des fichiers.",
+    "Si l'utilisateur demande une suppression, refuse poliment.",
+    # ── Blocs optionnels injectés dynamiquement ──
+    # "## Notes personnelles de l'utilisateur :\n{notes_block}"  (si notes_period fourni)
+    # "## Fichiers de contexte fournis par l'utilisateur :\n{context_blocks}"  (si context_files)
+]
+```
+
+### Paramètres techniques
+
+| Paramètre | Valeur | Justification |
+| --- | --- | --- |
+| **Timeout** | 90s (EurIA) / 90s (Claude) | Conversationnel |
+| **max_tokens** | 4 096 | Réponses longues autorisées |
+| **stream** | True | Affichage progressif token par token |
+| **Max fichiers contexte** | 10 (`_CHAT_MAX_CONTEXT_FILES`) | Limite prompt |
+| **Max chars par fichier** | 12 000 (`_CHAT_MAX_CONTEXT_CHARS`) | Limite tokens |
+| **Providers** | EurIA ou Claude (configurable via `AI_PROVIDER` + override par requête) | Dual-provider |
+
+### Injection de contexte
+
+Le chatbot accepte deux types de contexte injectés dans le system prompt :
+
+1. **Fichiers** (`context_files`) : jusqu'à 10 fichiers JSON/Markdown depuis `data/`, `rapports/` ou `samples/`, tronqués à 12 000 chars, injectés sous forme de blocs ` ```json ` ou ` ```markdown `.
+
+2. **Notes personnelles** (`notes_period`) : annotations de lecture (notes + tags) filtrées par période (`week`/`month`/`all`), enrichies avec les métadonnées article (titre, source, date).
+
+### Sécurité
+
+- Chemins restreints à `data/`, `rapports/`, `samples/` — aucun accès à `config/` ou `scripts/`
+- Le system prompt interdit explicitement toute opération de suppression ou modification
+- Les messages `role=system` injectés par le frontend sont filtrés (seuls `user` et `assistant` sont transmis à l'API)
+
+---
+
+## Callers supplémentaires (Prompt 1 réutilisé)
+
+### Rafraîchissement de résumé depuis le viewer
+
+- **Route Flask** : `POST /api/article/refresh-resume`
+- **Fichier** : `viewer/app.py` — fonction `api_article_refresh_resume()`
+- **Déclenché par** : bouton ↻ dans `ArticleCard` (vue grille/large)
+- **Prompt utilisé** : identique au **Prompt 1** via `client.generate_summary(source_text)`
+- **Particularité** : le texte source est le `Résumé` existant (re-résumé) ou le `Titre`, pas un texte HTML
+
+### Planification adaptative (scheduler)
+
+- **Script** : `scripts/scheduler_articles.py` — fonction `ask_euria_for_schedule()`
+- **Méthode** : `client.generate_summary(prompt, max_lines=5, timeout=60)` (réutilisation non conventionnelle)
+- **Objectif** : Demander à l'IA une recommandation de fréquence d'exécution selon le volume d'articles
+- **Prompt** :
+  ```python
+  f"Il y a eu {nb_new_articles} nouveaux articles cette semaine. "
+  f"Historique des fréquences d'exécution: {freq_history}. "
+  "Propose une fréquence optimale (en jours) pour lancer la génération de résumés..."
+  ```
+
+---
+
 ## Références
 
 - [API EurIA Infomaniak](https://euria.infomaniak.com)
@@ -746,4 +1062,4 @@ Exemple : `rapport_ORG_OpenAI_2026-03-07.md`
 
 **Auteur** : Patrick Ostertag
 **Email** : patrick.ostertag@gmail.com
-**Dernière mise à jour** : 7 mars 2026
+**Dernière mise à jour** : 12 mars 2026
