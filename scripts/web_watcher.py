@@ -8,6 +8,7 @@ Pour chaque source active dans config/web_sources.json :
   - Pour chaque nouvelle URL (non encore traitée, max max_per_run par run) :
       * Fetch la page HTML
       * Extrait titre, date, texte, images avec BeautifulSoup
+      * Vérifie la présence d'un mot-clé (keyword_filter ou keyword) dans le titre — sinon ignoré
       * Génère un résumé en français via l'API EurIA
       * Sauvegarde dans data/articles-from-rss/<keyword>.json (sans doublon)
       * Met à jour data/articles-from-rss/_WUDD.AI_/48-heures.json
@@ -393,15 +394,14 @@ def _process_source(
             processed_set.add(_normalize_url(url))
             continue
 
-        # Filtre par mot-clé sur le contenu (optionnel, défini dans web_sources.json)
-        keyword_filter = source.get("keyword_filter", [])
-        if keyword_filter:
-            combined = (page["title"] + " " + page["text"]).lower()
-            if not any(kw.lower() in combined for kw in keyword_filter):
-                print_console(f"    ✗ Hors sujet (aucun mot-clé trouvé parmi {keyword_filter}) — ignoré")
-                src_state["processed_urls"].append(url)
-                processed_set.add(_normalize_url(url))
-                continue
+        # Filtre par mot-clé sur le titre uniquement (keyword_filter ou keyword de la source)
+        keyword_filter = source.get("keyword_filter") or [keyword]
+        title_lower = page["title"].lower()
+        if not any(kw.lower() in title_lower for kw in keyword_filter):
+            print_console(f"    ✗ Hors sujet (aucun mot-clé trouvé dans le titre parmi {keyword_filter[:3]}) — ignoré")
+            src_state["processed_urls"].append(url)
+            processed_set.add(_normalize_url(url))
+            continue
 
         # Date : contenu de page > lastmod sitemap > maintenant
         pub_date_str = page["pub_date_str"] or lastmod
