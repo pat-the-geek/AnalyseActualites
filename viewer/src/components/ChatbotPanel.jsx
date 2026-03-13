@@ -81,8 +81,36 @@ function formatDateShort(ts) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function ChatbotPanel({ onClose, onFileSaved, initialFile }) {
-  const WELCOME_MSG = {
+// Étiquettes des types NER en français
+const NER_LABELS = {
+  PERSON: 'Personne', ORG: 'Organisation', GPE: 'Pays/Région',
+  LOC: 'Lieu', PRODUCT: 'Produit', EVENT: 'Événement',
+}
+
+export default function ChatbotPanel({ onClose, onFileSaved, initialFile, entityContext }) {
+  // entityContext : { type, value } | null — contexte entité pré-chargé depuis EntityArticlePanel
+
+  const entityLabel = entityContext
+    ? `${entityContext.value} (${NER_LABELS[entityContext.type] ?? entityContext.type})`
+    : null
+
+  const WELCOME_MSG = entityContext ? {
+    role: 'assistant',
+    content: `**Terminal IA — Entité : ${entityLabel}**
+
+Je suis prêt à répondre à vos questions sur cette entité. Le contexte chargé comprend :
+- 📰 Les articles de presse la mentionnant
+- 🔗 Les entités co-occurrentes (relations)
+- 📅 Le calendrier des mentions
+- 📊 La tonalité éditoriale et les sources
+
+Exemples de questions :
+- _Quel rôle joue ${entityContext.value} dans l'actualité récente ?_
+- _Quelles organisations sont liées à ${entityContext.value} ?_
+- _Comment la couverture médiatique a-t-elle évolué ?_
+- _Quels sont les points de vue éditoriaux sur ce sujet ?_`,
+    welcome: true,
+  } : {
     role: 'assistant',
     content: `**Bienvenue dans le terminal IA de WUDD.ai** 👋
 
@@ -104,6 +132,12 @@ Voici ce que je peux faire pour vous :
   const [input, setInput]               = useState('')
   const [streaming, setStreaming]       = useState(false)
   const [contextFiles, setContextFiles] = useState(() => initialFile?.path ? [initialFile.path] : [])
+  // Contexte entité pré-formaté (texte) chargé depuis /api/entity-context (SSE)
+  const [entityContextText, setEntityContextText]         = useState('')
+  const [entityContextLoading, setEntityContextLoading]   = useState(false)
+  const [entityContextStep, setEntityContextStep]         = useState(null)   // étape courante
+  const [entityContextLogs, setEntityContextLogs]         = useState([])     // log de chargement
+  const [entityContextStats, setEntityContextStats]       = useState(null)   // { article_count, has_info, has_rag }
   const [availableFiles, setAvailableFiles] = useState([])
   const [pickerOpen, setPickerOpen]     = useState(false)
   const [fileSearch, setFileSearch]     = useState('')
@@ -164,6 +198,62 @@ Voici ce que je peux faire pour vous :
       })
       .catch(() => {})
   }, [])
+
+  // Charger le contexte entité via SSE depuis /api/entity-context
+  useEffect(() => {
+    if (!entityContext?.type || !entityContext?.value) return
+    setEntityContextLoading(true)
+    setEntityContextLogs([])
+    setEntityContextStep(null)
+    setEntityContextStats(null)
+    setEntityContextText('')
+
+    const params = new URLSearchParams({ type: entityContext.type, value: entityContext.value, n: 25 })
+    const ctrl = new AbortController()
+
+    fetch(`/api/entity-context?${params}`, { signal: ctrl.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const reader  = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop()
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const raw = line.slice(6).trim()
+            if (!raw) continue
+            try {
+              const evt = JSON.parse(raw)
+              if (evt.type === 'progress') {
+                setEntityContextStep(evt.step)
+                setEntityContextLogs(prev => [...prev, evt.message])
+              } else if (evt.type === 'done') {
+                setEntityContextText(evt.context_text || '')
+                setEntityContextStats({
+                  article_count: evt.article_count,
+                  has_info: evt.has_info,
+                  has_rag: evt.has_rag,
+                })
+                setEntityContextStep('done')
+                setEntityContextLoading(false)
+              }
+            } catch (_) { /* ignore */ }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') setEntityContextLoading(false)
+      })
+
+    return () => ctrl.abort()
+  }, [entityContext?.type, entityContext?.value])
 
   // Charger la liste des fichiers disponibles pour le contexte
   // et pré-sélectionner 48-heures.json s'il existe
@@ -227,6 +317,7 @@ Voici ce que je peux faire pour vous :
           messages: newMessages.filter(m => !m.welcome),
           context_files: contextFiles,
           notes_period: overrideNotesPeriod || notesPeriod || undefined,
+          ...(entityContextText ? { entity_context: entityContextText } : {}),
           ...(selectedProvider ? { provider: selectedProvider } : {}),
         }),
         signal: ctrl.signal,
@@ -480,6 +571,29 @@ Voici ce que je peux faire pour vous :
               <span className="md:hidden">&gt;_</span>
               <span className="animate-pulse ml-1 text-green-500">█</span>
             </span>
+            {/* Badge entité — affiché quand un contexte entité est chargé */}
+            {entityContext && (
+              <span
+                className={`font-mono text-[10px] px-2 py-0.5 rounded border max-w-[200px] truncate ${
+                  entityContextLoading
+                    ? 'text-amber-400 bg-amber-900/30 border-amber-800/50 animate-pulse'
+                    : entityContextStep === 'done'
+                      ? 'text-emerald-300 bg-emerald-900/40 border-emerald-800/60'
+                      : 'text-slate-400 bg-slate-800/40 border-slate-700'
+                }`}
+                title={
+                  entityContextLoading
+                    ? (entityContextLogs[entityContextLogs.length - 1] || 'Chargement du contexte…')
+                    : entityContextStats
+                      ? `${entityContext.value} — ${entityContextStats.article_count} article(s)${entityContextStats.has_info ? ' + synthèse IA' : ''}${entityContextStats.has_rag ? ' + RAG' : ''}`
+                      : `Contexte entité : ${entityLabel}`
+                }
+              >
+                {entityContextLoading
+                  ? `⟳ ${entityContextLogs[entityContextLogs.length - 1] || 'entité…'}`
+                  : `◆ ${entityContext.value}`}
+              </span>
+            )}
             {/* Indicateur de fichiers de contexte */}
             {contextFiles.length > 0 && (
               <span className="font-mono text-[10px] text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded">
@@ -832,6 +946,33 @@ Voici ce que je peux faire pour vous :
                         </div>
                       )}
                     </div>
+                    {/* Commandes rapides spécifiques à l'entité */}
+                    {entityContext && (
+                      <div className="space-y-1 mb-4">
+                        <p className="font-mono text-[10px] text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                          <span>◆</span>
+                          {entityContext.value}
+                        </p>
+                        {[
+                          { label: 'Synthèse de l\'actualité', text: `Fais une synthèse structurée de l'actualité récente concernant ${entityContext.value} à partir des articles en contexte.` },
+                          { label: 'Entités liées', text: `Quelles sont les principales entités (personnes, organisations, pays) liées à ${entityContext.value} dans les articles ? Présente-les dans un tableau avec le nombre de co-occurrences.` },
+                          { label: 'Évolution dans le temps', text: `Comment la couverture médiatique de ${entityContext.value} a-t-elle évolué dans le temps ? Identifie les périodes clés.` },
+                          { label: 'Analyse éditoriale', text: `Analyse le ton éditorial des sources qui couvrent ${entityContext.value}. Y a-t-il des biais ou des divergences entre les sources ?` },
+                          { label: 'Points de controverse', text: `Identifie les points de controverse ou de débat autour de ${entityContext.value} dans les articles en contexte.` },
+                          { label: 'Fiche entité complète', text: `Génère une fiche structurée complète sur ${entityContext.value} : présentation, rôle, actualité récente, chiffres clés, relations principales, et tendances émergentes.` },
+                        ].map((cmd, i) => (
+                          <button
+                            key={i}
+                            onClick={() => sendMessage(cmd.text)}
+                            disabled={streaming || entityContextLoading}
+                            className="block w-full text-left font-mono text-xs text-slate-300 hover:text-emerald-400 hover:bg-slate-800/40 px-2 py-1 rounded transition-colors disabled:opacity-40"
+                          >
+                            <ChevronRight size={10} className="inline mr-1 text-emerald-800" />
+                            {cmd.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {/* Commandes rapides */}
                     <div className="space-y-1">
                       <p className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2">
@@ -869,6 +1010,41 @@ Voici ce que je peux faire pour vous :
                           {cmd.label}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Log de chargement du contexte entité */}
+                {entityContext && (entityContextLoading || entityContextStats) && (
+                  <div className="mb-4 font-mono text-[10px] border border-emerald-900/40 rounded-lg overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-emerald-900/30" style={{ background: '#0f2318' }}>
+                      <span className="text-emerald-600">◆</span>
+                      <span className="text-emerald-500 font-semibold uppercase tracking-widest">
+                        {entityContextLoading ? 'Chargement contexte entité…' : 'Contexte entité chargé'}
+                      </span>
+                      {entityContextStats && !entityContextLoading && (
+                        <span className="ml-auto text-emerald-700">
+                          {entityContextStats.article_count} art.
+                          {entityContextStats.has_info ? ' · Synthèse IA ✓' : ''}
+                          {entityContextStats.has_rag ? ' · RAG ✓' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div className="px-3 py-2 space-y-0.5" style={{ background: '#050d09' }}>
+                      {entityContextLogs.map((log, i) => (
+                        <div key={i} className={`flex items-start gap-1.5 ${i === entityContextLogs.length - 1 && entityContextLoading ? 'text-amber-400' : 'text-slate-500'}`}>
+                          <span className="shrink-0 mt-0.5">
+                            {i === entityContextLogs.length - 1 && entityContextLoading ? '▶' : '✓'}
+                          </span>
+                          <span>{log}</span>
+                        </div>
+                      ))}
+                      {entityContextStep === 'done' && entityContextStats && (
+                        <div className="flex items-center gap-1.5 text-emerald-600 mt-1 pt-1 border-t border-emerald-900/30">
+                          <span>✓</span>
+                          <span>Contexte prêt — vous pouvez poser vos questions</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
