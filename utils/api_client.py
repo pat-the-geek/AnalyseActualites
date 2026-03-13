@@ -491,7 +491,7 @@ File contents:
 # ── Client Anthropic Claude ───────────────────────────────────────────────────
 
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_API_VERSION = "2024-07-01"
+CLAUDE_API_VERSION = "2023-06-01"
 
 
 class ClaudeClient:
