@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info, Calendar, Layers } from 'lucide-react'
+import { X, FileText, Download, Loader2, ExternalLink, ChevronLeft, Network, GripHorizontal, Maximize2, Minimize2, Info, Calendar, Layers, Terminal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import EntityGraph from './EntityGraph'
@@ -742,6 +742,20 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
               </button>
             </div>
 
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('wudd:openEntityChatbot', {
+                  detail: { type: current.type, value: current.value }
+                }))
+              }}
+              disabled={loading || articles.length === 0}
+              title="Ouvrir le Terminal IA avec le contexte de cette entité"
+              className="inline-flex items-center gap-1 px-3 py-3 md:px-2.5 md:py-1.5 rounded-lg text-xs font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Terminal size={18} className="md:hidden" />
+              <Terminal size={12} className="hidden md:block" />
+              <span className="hidden sm:inline">Terminal IA</span>
+            </button>
             <button
               onClick={handleGenerateReport}
               disabled={loading || articles.length === 0 || reportGenerating}

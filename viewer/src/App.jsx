@@ -231,6 +231,7 @@ export default function App() {
   const [watchOpen, setWatchOpen]         = useState(false)
   const [clusterOpen, setClusterOpen]     = useState(false)
   const [chatOpen, setChatOpen]           = useState(false)
+  const [chatEntityContext, setChatEntityContext] = useState(null) // { type, value } | null
   const [outilsOpen, setOutilsOpen]       = useState(false)
   const outilsMenuRef                     = useRef(null)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
@@ -348,6 +349,20 @@ export default function App() {
       .then(r => r.ok ? r.json() : { providers: [] })
       .then(d => setAvailableProviders(d.providers ?? []))
       .catch(() => {})
+  }, [])
+
+  // ── Terminal IA depuis une entité ─────────────────────────────────────────────
+  // L'EntityArticlePanel dispatche "wudd:openEntityChatbot" quand l'utilisateur
+  // clique sur le bouton "Terminal IA". On ouvre le chatbot avec le contexte entité.
+  useEffect(() => {
+    const handler = (e) => {
+      const { type, value } = e.detail || {}
+      if (!type || !value) return
+      setChatEntityContext({ type, value })
+      setChatOpen(true)
+    }
+    window.addEventListener('wudd:openEntityChatbot', handler)
+    return () => window.removeEventListener('wudd:openEntityChatbot', handler)
   }, [])
 
   // Callback : crée ou met à jour l'annotation d'un article (optimistic update)
@@ -877,7 +892,12 @@ export default function App() {
         <ComparePanel onClose={() => setCompareOpen(false)} />
       )}
       {chatOpen && (
-        <ChatbotPanel onClose={() => setChatOpen(false)} onFileSaved={refreshFiles} initialFile={selectedFile} />
+        <ChatbotPanel
+          onClose={() => { setChatOpen(false); setChatEntityContext(null) }}
+          onFileSaved={refreshFiles}
+          initialFile={chatEntityContext ? null : selectedFile}
+          entityContext={chatEntityContext}
+        />
       )}
       {entitySearch && (
         <EntitySearchModal
