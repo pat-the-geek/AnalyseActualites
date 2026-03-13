@@ -62,7 +62,7 @@ function ClusterCard({ cluster }) {
                 <div className="flex items-start gap-2">
                   <span className="text-[10px] text-current/50 shrink-0 mt-0.5 tabular-nums">
                     {art['Date de publication']
-                      ? new Date(art['Date de publication']).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+                      ? parseArticleDate(art['Date de publication']).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
                       : '—'}
                   </span>
                   <div className="flex-1 min-w-0">

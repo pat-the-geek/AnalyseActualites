@@ -142,3 +142,84 @@ html:not(.dark) .json-number { color: #1d4ed8; }
 .custom-scrollbar::-webkit-scrollbar-track  { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb  { background: #1e4d35; border-radius: 2px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #166534; }
+
+/* ── Export PDF via impression navigateur ── */
+@media print {
+  /* 1. Cache TOUT le reste de l'appli */
+  body > *:not(#print-area) {
+    display: none !important;
+  }
+
+  /* 2. Zone d'impression : flux normal, pleine largeur, fond blanc */
+  #print-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2cm 2.5cm !important;
+    background: white !important;
+    font-size: 11pt;
+    line-height: 1.7;
+    color: #000 !important;
+    box-sizing: border-box !important;
+  }
+  #print-area * {
+    visibility: visible !important;
+    overflow: visible !important;
+    max-height: none !important;
+    color: inherit;
+    background: transparent;
+  }
+
+  /* 3. Typographie */
+  #print-area h1 { font-size: 20pt; margin: 0 0 12pt; page-break-after: avoid; break-after: avoid; color: #000 !important; }
+  #print-area h2 { font-size: 15pt; margin: 16pt 0 8pt; page-break-after: avoid; break-after: avoid; color: #111 !important; }
+  #print-area h3 { font-size: 12pt; margin: 12pt 0 6pt; page-break-after: avoid; break-after: avoid; color: #222 !important; }
+  #print-area h4 { font-size: 11pt; font-weight: bold; margin: 10pt 0 4pt; page-break-after: avoid; break-after: avoid; }
+  #print-area p  { margin: 0 0 8pt; }
+  #print-area li { margin-bottom: 3pt; }
+
+  /* 4. Liens */
+  #print-area a { color: #1a56db !important; text-decoration: underline; }
+  #print-area a::after {
+    content: ' (' attr(href) ')';
+    font-size: 8pt;
+    color: #555 !important;
+    word-break: break-all;
+  }
+
+  /* 5. Tableaux */
+  #print-area table { page-break-inside: avoid; break-inside: avoid; border-collapse: collapse !important; width: 100%; margin: 8pt 0; }
+  #print-area th { background: #f0f0f0 !important; color: #000 !important; border: 1px solid #999 !important; padding: 5pt 8pt; font-weight: bold; }
+  #print-area td { background: white !important; color: #000 !important; border: 1px solid #bbb !important; padding: 4pt 8pt; }
+  #print-area tr:nth-child(even) td { background: #f9f9f9 !important; }
+
+  /* 6. Code */
+  #print-area code { background: #f5f5f5 !important; color: #c0392b !important; padding: 1pt 3pt; border-radius: 2pt; font-size: 9pt; }
+  #print-area pre  { background: #f5f5f5 !important; padding: 8pt; border-radius: 3pt; page-break-inside: avoid; margin: 0 0 8pt; }
+  #print-area pre code { background: transparent !important; color: #333 !important; padding: 0; }
+
+  /* 7. Images */
+  #print-area img { max-width: 100%; height: auto; page-break-inside: avoid; }
+
+  /* 8. Métadonnées frontmatter */
+  #print-area dt { color: #666 !important; font-size: 9pt; }
+  #print-area dd { color: #000 !important; }
+
+  /* 9. Cache les boutons interactifs dans la zone */
+  #print-area button, #print-area [role="button"] { display: none !important; }
+  /* Cache les wrappers marqués no-print (bouton TTS, etc.) */
+  .no-print { display: none !important; }
+
+  /* 10. Supprime les contraintes de largeur max, le centrage et tout espacement haut résiduel */
+  #print-area > div { max-width: none !important; margin: 0 !important; padding-top: 0 !important; }
+  /* Reset body pour éviter tout espace supplémentaire */
+  body { margin: 0 !important; padding: 0 !important; }
+
+  /* 11. Page A4 — margin:0 supprime les headers/footers natifs de Chrome */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}

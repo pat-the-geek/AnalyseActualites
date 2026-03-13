@@ -149,10 +149,18 @@ def _update_48h_incremental(new_articles: list) -> int:
         added += 1
 
     def _safe_date(a: dict) -> datetime:
+        date_str = a.get("Date de publication", "")
+        # Format RFC 2822 (produit par flux_watcher)
         try:
-            return datetime.strptime(a.get("Date de publication", "")[:25], DATE_FORMAT_RSS)
+            return datetime.strptime(date_str[:25], DATE_FORMAT_RSS)
         except Exception:
-            return datetime.min
+            pass
+        # Format DD/MM/YYYY (produit par get-keyword-from-rss et web_watcher)
+        try:
+            return datetime.strptime(date_str[:10], "%d/%m/%Y")
+        except Exception:
+            pass
+        return datetime.min
 
     fresh = [a for a in existing if _safe_date(a) >= two_days_ago]
     fresh.sort(key=_safe_date, reverse=True)

@@ -11,10 +11,17 @@ import { X, ExternalLink, FileText, Loader2, Tag } from 'lucide-react'
  *   onSelectFile {fn(file)} — appelé quand l'utilisateur clique sur un fichier
  */
 
+function parseArticleDate(raw) {
+  if (!raw) return new Date(NaN)
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  return new Date(raw)
+}
+
 function formatDate(raw) {
   if (!raw) return ''
   try {
-    return new Date(raw).toLocaleDateString('fr-FR', {
+    return parseArticleDate(raw).toLocaleDateString('fr-FR', {
       day: '2-digit', month: 'short', year: 'numeric',
     })
   } catch { return raw }

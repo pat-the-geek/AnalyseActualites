@@ -89,20 +89,30 @@ const BUCKET_ORDER = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Parse DD/MM/YYYY (standard projet), ISO 8601 ou RFC 822.
+// new Date("11/03/2026") serait interprété par JS comme novembre 3 (format US),
+// d'où ce helper qui détecte et corrige le format français en priorité.
+function parseArticleDate(raw) {
+  if (!raw) return new Date(NaN)
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  return new Date(raw)
+}
+
 function formatDate(raw) {
   if (!raw) return ''
   try {
-    return new Date(raw).toLocaleDateString('fr-FR', {
+    return parseArticleDate(raw).toLocaleDateString('fr-FR', {
       day: '2-digit', month: 'short', year: 'numeric',
     })
   } catch { return raw }
 }
 
 function formatTime(raw) {
-  // ISO 8601 : "2026-03-02T03:14:00Z"  — RFC 822 : "Fri, 27 Feb 2026 17:23:48 +0000"
+  // ISO 8601 : "2026-03-02T03:14:00Z"  — RFC 822 : "Fri, 27 Feb 2026 17:23:48 +0000" — DD/MM/YYYY n'a pas d'heure
   if (!raw || (!/T\d{2}:\d{2}/.test(raw) && !/\d{2}:\d{2}:\d{2}/.test(raw))) return ''
   try {
-    return new Date(raw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return parseArticleDate(raw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   } catch { return '' }
 }
 
@@ -119,13 +129,13 @@ function entityCount(article) {
 
 function toTimestamp(raw) {
   if (!raw) return 0
-  const d = new Date(raw)
+  const d = parseArticleDate(raw)
   return isNaN(d) ? 0 : d.getTime()
 }
 
 function getDateBucket(raw) {
   if (!raw) return 'Date inconnue'
-  const d = new Date(raw)
+  const d = parseArticleDate(raw)
   if (isNaN(d)) return 'Date inconnue'
   const now = new Date(); now.setHours(0, 0, 0, 0)
   const target = new Date(d); target.setHours(0, 0, 0, 0)

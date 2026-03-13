@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { Download, FileText, Calendar, HardDrive, ChevronRight, ChevronDown, Images, ArrowUp, Tag, Braces, LayoutList, Trash2, AlertTriangle } from 'lucide-react'
+import { Download, FileText, Calendar, HardDrive, ChevronRight, ChevronDown, Images, ArrowUp, Tag, Braces, LayoutList, Trash2, AlertTriangle, Printer } from 'lucide-react'
 import JsonViewer from './JsonViewer'
 import MarkdownViewer from './MarkdownViewer'
 import EntityPanel from './EntityPanel'
@@ -216,6 +216,48 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
   // Remet le scroll à 0 et la vue JSON lors d'un changement de fichier
   useEffect(() => { setScrollTop(0); setViewMode('articles'); setExportOpen(false) }, [file])
 
+  // Garde une référence du fichier courant accessible depuis beforeprint
+  const fileRef = useRef(file)
+  useEffect(() => { fileRef.current = file }, [file])
+
+  // Déplace #print-area dans <body> avant impression pour éviter
+  // les contraintes flex/overflow qui tronquent et créent des pages vides
+  useEffect(() => {
+    function beforePrint() {
+      const el = document.getElementById('print-area')
+      if (!el) return
+      el._printParent      = el.parentNode
+      el._printNextSibling = el.nextSibling || null
+      // Injecte le footer filename directement en DOM (inline styles — sans dépendance CSS)
+      const filename = fileRef.current?.path?.split('/').pop() || ''
+      if (filename) {
+        const footer = document.createElement('div')
+        footer.style.cssText = 'display:block;text-align:center;font-size:8pt;color:#555;margin-top:24pt;padding-top:6pt;border-top:0.5pt solid #bbb;font-family:sans-serif;'
+        footer.textContent = filename
+        el._injectedFooter = footer
+        el.appendChild(footer)
+      }
+      document.body.appendChild(el)
+    }
+    function afterPrint() {
+      const el = document.getElementById('print-area')
+      if (!el || !el._printParent) return
+      if (el._injectedFooter) {
+        try { el.removeChild(el._injectedFooter) } catch (e) {}
+        delete el._injectedFooter
+      }
+      el._printParent.insertBefore(el, el._printNextSibling)
+      delete el._printParent
+      delete el._printNextSibling
+    }
+    window.addEventListener('beforeprint', beforePrint)
+    window.addEventListener('afterprint',  afterPrint)
+    return () => {
+      window.removeEventListener('beforeprint', beforePrint)
+      window.removeEventListener('afterprint',  afterPrint)
+    }
+  }, [])
+
   // Ferme le dropdown export au clic extérieur
   useEffect(() => {
     if (!exportOpen) return
@@ -409,6 +451,15 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
                   <span>XLSX</span>
                 </a>
               )}
+
+              {/* PDF / impression */}
+              <button
+                onClick={() => { window.print(); setExportOpen(false) }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-700/70 active:bg-slate-200/70 transition-colors"
+              >
+                <Printer size={13} className="text-purple-500 shrink-0" />
+                <span>PDF</span>
+              </button>
             </div>
           )}
         </div>
@@ -443,6 +494,16 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
             </a>
           </>
         )}
+
+        {/* Bouton PDF / impression — disponible pour tous les fichiers */}
+        <button
+          onClick={() => window.print()}
+          title="Imprimer / Exporter en PDF"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
+        >
+          <Printer size={12} />
+          <span className="hidden sm:inline">PDF</span>
+        </button>
 
         {/* Bouton supprimer (uniquement pour les fichiers non-JSON) */}
         {onDelete && file?.type !== 'json' && (
@@ -493,7 +554,9 @@ export default function FileViewer({ file, content, loading, loadingProgress, on
             </>
           )
         ) : (
-          <MarkdownViewer content={content} />
+          <div id="print-area">
+            <MarkdownViewer content={content} />
+          </div>
         )}
       </div>
       {/* ── Boutons de navigation flottants ── */}

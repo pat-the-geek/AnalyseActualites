@@ -321,10 +321,18 @@ def _update_48h(new_articles: list) -> None:
             seen_urls.add(article["URL"])
 
     def _dt(a: dict) -> datetime:
+        date_str = a.get("Date de publication", "")
+        # Format DD/MM/YYYY (produit par get-keyword-from-rss et web_watcher)
         try:
-            return datetime.strptime(a.get("Date de publication", ""), "%d/%m/%Y")
+            return datetime.strptime(date_str[:10], "%d/%m/%Y")
         except Exception:
-            return datetime.utcnow()
+            pass
+        # Format RFC 2822 (produit par flux_watcher)
+        try:
+            return datetime.strptime(date_str[:25], "%a, %d %b %Y %H:%M:%S")
+        except Exception:
+            pass
+        return datetime.utcnow()
 
     fresh = [a for a in existing if _dt(a) >= two_days_ago]
     fresh.sort(key=_dt, reverse=True)

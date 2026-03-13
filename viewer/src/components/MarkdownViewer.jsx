@@ -55,7 +55,7 @@ export default function MarkdownViewer({ content }) {
   return (
     <div className="max-w-3xl mx-auto">
       {/* Bouton lecture à voix haute */}
-      <div className="flex justify-end mb-2">
+      <div className="no-print flex justify-end mb-2">
         <TTSButton text={body} size={14} />
       </div>
 

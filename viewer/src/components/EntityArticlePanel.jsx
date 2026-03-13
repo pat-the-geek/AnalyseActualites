@@ -205,8 +205,9 @@ export default function EntityArticlePanel({ entityType, entityValue, onClose })
       .then(data => {
         if (data?.error) throw new Error(data.error)
         const sorted = (Array.isArray(data) ? data : []).sort((a, b) => {
-          const ta = new Date(a['Date de publication'] ?? 0).getTime()
-          const tb = new Date(b['Date de publication'] ?? 0).getTime()
+          const parseD = raw => { const m = (raw||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1])) : new Date(raw||0) }
+          const ta = parseD(a['Date de publication']).getTime()
+          const tb = parseD(b['Date de publication']).getTime()
           return tb - ta
         })
         setArticles(sorted)

@@ -10,17 +10,24 @@ import TTSButton, { stopAll } from './TTSButton'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function parseArticleDate(raw) {
+  if (!raw) return new Date(NaN)
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]))
+  return new Date(raw)
+}
+
 function formatDate(raw) {
   if (!raw) return ''
   try {
-    return new Date(raw).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+    return parseArticleDate(raw).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
   } catch { return raw }
 }
 
 function formatTime(raw) {
   if (!raw || (!/T\d{2}:\d{2}/.test(raw) && !/\d{2}:\d{2}:\d{2}/.test(raw))) return ''
   try {
-    return new Date(raw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return parseArticleDate(raw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   } catch { return '' }
 }
 

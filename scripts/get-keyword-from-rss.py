@@ -246,7 +246,7 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                 images = extract_top_n_largest_images(link, n=1, min_width=500)
                 article = {
                     "Titre": title,
-                    "Date de publication": pub_date,
+                    "Date de publication": pub_dt.strftime("%d/%m/%Y"),
                     "Sources": feed_title,
                     "URL": link,
                     "Résumé": resume,
@@ -317,9 +317,12 @@ for json_file in sorted(OUTPUT_DIR.glob("*.json")):
                 continue
             pub_date_str = article.get("Date de publication", "")
             try:
-                pub_dt = datetime.strptime(pub_date_str[:25], "%a, %d %b %Y %H:%M:%S")
+                pub_dt = datetime.strptime(pub_date_str, "%d/%m/%Y")  # format standard DD/MM/YYYY
             except Exception:
-                continue
+                try:
+                    pub_dt = datetime.strptime(pub_date_str[:25], "%a, %d %b %Y %H:%M:%S")  # ancien format RFC 2822 (rétrocompat)
+                except Exception:
+                    continue
             if pub_dt >= two_days_ago:
                 seen_urls.add(url)
                 articles_48h.append(article)
@@ -328,10 +331,14 @@ for json_file in sorted(OUTPUT_DIR.glob("*.json")):
 
 
 def _parse_date_safe(article: dict) -> datetime:
+    date_str = article.get("Date de publication", "")
     try:
-        return datetime.strptime(article.get("Date de publication", "")[:25], "%a, %d %b %Y %H:%M:%S")
+        return datetime.strptime(date_str, "%d/%m/%Y")  # format standard DD/MM/YYYY
     except Exception:
-        return datetime.min
+        try:
+            return datetime.strptime(date_str[:25], "%a, %d %b %Y %H:%M:%S")  # ancien format RFC 2822 (rétrocompat)
+        except Exception:
+            return datetime.min
 
 
 articles_48h.sort(key=_parse_date_safe, reverse=True)
