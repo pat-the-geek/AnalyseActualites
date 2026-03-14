@@ -584,10 +584,10 @@ Voici ce que je peux faire pour vous :
   return (
     <>
       {/* Fond semi-transparent */}
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80]" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[220]" onClick={onClose} />
 
-      {/* Panneau principal */}
-      <div className="fixed inset-0 z-[81] flex items-stretch md:items-center justify-center md:p-4 pointer-events-none" style={{ height: '100dvh' }}>
+      {/* Panneau principal — z-[221] pour passer au-dessus de tous les modals (rapport z-[200]) */}
+      <div className="fixed inset-0 z-[221] flex items-stretch md:items-center justify-center md:p-4 pointer-events-none" style={{ height: '100dvh' }}>
         <div
           className={`pointer-events-auto w-full h-full md:h-auto md:max-h-[92vh] relative flex flex-col overflow-hidden shadow-2xl border border-green-900/40 ${
             fullscreen
