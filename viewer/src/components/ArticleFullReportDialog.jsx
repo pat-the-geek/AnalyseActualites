@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, Maximize2, Minimize2, Copy, Download, Printer,
   RefreshCw, FileText, Check,
@@ -376,21 +377,21 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:p-0"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:p-0"
       onClick={e => e.target === e.currentTarget && !isFullscreen && onClose()}
     >
       <div
         id="article-report-print-root"
-        className={`flex flex-col shadow-2xl bg-white/92 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/45 dark:border-white/[0.09] transition-all duration-200 ${
+        className={`flex flex-col shadow-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 transition-all duration-200 ${
           isFullscreen
             ? 'fixed inset-0 rounded-none'
             : 'w-[80vw] max-w-5xl h-[88vh] rounded-2xl'
         } overflow-hidden`}
       >
         {/* ── Title bar ─────────────────────────────────────────────────────── */}
-        <div className="no-print flex items-center gap-3 px-5 py-3 border-b border-slate-200/60 dark:border-slate-700/60 shrink-0 bg-white/50 dark:bg-slate-900/50">
+        <div className="no-print flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-900">
           <FileText size={17} className="text-blue-500 shrink-0" />
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{titre}</h2>
@@ -438,28 +439,16 @@ export default function ArticleFullReportDialog({ article, onClose }) {
 
         {/* ── Entity avatar band (Option 6A) ────────────────────────────────── */}
         {avatarList.length > 0 && (
-          <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50/60 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-700/50 overflow-x-auto shrink-0">
+          <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto shrink-0">
             {avatarList.map(({ name, type, imageUrl }) => (
               <EntityAvatar key={`${type}-${name}`} name={name} type={type} imageUrl={imageUrl} />
             ))}
           </div>
         )}
 
-        {/* ── Main article image ────────────────────────────────────────────── */}
-        {mainImageUrl && (
-          <div className="shrink-0 max-h-52 overflow-hidden bg-slate-100 dark:bg-slate-800">
-            <img
-              src={mainImageUrl}
-              alt={titre}
-              className="w-full max-h-52 object-cover"
-              loading="eager"
-              onError={e => { e.currentTarget.closest('div').style.display = 'none' }}
-            />
-          </div>
-        )}
 
         {/* ── Report content ────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-8 py-6 bg-white dark:bg-slate-900">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-sm text-rose-700 dark:text-rose-300">
               Erreur : {error}
@@ -490,6 +479,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
