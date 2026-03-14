@@ -3,10 +3,11 @@ import {
   ExternalLink, ChevronDown, ChevronUp, Tag, X,
   Filter, Search, ArrowUpDown, Newspaper,
   Download, LayoutGrid, AlignLeft, LayoutList, Maximize2, Clock,
-  Star, Eye, Pencil, Check, RefreshCw,
+  Star, Eye, Pencil, Check, RefreshCw, FileText,
 } from 'lucide-react'
 import EntityHighlighter from './EntityHighlighter'
 import EntityArticlePanel from './EntityArticlePanel'
+import ArticleFullReportDialog from './ArticleFullReportDialog'
 import TTSButton from './TTSButton'
 
 // ── Badge sentiment ───────────────────────────────────────────────────────────
@@ -308,7 +309,7 @@ function IAPickerModal({ providers, onPick, onClose }) {
 }
 
 /** Carte article complète (vue grille / large) — style Liquid Glass. */
-function ArticleCard({ article, index, highlight, onEntityClick, annotation, onAnnotate, filePath, availableProviders, isFirstUnread, isLarge }) {
+function ArticleCard({ article, index, highlight, onEntityClick, onFullReport, annotation, onAnnotate, filePath, availableProviders, isFirstUnread, isLarge }) {
   const [expanded, setExpanded]           = useState(index < 3)
   const [lightbox, setLightbox]           = useState(false)
   const [noteOpen, setNoteOpen]           = useState(false)
@@ -464,11 +465,24 @@ function ArticleCard({ article, index, highlight, onEntityClick, annotation, onA
             : <SearchHighlighter text={resume} query={highlight} />
           }
         </div>
-        {resume.length > 300 && (
-          <button onClick={() => setExpanded(v => !v)}
-            className="mt-2 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors justify-end w-full">
-            {expanded ? <><ChevronUp size={12} /> Réduire</> : <><ChevronDown size={12} /> Lire la suite</>}
-          </button>
+        {(url || resume.length > 300) && (
+          <div className="mt-2 flex items-center justify-end gap-3">
+            {url && (
+              <button
+                onClick={() => onFullReport?.(article)}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                title="Générer un rapport complet"
+              >
+                <FileText size={12} /> Rapport
+              </button>
+            )}
+            {resume.length > 300 && (
+              <button onClick={() => setExpanded(v => !v)}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                {expanded ? <><ChevronUp size={12} /> Réduire</> : <><ChevronDown size={12} /> Lire la suite</>}
+              </button>
+            )}
+          </div>
         )}
 
         {/* Panneau notes/tags (dépliable) */}
@@ -557,6 +571,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
   const [selectedTypes, setSelectedTypes]     = useState(new Set())
   const [selectedSources, setSelectedSources] = useState(new Set())
   const [selectedEntity, setSelectedEntity]   = useState(null) // { type, value }
+  const [reportArticle, setReportArticle]     = useState(null) // article pour le rapport complet
   const [typesOpen, setTypesOpen]             = useState(false)
   const [sourcesOpen, setSourcesOpen]         = useState(false)
   const [annotFilter, setAnnotFilter]         = useState('tous') // 'tous' | 'importants' | 'non-lus'
@@ -956,6 +971,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
             <div key={article['URL'] ?? i} className="w-full" style={{ maxWidth: '80%' }}>
               <ArticleCard article={article} index={i} highlight={searchQuery.trim()}
                 onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+                onFullReport={a => setReportArticle(a)}
                 annotation={annotations?.[article['URL']] ?? null}
                 onAnnotate={onAnnotate}
                 filePath={filePath}
@@ -972,6 +988,7 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
           {displayedArticles.map((article, i) => (
             <ArticleCard key={article['URL'] ?? i} article={article} index={i} highlight={searchQuery.trim()}
               onEntityClick={(type, value) => setSelectedEntity({ type, value })}
+              onFullReport={a => setReportArticle(a)}
               annotation={annotations?.[article['URL']] ?? null}
               onAnnotate={onAnnotate}
               filePath={filePath}
@@ -987,6 +1004,13 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
           entityType={selectedEntity.type}
           entityValue={selectedEntity.value}
           onClose={() => setSelectedEntity(null)}
+        />
+      )}
+
+      {reportArticle && (
+        <ArticleFullReportDialog
+          article={reportArticle}
+          onClose={() => setReportArticle(null)}
         />
       )}
     </div>
