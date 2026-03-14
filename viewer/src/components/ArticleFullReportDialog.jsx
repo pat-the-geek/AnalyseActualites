@@ -438,7 +438,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
 
         {/* ── Entity avatar band (Option 6A) ────────────────────────────────── */}
         {avatarList.length > 0 && (
-          <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50/60 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-700/50 overflow-x-auto shrink-0">
+          <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto shrink-0">
             {avatarList.map(({ name, type, imageUrl }) => (
               <EntityAvatar key={`${type}-${name}`} name={name} type={type} imageUrl={imageUrl} />
             ))}
@@ -447,7 +447,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
 
 
         {/* ── Report content ────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-8 py-6 bg-white dark:bg-slate-900">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-sm text-rose-700 dark:text-rose-300">
               Erreur : {error}
