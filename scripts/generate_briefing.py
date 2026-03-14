@@ -105,9 +105,15 @@ def collect_articles(project_root: Path, hours: int) -> list[dict]:
 
 
 def compute_top_entities(articles: list[dict], top_n: int = 10) -> list[tuple]:
-    """Retourne les top_n entités (type, valeur, count) les plus mentionnées."""
+    """Retourne les top_n entités (type, valeur, count) les plus mentionnées.
+
+    O(n) — la capitalisation originale est mémorisée lors du premier passage,
+    sans double boucle sur les articles.
+    """
     counter: Counter = Counter()
-    type_map: dict[str, str] = {}
+    # key_to_meta[key_lower] = (nom_original, type)
+    key_to_meta: dict[str, tuple[str, str]] = {}
+
     for article in articles:
         entities = article.get("entities", {})
         if not isinstance(entities, dict):
@@ -121,22 +127,15 @@ def compute_top_entities(articles: list[dict], top_n: int = 10) -> list[tuple]:
                 if isinstance(name, str) and name.strip():
                     key = name.strip().lower()
                     counter[key] += 1
-                    type_map.setdefault(key, etype)
+                    # Mémoriser la capitalisation originale dès le 1er passage (O(1))
+                    if key not in key_to_meta:
+                        key_to_meta[key] = (name.strip(), etype)
 
-    results = []
-    for key, count in counter.most_common(top_n):
-        orig_name = key
-        # Retrouver le nom original (capitalisation)
-        for article in articles:
-            for etype, names in (article.get("entities") or {}).items():
-                if not isinstance(names, list):
-                    continue
-                for name in names:
-                    if isinstance(name, str) and name.strip().lower() == key:
-                        orig_name = name.strip()
-                        break
-        results.append((type_map.get(key, "?"), orig_name, count))
-    return results
+    return [
+        (key_to_meta[key][1], key_to_meta[key][0], count)
+        for key, count in counter.most_common(top_n)
+        if key in key_to_meta
+    ]
 
 
 def load_alerts(project_root: Path) -> list[dict]:

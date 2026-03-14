@@ -1321,41 +1321,44 @@ def api_entity_context():
     def generate():  # noqa: C901
         from collections import Counter as _Counter, defaultdict as _defaultdict
 
-        # ── Étape 1 : collecte des données locales ─────────────────────────
+        # ── Étape 1 : collecte via entity_index (évite le scan rglob) ──────
         yield _evt({"type": "progress", "step": "data",
                     "message": f"Collecte des articles pour « {entity_value} »…"})
 
-        seen_urls: set = set()
-        articles: list[dict] = []
-        for data_dir in [PROJECT_ROOT / "data" / "articles",
-                         PROJECT_ROOT / "data" / "articles-from-rss"]:
-            if not data_dir.exists():
-                continue
-            for json_file in sorted(data_dir.rglob("*.json")):
-                if "cache" in json_file.relative_to(data_dir).parts:
+        try:
+            from utils.entity_index import get_entity_index as _get_eidx
+            eidx = _get_eidx(PROJECT_ROOT)
+            articles = eidx.load_articles(entity_type, entity_value)
+        except Exception:
+            # Fallback : scan complet si l'index n'est pas disponible
+            articles = []
+            seen_urls: set = set()
+            for data_dir in [PROJECT_ROOT / "data" / "articles",
+                             PROJECT_ROOT / "data" / "articles-from-rss"]:
+                if not data_dir.exists():
                     continue
-                try:
-                    arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                    if not isinstance(arts, list):
+                for json_file in sorted(data_dir.rglob("*.json")):
+                    if "cache" in json_file.relative_to(data_dir).parts:
                         continue
-                except (json.JSONDecodeError, OSError):
-                    continue
-                for article in arts:
-                    ents = article.get("entities", {})
-                    if not isinstance(ents, dict):
+                    try:
+                        arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                        if not isinstance(arts, list):
+                            continue
+                    except (json.JSONDecodeError, OSError):
                         continue
-                    values = ents.get(entity_type, [])
-                    if not (isinstance(values, list) and entity_value in values):
-                        continue
-                    url = (article.get("URL") or "").strip()
-                    rkey = article.get("Résumé", "")[:150].strip()
-                    if (url and url in seen_urls) or (rkey and rkey in seen_urls):
-                        continue
-                    if url:
-                        seen_urls.add(url)
-                    if rkey:
-                        seen_urls.add(rkey)
-                    articles.append(article)
+                    for article in arts:
+                        ents = article.get("entities", {})
+                        if not isinstance(ents, dict):
+                            continue
+                        values = ents.get(entity_type, [])
+                        if not (isinstance(values, list) and entity_value in values):
+                            continue
+                        url = (article.get("URL") or "").strip()
+                        if url and url in seen_urls:
+                            continue
+                        if url:
+                            seen_urls.add(url)
+                        articles.append(article)
 
         articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
         top_articles = articles[:n_articles]
@@ -1363,23 +1366,22 @@ def api_entity_context():
         yield _evt({"type": "progress", "step": "data",
                     "message": f"{len(articles)} article(s) trouvé(s). Calcul des relations…"})
 
-        # Co-occurrences L1
+        # ── Calcul co-occurrences + calendrier en un seul passage ──────────
         cooc: _Counter = _Counter()
-        for article in articles:
-            ents = article.get("entities", {})
-            if not isinstance(ents, dict):
-                continue
-            for etype, evals in ents.items():
-                if not isinstance(evals, list):
-                    continue
-                for ev in evals:
-                    if not (etype == entity_type and ev == entity_value):
-                        cooc[(etype, ev)] += 1
-        top_cooc = cooc.most_common(15)
-
-        # Calendrier mensuel
         monthly: dict[str, int] = _defaultdict(int)
+        sentiments_tmp: _Counter = _Counter()
+        sources_tmp: _Counter = _Counter()
+
         for article in articles:
+            # Co-occurrences L1
+            ents = article.get("entities", {})
+            if isinstance(ents, dict):
+                for etype, evals in ents.items():
+                    if isinstance(evals, list):
+                        for ev in evals:
+                            if not (etype == entity_type and ev == entity_value):
+                                cooc[(etype, ev)] += 1
+            # Calendrier mensuel
             date_str = article.get("Date de publication", "")
             if date_str and len(date_str) >= 7:
                 if "/" in date_str:
@@ -1388,8 +1390,17 @@ def api_entity_context():
                         monthly[f"{parts[2]}-{parts[1]}"] += 1
                 elif "-" in date_str:
                     monthly[date_str[:7]] += 1
+            # Sentiments & sources (évite un 2e passage plus bas)
+            s = article.get("sentiment")
+            if s:
+                sentiments_tmp[s] += 1
+            src = article.get("Sources")
+            if src:
+                sources_tmp[src] += 1
 
-        # ── Étape 2 : synthèse encyclopédique IA ──────────────────────────
+        top_cooc = cooc.most_common(15)
+
+        # ── Étape 2 : synthèse IA (encyclopédie + RAG) avec cache ─────────
         yield _evt({"type": "progress", "step": "info",
                     "message": "Synthèse encyclopédique IA en cours…"})
 
@@ -1399,43 +1410,70 @@ def api_entity_context():
             "PRODUCT": "produit ou technologie", "EVENT": "événement",
         }
         label_fr = type_labels_fr.get(entity_type, entity_type.lower())
-        info_prompt = (
-            f"Fournis une synthèse encyclopédique en français sur « {entity_value} » ({label_fr}).\n\n"
-            "Structure ta réponse en Markdown avec des sections pertinentes "
-            "(présentation, rôle, contexte, actualité récente, chiffres clés, "
-            "liens avec d'autres acteurs…).\n"
-            "Sois factuel et concis. Génère uniquement le contenu Markdown, "
-            "sans balises <think>."
-        )
-        info_text = _call_ai_blocking(info_prompt, timeout=90, enable_web_search=True)
 
-        # ── Étape 3 : analyse RAG multi-sources ───────────────────────────
-        yield _evt({"type": "progress", "step": "rag",
-                    "message": "Analyse comparative multi-sources (RAG)…"})
-
+        info_text = ""
         rag_text = ""
-        if top_articles:
-            sources_block = ""
-            for i, a in enumerate(top_articles[:15], 1):
-                src    = a.get("Sources", "Source inconnue")
-                date   = a.get("Date de publication", "")
-                resume = (a.get("Résumé") or "")[:600]
-                sources_block += f"\n--- Article {i} ({src}, {date}) ---\n{resume}\n"
 
-            rag_prompt = (
-                f"Tu es un analyste de presse. Voici {min(len(top_articles), 15)} articles "
-                f"de sources différentes traitant de : **{entity_value}**.\n\n"
-                "Génère une synthèse comparative structurée en Markdown comprenant :\n"
-                "1. **Résumé de la situation** (2-3 phrases)\n"
-                "2. **Points de convergence** entre les sources\n"
-                "3. **Points de divergence ou contradictions**\n"
-                "4. **Positionnement éditorial** : sources favorables, neutres ou critiques\n"
-                "5. **Éléments clés manquants**\n\n"
-                "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n"
-                "Génère uniquement le contenu Markdown, sans balises <think>.\n\n"
-                f"Articles :\n{sources_block}"
+        # Vérifier le cache avant tout appel IA
+        try:
+            from utils.synthesis_cache import get_synthesis_cache as _get_scache
+            _scache = _get_scache(PROJECT_ROOT)
+            _cached = _scache.get(entity_type, entity_value)
+        except Exception:
+            _cached = None
+            _scache = None
+
+        if _cached:
+            info_text = _cached.get("info_text", "")
+            rag_text  = _cached.get("rag_text", "")
+            yield _evt({"type": "progress", "step": "info",
+                        "message": "Synthèse chargée depuis le cache."})
+        else:
+            # Appel 1 : synthèse encyclopédique
+            info_prompt = (
+                f"Fournis une synthèse encyclopédique en français sur « {entity_value} » ({label_fr}).\n\n"
+                "Structure ta réponse en Markdown avec des sections pertinentes "
+                "(présentation, rôle, contexte, actualité récente, chiffres clés, "
+                "liens avec d'autres acteurs…).\n"
+                "Sois factuel et concis. Génère uniquement le contenu Markdown, "
+                "sans balises <think>."
             )
-            rag_text = _call_ai_blocking(rag_prompt, timeout=120)
+            info_text = _call_ai_blocking(info_prompt, timeout=90, enable_web_search=True)
+
+            # Appel 2 : analyse RAG multi-sources
+            yield _evt({"type": "progress", "step": "rag",
+                        "message": "Analyse comparative multi-sources (RAG)…"})
+
+            if top_articles:
+                sources_block = ""
+                for i, a in enumerate(top_articles[:15], 1):
+                    src    = a.get("Sources", "Source inconnue")
+                    date   = a.get("Date de publication", "")
+                    resume = (a.get("Résumé") or "")[:600]
+                    sources_block += f"\n--- Article {i} ({src}, {date}) ---\n{resume}\n"
+
+                rag_prompt = (
+                    f"Tu es un analyste de presse. Voici {min(len(top_articles), 15)} articles "
+                    f"de sources différentes traitant de : **{entity_value}**.\n\n"
+                    "Génère une synthèse comparative structurée en Markdown comprenant :\n"
+                    "1. **Résumé de la situation** (2-3 phrases)\n"
+                    "2. **Points de convergence** entre les sources\n"
+                    "3. **Points de divergence ou contradictions**\n"
+                    "4. **Positionnement éditorial** : sources favorables, neutres ou critiques\n"
+                    "5. **Éléments clés manquants**\n\n"
+                    "Cite les sources (nom + date) à chaque point. Sois concis et factuel.\n"
+                    "Génère uniquement le contenu Markdown, sans balises <think>.\n\n"
+                    f"Articles :\n{sources_block}"
+                )
+                rag_text = _call_ai_blocking(rag_prompt, timeout=120)
+
+            # Stocker dans le cache pour les prochaines requêtes
+            if _scache and (info_text or rag_text):
+                try:
+                    _scache.set(entity_type, entity_value,
+                                info_text=info_text, rag_text=rag_text)
+                except Exception:
+                    pass
 
         # ── Étape 4 : assemblage du contexte final ─────────────────────────
         yield _evt({"type": "progress", "step": "build",
@@ -1470,16 +1508,9 @@ def api_entity_context():
                 ctx_lines.append(f"  - {ev} ({lbl}) : {count} co-occurrence(s)")
             ctx_lines.append("")
 
-        # Sentiments agrégés
-        sentiments: _Counter = _Counter()
-        sources_ctr: _Counter = _Counter()
-        for art in articles:
-            s = art.get("sentiment")
-            if s:
-                sentiments[s] += 1
-            src = art.get("Sources")
-            if src:
-                sources_ctr[src] += 1
+        # Sentiments agrégés (calculés lors du passage co-occurrences)
+        sentiments = sentiments_tmp
+        sources_ctr = sources_tmp
         if sentiments:
             ctx_lines.append("## Tonalité éditoriale")
             for sent, cnt in sentiments.most_common():
@@ -3355,22 +3386,43 @@ def api_analytics_compare():
             "top_entities": top_entities[:20],
         }
 
-    all_articles = []
-    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
-        if not data_dir.exists():
-            continue
-        for json_file in data_dir.rglob("*.json"):
-            if "cache" in str(json_file):
+    # Utiliser l'article_index pour charger uniquement les fichiers contenant
+    # des articles dans les deux fenêtres temporelles (évite le scan rglob complet).
+    try:
+        from utils.article_index import get_article_index as _get_aidx
+        _aidx = _get_aidx(PROJECT_ROOT)
+        # Déterminer la fenêtre englobante pour une seule requête d'index
+        date_min = min(from1, from2)
+        date_max = max(to1, to2)
+        # Charger les entrées d'index dans la plage globale
+        all_entries = [
+            e for e in _aidx._data.get("articles", [])
+            if date_min <= e.get("date", "") <= date_max
+        ] if (_aidx._load() or True) else []
+        all_articles = _aidx.load_articles(all_entries)
+        index_available = True
+    except Exception:
+        index_available = False
+        all_articles = []
+
+    if not index_available or not all_articles:
+        # Fallback : scan complet
+        for data_dir in [PROJECT_ROOT / "data" / "articles",
+                         PROJECT_ROOT / "data" / "articles-from-rss"]:
+            if not data_dir.exists():
                 continue
-            try:
-                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if isinstance(arts, list):
-                    all_articles.extend(arts)
-            except (json.JSONDecodeError, OSError):
-                continue
+            for json_file in data_dir.rglob("*.json"):
+                if "cache" in str(json_file):
+                    continue
+                try:
+                    arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if isinstance(arts, list):
+                        all_articles.extend(arts)
+                except (json.JSONDecodeError, OSError):
+                    continue
 
     # Déduplication par URL
-    seen = set()
+    seen: set = set()
     deduped = []
     for a in all_articles:
         url = a.get("URL", "")

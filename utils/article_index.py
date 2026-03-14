@@ -1,0 +1,353 @@
+"""utils/article_index.py — Index léger des métadonnées d'articles.
+
+Maintient data/article_index.json : liste de métadonnées minimales pour chaque
+article connu, permettant au ScoringEngine et aux rapports de filtrer par date
+et de localiser les fichiers sources SANS relire tout data/.
+
+Format de l'index :
+    {
+        "version": 1,
+        "generated_at": "2026-03-14T10:00:00Z",
+        "articles": [
+            {
+                "url": "https://...",
+                "source": "Le Monde",
+                "date": "2026-03-13",
+                "date_iso": "2026-03-13T10:00:00Z",
+                "has_entities": true,
+                "has_sentiment": true,
+                "has_images": true,
+                "file": "data/articles-from-rss/_WUDD.AI_/48-heures.json",
+                "idx": 0
+            }
+        ]
+    }
+
+Utilisation typique :
+    from utils.article_index import ArticleIndex
+    idx = ArticleIndex(project_root)
+    idx.update(new_articles, source_file="data/articles-from-rss/_WUDD.AI_/48-heures.json")
+    recent = idx.get_recent(hours=24)   # liste de métadonnées filtrées
+    articles = idx.load_articles(recent) # charge les articles complets depuis le disque
+"""
+
+import json
+import threading
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+
+from .logging import default_logger
+
+_INDEX_VERSION = 1
+_INDEX_FILENAME = "article_index.json"
+
+# ── Parsing de date ─────────────────────────────────────────────────────────
+
+# Paires (format, longueur attendue dans la chaîne source)
+_DATE_FMTS = (
+    ("%Y-%m-%dT%H:%M:%SZ", 20),
+    ("%Y-%m-%dT%H:%M:%S",  19),
+    ("%Y-%m-%d",           10),
+    ("%d/%m/%Y",           10),
+)
+
+
+def _parse_date_iso(date_str: str) -> Optional[str]:
+    """Convertit une date dans n'importe quel format en ISO 8601 UTC.
+    Retourne None si non parsable."""
+    if not date_str:
+        return None
+    for fmt, length in _DATE_FMTS:
+        try:
+            dt = datetime.strptime(date_str[:length], fmt).replace(tzinfo=timezone.utc)
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            continue
+    # RFC 822 (flux RSS)
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(date_str).astimezone(timezone.utc)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        pass
+    return None
+
+
+def _date_iso_to_dt(iso: str) -> Optional[datetime]:
+    """Parse une date ISO 8601 UTC en datetime. Retourne None si invalide."""
+    if not iso:
+        return None
+    try:
+        return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+# ── Classe principale ────────────────────────────────────────────────────────
+
+class ArticleIndex:
+    """Index léger des métadonnées d'articles pour accès rapide sans scan complet.
+
+    Thread-safe via threading.Lock.
+    """
+
+    def __init__(self, project_root: Optional[Path] = None):
+        if project_root is None:
+            project_root = Path(__file__).parent.parent
+        self.project_root = project_root
+        self._index_path = project_root / "data" / _INDEX_FILENAME
+        self._lock = threading.Lock()
+        self._data: dict = {"version": _INDEX_VERSION, "articles": []}
+        self._loaded = False
+
+    # ── Chargement / sauvegarde ─────────────────────────────────────────────
+
+    def _load(self) -> None:
+        """Charge l'index depuis le disque (paresseux, une seule fois)."""
+        if self._loaded:
+            return
+        if self._index_path.exists():
+            try:
+                raw = json.loads(self._index_path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict) and raw.get("version") == _INDEX_VERSION:
+                    self._data = raw
+                else:
+                    default_logger.warning(
+                        f"article_index.json : version incompatible, reconstruction nécessaire."
+                    )
+            except (json.JSONDecodeError, OSError) as e:
+                default_logger.warning(f"Impossible de charger article_index.json : {e}")
+        self._loaded = True
+
+    def _save(self) -> None:
+        """Sauvegarde atomique de l'index."""
+        self._data["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tmp = self._index_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(self._data, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            tmp.replace(self._index_path)
+        except OSError as e:
+            default_logger.error(f"Impossible de sauvegarder article_index.json : {e}")
+
+    # ── Mise à jour incrémentale ─────────────────────────────────────────────
+
+    def update(self, articles: list[dict], source_file: str) -> int:
+        """Ajoute ou met à jour les entrées d'index pour les articles donnés.
+
+        Args:
+            articles    : liste d'articles au format interne WUDD.ai
+            source_file : chemin relatif à project_root du fichier source
+                          (ex: "data/articles-from-rss/_WUDD.AI_/48-heures.json")
+
+        Returns:
+            Nombre de nouvelles entrées ajoutées.
+        """
+        if not articles:
+            return 0
+
+        # Normaliser le chemin source
+        try:
+            src_path = Path(source_file)
+            if src_path.is_absolute():
+                source_file = str(src_path.relative_to(self.project_root)).replace("\\", "/")
+        except ValueError:
+            pass
+
+        with self._lock:
+            self._load()
+
+            # Construire un set des URLs déjà indexées pour ce fichier source
+            existing: dict[str, int] = {
+                entry["url"]: i
+                for i, entry in enumerate(self._data["articles"])
+                if entry.get("file") == source_file and entry.get("url")
+            }
+
+            added = 0
+            for idx_in_file, article in enumerate(articles):
+                url = (article.get("URL") or article.get("url") or "").strip()
+                if not url:
+                    continue
+
+                date_raw = article.get("Date de publication", "")
+                date_iso = _parse_date_iso(date_raw)
+                date_short = date_iso[:10] if date_iso else ""
+
+                entry = {
+                    "url": url,
+                    "source": str(article.get("Sources") or article.get("source") or ""),
+                    "date": date_short,
+                    "date_iso": date_iso or "",
+                    "has_entities": bool(article.get("entities")),
+                    "has_sentiment": bool(article.get("sentiment")),
+                    "has_images": bool(article.get("Images")),
+                    "file": source_file,
+                    "idx": idx_in_file,
+                }
+
+                if url in existing:
+                    # Mise à jour de l'entrée existante (les champs d'enrichissement peuvent avoir changé)
+                    self._data["articles"][existing[url]] = entry
+                else:
+                    self._data["articles"].append(entry)
+                    existing[url] = len(self._data["articles"]) - 1
+                    added += 1
+
+            self._save()
+            return added
+
+    def rebuild(self) -> int:
+        """Reconstruit l'index complet en scannant tout data/.
+
+        À utiliser lors de la migration initiale ou après corruption.
+        Retourne le nombre total d'entrées indexées.
+        """
+        scan_dirs = [
+            self.project_root / "data" / "articles",
+            self.project_root / "data" / "articles-from-rss",
+        ]
+
+        new_articles: list[dict] = []
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
+                continue
+            for json_file in sorted(scan_dir.rglob("*.json")):
+                if "cache" in json_file.relative_to(scan_dir).parts:
+                    continue
+                try:
+                    data = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(data, list):
+                        continue
+                    rel = str(json_file.relative_to(self.project_root)).replace("\\", "/")
+                    for i, article in enumerate(data):
+                        url = (article.get("URL") or article.get("url") or "").strip()
+                        if not url:
+                            continue
+                        date_raw = article.get("Date de publication", "")
+                        date_iso = _parse_date_iso(date_raw)
+                        new_articles.append({
+                            "url": url,
+                            "source": str(article.get("Sources") or article.get("source") or ""),
+                            "date": date_iso[:10] if date_iso else "",
+                            "date_iso": date_iso or "",
+                            "has_entities": bool(article.get("entities")),
+                            "has_sentiment": bool(article.get("sentiment")),
+                            "has_images": bool(article.get("Images")),
+                            "file": rel,
+                            "idx": i,
+                        })
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+        # Déduplication par URL (garder la plus récente)
+        seen: dict[str, dict] = {}
+        for entry in new_articles:
+            url = entry["url"]
+            if url not in seen or entry["date_iso"] > seen[url]["date_iso"]:
+                seen[url] = entry
+
+        with self._lock:
+            self._data = {
+                "version": _INDEX_VERSION,
+                "articles": list(seen.values()),
+            }
+            self._save()
+            self._loaded = True
+            return len(self._data["articles"])
+
+    # ── Requêtes ────────────────────────────────────────────────────────────
+
+    def get_recent(self, hours: int = 48) -> list[dict]:
+        """Retourne les métadonnées des articles publiés dans les dernières `hours` heures.
+
+        Ne lit pas les fichiers source — utilise uniquement l'index en mémoire.
+        """
+        with self._lock:
+            self._load()
+
+        if hours <= 0:
+            return list(self._data["articles"])
+
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(hours=hours)
+        result = []
+        for entry in self._data["articles"]:
+            dt = _date_iso_to_dt(entry.get("date_iso", ""))
+            if dt and dt >= cutoff:
+                result.append(entry)
+        return result
+
+    def load_articles(self, entries: list[dict]) -> list[dict]:
+        """Charge les articles complets depuis le disque à partir d'une liste de métadonnées.
+
+        Groupe les lectures par fichier pour minimiser les I/O.
+
+        Args:
+            entries : liste de métadonnées (format retourné par get_recent())
+
+        Returns:
+            Liste d'articles complets, dans le même ordre que entries.
+        """
+        # Regrouper par fichier
+        by_file: dict[str, list[tuple[int, int]]] = {}
+        for pos, entry in enumerate(entries):
+            f = entry.get("file", "")
+            if f:
+                by_file.setdefault(f, []).append((pos, entry.get("idx", -1)))
+
+        result: list[Optional[dict]] = [None] * len(entries)
+        for rel_path, positions in by_file.items():
+            full_path = self.project_root / rel_path
+            try:
+                data = json.loads(full_path.read_text(encoding="utf-8", errors="replace"))
+                if not isinstance(data, list):
+                    continue
+                for pos, file_idx in positions:
+                    if 0 <= file_idx < len(data):
+                        article = data[file_idx]
+                        article.setdefault("_source_file", rel_path)
+                        result[pos] = article
+            except (json.JSONDecodeError, OSError):
+                continue
+
+        return [a for a in result if a is not None]
+
+    def count(self) -> int:
+        """Retourne le nombre total d'articles indexés."""
+        with self._lock:
+            self._load()
+        return len(self._data["articles"])
+
+    def stats(self) -> dict:
+        """Retourne des statistiques sur l'index."""
+        with self._lock:
+            self._load()
+        articles = self._data["articles"]
+        return {
+            "total": len(articles),
+            "with_entities": sum(1 for a in articles if a.get("has_entities")),
+            "with_sentiment": sum(1 for a in articles if a.get("has_sentiment")),
+            "with_images": sum(1 for a in articles if a.get("has_images")),
+            "generated_at": self._data.get("generated_at", ""),
+        }
+
+
+# ── Singleton ────────────────────────────────────────────────────────────────
+
+_instances: dict[Path, ArticleIndex] = {}
+_instances_lock = threading.Lock()
+
+
+def get_article_index(project_root: Optional[Path] = None) -> ArticleIndex:
+    """Retourne l'instance singleton de l'ArticleIndex pour project_root."""
+    if project_root is None:
+        project_root = Path(__file__).parent.parent
+    project_root = project_root.resolve()
+    with _instances_lock:
+        if project_root not in _instances:
+            _instances[project_root] = ArticleIndex(project_root)
+        return _instances[project_root]

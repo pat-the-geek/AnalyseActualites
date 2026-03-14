@@ -298,3 +298,76 @@ class ScoringEngine:
                     continue
 
         return self.score_and_sort(all_articles, now=now, top_n=top_n)
+
+    def get_top_articles_from_index(
+        self,
+        top_n: int = 10,
+        hours: int = 48,
+        include_rss: bool = True,
+    ) -> list[dict]:
+        """Variante de get_top_articles() utilisant l'ArticleIndex pour éviter le scan complet.
+
+        Charge uniquement les fichiers contenant des articles récents, identifiés
+        via l'index léger (data/article_index.json) sans rglob sur data/.
+
+        Retourne les N articles les mieux scorés. Bascule automatiquement sur
+        get_top_articles() si l'index n'est pas disponible.
+        """
+        try:
+            from .article_index import get_article_index
+        except ImportError:
+            return self.get_top_articles(top_n=top_n, hours=hours, include_rss=include_rss)
+
+        idx = get_article_index(self.project_root)
+        recent_entries = idx.get_recent(hours=hours)
+
+        if not recent_entries:
+            # Index vide ou inexistant — fallback sur le scan complet
+            return self.get_top_articles(top_n=top_n, hours=hours, include_rss=include_rss)
+
+        if not include_rss:
+            recent_entries = [
+                e for e in recent_entries
+                if not e.get("file", "").startswith("data/articles-from-rss")
+            ]
+
+        all_articles = idx.load_articles(recent_entries)
+
+        now = datetime.now(timezone.utc)
+        return self.score_and_sort(all_articles, now=now, top_n=top_n)
+
+
+# ── Singleton ScoringEngine ──────────────────────────────────────────────────
+# Évite de relire keyword-to-search.json et sources_credibility.json à chaque
+# instanciation (plusieurs scripts l'instancient indépendamment dans la même journée).
+
+import threading as _threading
+
+_engine_instances: dict[Path, tuple["ScoringEngine", float]] = {}
+_engine_lock = _threading.Lock()
+
+
+def get_scoring_engine(project_root: Optional[Path] = None) -> "ScoringEngine":
+    """Retourne un ScoringEngine singleton pour project_root.
+
+    L'instance est recréée automatiquement si les fichiers de configuration
+    ont été modifiés depuis la dernière instanciation.
+    """
+    if project_root is None:
+        project_root = Path(__file__).parent.parent
+    project_root = project_root.resolve()
+
+    config_files = [
+        project_root / "config" / "keyword-to-search.json",
+        project_root / "config" / "sources_credibility.json",
+    ]
+    current_mtime = max(
+        (f.stat().st_mtime for f in config_files if f.exists()),
+        default=0.0,
+    )
+
+    with _engine_lock:
+        cached = _engine_instances.get(project_root)
+        if cached is None or cached[1] < current_mtime:
+            _engine_instances[project_root] = (ScoringEngine(project_root), current_mtime)
+        return _engine_instances[project_root][0]

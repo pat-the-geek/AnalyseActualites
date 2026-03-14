@@ -35,6 +35,8 @@ from utils.api_client import get_ai_client
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
 from utils.quota import get_quota_manager
+from utils.article_index import get_article_index
+from utils.entity_index import get_entity_index
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -344,6 +346,24 @@ def main(dry_run: bool = False) -> None:
 
     # ── Mise à jour incrémentale de 48-heures.json ──────────────────────────
     _update_48h_incremental(new_articles_all)
+
+    # ── Mise à jour des index (article_index + entity_index) ─────────────
+    if new_articles_all:
+        wudd_path_rel = str(
+            (WUDD_DIR / "48-heures.json").relative_to(PROJECT_ROOT)
+        ).replace("\\", "/")
+        try:
+            art_idx = get_article_index(PROJECT_ROOT)
+            art_idx.update(new_articles_all, source_file=wudd_path_rel)
+            print_console(f"  article_index.json mis à jour ({len(new_articles_all)} article(s))")
+        except Exception as e:
+            print_console(f"  Mise à jour article_index ignorée : {e}", level="warning")
+        try:
+            ent_idx = get_entity_index(PROJECT_ROOT)
+            ent_idx.update(new_articles_all, source_file=wudd_path_rel)
+            print_console(f"  entity_index.json mis à jour")
+        except Exception as e:
+            print_console(f"  Mise à jour entity_index ignorée : {e}", level="warning")
 
     # ── Mémoriser l'état ────────────────────────────────────────────────────
     _save_state(next_idx, total, feed_title, len(new_articles_all))
