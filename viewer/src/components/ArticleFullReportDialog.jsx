@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, Maximize2, Minimize2, Copy, Download, Printer,
   RefreshCw, FileText, Check,
@@ -376,9 +377,9 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:p-0"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:p-0"
       onClick={e => e.target === e.currentTarget && !isFullscreen && onClose()}
     >
       <div
@@ -478,6 +479,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
