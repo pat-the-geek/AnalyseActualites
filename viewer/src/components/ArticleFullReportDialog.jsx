@@ -61,6 +61,23 @@ function MermaidBlock({ code, isStreaming }) {
       .then(({ svg }) => {
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg
+          // Rendre le SVG responsive : supprime width/height fixes,
+          // force 100 % de largeur tout en conservant le viewBox
+          const svgEl = containerRef.current.querySelector('svg')
+          if (svgEl) {
+            const vb = svgEl.getAttribute('viewBox')
+            if (!vb) {
+              // Construire un viewBox depuis les dimensions existantes
+              const w = svgEl.getAttribute('width')  || svgEl.style.width  || '800'
+              const h = svgEl.getAttribute('height') || svgEl.style.height || '400'
+              svgEl.setAttribute('viewBox', `0 0 ${parseFloat(w)} ${parseFloat(h)}`)
+            }
+            svgEl.setAttribute('width',  '100%')
+            svgEl.removeAttribute('height')
+            svgEl.style.width    = '100%'
+            svgEl.style.height   = 'auto'
+            svgEl.style.maxWidth = '100%'
+          }
           setRendered(true)
         }
       })
