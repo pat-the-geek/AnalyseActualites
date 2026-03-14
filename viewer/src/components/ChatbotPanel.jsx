@@ -777,9 +777,9 @@ Voici ce que je peux faire pour vous :
           {/* ── Corps : sidebar contexte + zone chat ────────────────── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
 
-            {/* Sidebar sélection de fichiers (desktop) — masquée si contexte entité */}
+            {/* Sidebar sélection de fichiers (desktop) — masquée si contexte entité ou article */}
             <div
-              className={`${entityContext ? 'hidden' : 'hidden lg:flex'} flex-col w-64 shrink-0 border-r border-green-900/30 overflow-hidden`}
+              className={`${entityContext || articleContext ? 'hidden' : 'hidden lg:flex'} flex-col w-64 shrink-0 border-r border-green-900/30 overflow-hidden`}
               style={{ background: '#0d1117' }}
             >
               <div className="px-3 py-2 border-b border-green-900/30">
