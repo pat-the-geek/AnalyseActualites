@@ -231,7 +231,8 @@ export default function App() {
   const [watchOpen, setWatchOpen]         = useState(false)
   const [clusterOpen, setClusterOpen]     = useState(false)
   const [chatOpen, setChatOpen]           = useState(false)
-  const [chatEntityContext, setChatEntityContext] = useState(null) // { type, value } | null
+  const [chatEntityContext, setChatEntityContext]   = useState(null) // { type, value } | null
+  const [chatArticleContext, setChatArticleContext] = useState(null) // { titre, sources, date, url, entities, resume, reportMd } | null
   const [outilsOpen, setOutilsOpen]       = useState(false)
   const outilsMenuRef                     = useRef(null)
   const [sidebarOpen, setSidebarOpen]     = useState(() => window.innerWidth >= 768)
@@ -363,6 +364,19 @@ export default function App() {
     }
     window.addEventListener('wudd:openEntityChatbot', handler)
     return () => window.removeEventListener('wudd:openEntityChatbot', handler)
+  }, [])
+
+  // ── Terminal IA depuis un rapport d'article ───────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      const ctx = e.detail || {}
+      if (!ctx.reportMd) return
+      setChatArticleContext(ctx)
+      setChatEntityContext(null)
+      setChatOpen(true)
+    }
+    window.addEventListener('wudd:openArticleChatbot', handler)
+    return () => window.removeEventListener('wudd:openArticleChatbot', handler)
   }, [])
 
   // Callback : crée ou met à jour l'annotation d'un article (optimistic update)
@@ -893,10 +907,11 @@ export default function App() {
       )}
       {chatOpen && (
         <ChatbotPanel
-          onClose={() => { setChatOpen(false); setChatEntityContext(null) }}
+          onClose={() => { setChatOpen(false); setChatEntityContext(null); setChatArticleContext(null) }}
           onFileSaved={refreshFiles}
-          initialFile={chatEntityContext ? null : selectedFile}
+          initialFile={(chatEntityContext || chatArticleContext) ? null : selectedFile}
           entityContext={chatEntityContext}
+          articleContext={chatArticleContext}
         />
       )}
       {entitySearch && (

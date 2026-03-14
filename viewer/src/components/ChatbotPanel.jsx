@@ -87,14 +87,54 @@ const NER_LABELS = {
   LOC: 'Lieu', PRODUCT: 'Produit', EVENT: 'Événement',
 }
 
-export default function ChatbotPanel({ onClose, onFileSaved, initialFile, entityContext }) {
-  // entityContext : { type, value } | null — contexte entité pré-chargé depuis EntityArticlePanel
+export default function ChatbotPanel({ onClose, onFileSaved, initialFile, entityContext, articleContext }) {
+  // entityContext  : { type, value } | null — contexte entité pré-chargé depuis EntityArticlePanel
+  // articleContext : { titre, sources, date, url, entities, resume, reportMd } | null — rapport complet
 
   const entityLabel = entityContext
     ? `${entityContext.value} (${NER_LABELS[entityContext.type] ?? entityContext.type})`
     : null
 
-  const WELCOME_MSG = entityContext ? {
+  // Texte de contexte article injecté directement (pas de SSE serveur nécessaire)
+  const articleContextText = articleContext ? (() => {
+    const lines = [
+      `# Rapport complet : ${articleContext.titre || 'Article'}`,
+      `Source : ${articleContext.sources || '—'} | Date : ${articleContext.date || '—'}`,
+      articleContext.url ? `URL : ${articleContext.url}` : '',
+      '',
+    ]
+    if (articleContext.entities && Object.keys(articleContext.entities).length) {
+      lines.push('## Entités nommées')
+      for (const [type, vals] of Object.entries(articleContext.entities)) {
+        if (Array.isArray(vals) && vals.length) lines.push(`- ${type} : ${vals.join(', ')}`)
+      }
+      lines.push('')
+    }
+    if (articleContext.resume) {
+      lines.push('## Résumé original', articleContext.resume, '')
+    }
+    if (articleContext.reportMd) {
+      lines.push('## Rapport généré', articleContext.reportMd)
+    }
+    return lines.filter(l => l !== undefined).join('\n')
+  })() : ''
+
+  const WELCOME_MSG = articleContext ? {
+    role: 'assistant',
+    content: `**Terminal IA — Rapport article**
+
+Le rapport complet de l'article est chargé en contexte :
+- 📰 **${articleContext.titre || 'Article'}** — ${[articleContext.sources, articleContext.date].filter(Boolean).join(' · ')}
+- 📊 Entités nommées détectées
+- 📝 Rapport Markdown complet (analyse, diagrammes, acteurs)
+
+Exemples de questions :
+- _Quels sont les principaux acteurs mentionnés et leurs rôles ?_
+- _Quelle est la position éditoriale de la source ?_
+- _Résume les points clés en 5 bullets._
+- _Génère un tableau comparatif des entités._`,
+    welcome: true,
+  } : entityContext ? {
     role: 'assistant',
     content: `**Terminal IA — Entité : ${entityLabel}**
 
@@ -317,7 +357,7 @@ Voici ce que je peux faire pour vous :
           messages: newMessages.filter(m => !m.welcome),
           context_files: contextFiles,
           notes_period: overrideNotesPeriod || notesPeriod || undefined,
-          ...(entityContextText ? { entity_context: entityContextText } : {}),
+          ...(articleContextText ? { entity_context: articleContextText } : entityContextText ? { entity_context: entityContextText } : {}),
           ...(selectedProvider ? { provider: selectedProvider } : {}),
         }),
         signal: ctrl.signal,
