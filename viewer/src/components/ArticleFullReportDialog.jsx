@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X, Maximize2, Minimize2, Copy, Download, Printer,
-  RefreshCw, FileText, Check,
+  RefreshCw, FileText, Check, Terminal,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -202,6 +202,12 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleOpenChatbot = () => {
+    window.dispatchEvent(new CustomEvent('wudd:openArticleChatbot', {
+      detail: { titre, sources, date, url, entities, resume, reportMd: cleanMd },
+    }))
+  }
+
   const handleDownload = () => {
     const fname = `rapport_${sources || 'article'}_${date || new Date().toISOString().slice(0, 10)}.md`
       .replace(/[/\\: ]/g, '-')
@@ -360,6 +366,16 @@ export default function ArticleFullReportDialog({ article, onClose }) {
             </p>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">
+            {!isLoading && cleanMd && (
+              <button
+                onClick={handleOpenChatbot}
+                className="flex items-center gap-1 px-2 py-1 mr-1 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors"
+                title="Ouvrir le Terminal IA avec ce rapport en contexte"
+              >
+                <Terminal size={12} />
+                Terminal IA
+              </button>
+            )}
             <button onClick={handleCopy} className={btnCls} title="Copier le Markdown">
               {copied
                 ? <Check size={14} className="text-emerald-500" />
