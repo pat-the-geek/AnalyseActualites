@@ -41,38 +41,15 @@ function MermaidBlock({ code }) {
 
 // ── Entity avatar (bande en-tête) ─────────────────────────────────────────────
 
-const AVATAR_STYLE = {
-  PERSON:  { ring: 'ring-violet-300 dark:ring-violet-700', bg: 'bg-violet-100 dark:bg-violet-900/50', text: 'text-violet-700 dark:text-violet-200', shape: 'rounded-full' },
-  ORG:     { ring: 'ring-blue-300 dark:ring-blue-700',     bg: 'bg-blue-100 dark:bg-blue-900/50',     text: 'text-blue-700 dark:text-blue-200',     shape: 'rounded-lg'   },
-  PRODUCT: { ring: 'ring-orange-300 dark:ring-orange-700', bg: 'bg-orange-100 dark:bg-orange-900/50', text: 'text-orange-700 dark:text-orange-200', shape: 'rounded-lg'   },
+const CHIP_STYLE = {
+  PERSON:  'bg-violet-100 dark:bg-violet-900/50 text-violet-800 dark:text-violet-200 border-violet-200 dark:border-violet-800',
+  ORG:     'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+  PRODUCT: 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-800',
+  GPE:     'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+  EVENT:   'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800',
+  LOC:     'bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800',
 }
-const FALLBACK_AVATAR = { ring: 'ring-slate-300 dark:ring-slate-600', bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300', shape: 'rounded-lg' }
-
-function EntityAvatar({ name, type, imageUrl }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const style    = AVATAR_STYLE[type] ?? FALLBACK_AVATAR
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
-
-  return (
-    <div className="flex flex-col items-center gap-1 shrink-0">
-      <div className={`w-12 h-12 ring-2 ${style.ring} ${style.shape} overflow-hidden flex items-center justify-center ${style.bg}`}>
-        {imageUrl && !imgFailed ? (
-          <img
-            src={imageUrl}
-            alt={name}
-            className="w-full h-full object-cover"
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          <span className={`text-sm font-bold ${style.text}`}>{initials}</span>
-        )}
-      </div>
-      <span className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[64px] text-center truncate leading-tight">
-        {name}
-      </span>
-    </div>
-  )
-}
+const FALLBACK_CHIP = 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
@@ -80,7 +57,6 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [reportMd, setReportMd]         = useState('')
   const [isLoading, setIsLoading]       = useState(true)
-  const [entityImages, setEntityImages] = useState({})
   const [error, setError]               = useState(null)
   const [copied, setCopied]             = useState(false)
   const abortRef = useRef(null)
@@ -122,26 +98,6 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     return () => style.remove()
   }, [])
 
-  // ── Fetch entity images (PERSON / ORG / PRODUCT) ─────────────────────────────
-  useEffect(() => {
-    const entityList = []
-    for (const [type, values] of Object.entries(entities)) {
-      if (['PERSON', 'ORG', 'PRODUCT'].includes(type) && Array.isArray(values)) {
-        for (const v of values.slice(0, 8)) {
-          if (typeof v === 'string' && v.trim()) entityList.push({ name: v.trim(), type })
-        }
-      }
-    }
-    if (!entityList.length) return
-    fetch('/api/entities/images', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entityList),
-    })
-      .then(r => r.json())
-      .then(data => setEntityImages(data ?? {}))
-      .catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── SSE streaming ─────────────────────────────────────────────────────────────
   const startStream = useCallback(() => {
@@ -223,15 +179,15 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   // Strip <think>…</think> blocks emitted by Qwen3
   const cleanMd = reportMd.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 
-  // Build avatar list (PERSON first, then ORG, PRODUCT)
-  const avatarList = []
-  for (const type of ['PERSON', 'ORG', 'PRODUCT']) {
+  // Build entity chip list (all types, PERSON/ORG/PRODUCT first)
+  const chipList = []
+  const TYPE_ORDER = ['PERSON', 'ORG', 'PRODUCT', 'GPE', 'EVENT', 'LOC']
+  const remaining = Object.keys(entities).filter(t => !TYPE_ORDER.includes(t))
+  for (const type of [...TYPE_ORDER, ...remaining]) {
     const vals = entities[type]
     if (!Array.isArray(vals)) continue
-    for (const v of vals.slice(0, 10)) {
-      if (typeof v === 'string') {
-        avatarList.push({ name: v, type, imageUrl: entityImages[v]?.url ?? null })
-      }
+    for (const v of vals.slice(0, 6)) {
+      if (typeof v === 'string' && v.trim()) chipList.push({ name: v.trim(), type })
     }
   }
 
@@ -437,11 +393,17 @@ export default function ArticleFullReportDialog({ article, onClose }) {
           </div>
         </div>
 
-        {/* ── Entity avatar band (Option 6A) ────────────────────────────────── */}
-        {avatarList.length > 0 && (
-          <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto shrink-0">
-            {avatarList.map(({ name, type, imageUrl }) => (
-              <EntityAvatar key={`${type}-${name}`} name={name} type={type} imageUrl={imageUrl} />
+        {/* ── Entity chip band ─────────────────────────────────────────────── */}
+        {chipList.length > 0 && (
+          <div className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 overflow-x-auto shrink-0">
+            {chipList.map(({ name, type }) => (
+              <span
+                key={`${type}-${name}`}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${CHIP_STYLE[type] ?? FALLBACK_CHIP}`}
+              >
+                {name}
+                <span className="opacity-60 font-normal">({type})</span>
+              </span>
             ))}
           </div>
         )}
