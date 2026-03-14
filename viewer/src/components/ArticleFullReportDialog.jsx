@@ -51,7 +51,8 @@ function MermaidBlock({ code, isStreaming }) {
     if (isStreaming) return            // attendre la fin du stream
     if (!containerRef.current) return
     setErrMsg(null)
-    setRendered(false)
+    // Ne pas remettre rendered=false ici : le SVG précédent reste visible
+    // pendant le re-rendu, évitant le flash "placeholder h-10 → plein écran"
 
     // Annuler si le composant est démonté avant la fin du rendu
     let cancelled = false
@@ -167,17 +168,41 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     style.setAttribute('data-article-report-print', '')
     style.textContent = `
       @media print {
-        body > *:not(#article-report-print-root) { display: none !important; }
+        /* Masquer tout sauf le wrapper du portal (ancêtre direct de body) */
+        body > *:not(#article-report-portal) { display: none !important; }
+
+        /* Supprimer backdrop / positionnement fixe du wrapper */
+        #article-report-portal {
+          position: static !important;
+          display: block !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          padding: 0 !important;
+          inset: unset !important;
+        }
+
+        /* La boîte de dialogue s'étale naturellement sur toutes les pages */
         #article-report-print-root {
-          position: fixed !important; inset: 0 !important;
-          width: 100vw !important; height: auto !important;
+          position: static !important;
+          display: block !important;
+          width: 100% !important;
+          max-width: none !important;
+          height: auto !important;
           overflow: visible !important;
           background: white !important;
           border-radius: 0 !important;
           box-shadow: none !important;
+          border: none !important;
         }
+
         .no-print { display: none !important; }
-        #article-report-print-root .overflow-y-auto { overflow: visible !important; }
+
+        /* Les conteneurs scrollables doivent laisser passer le contenu */
+        #article-report-print-root .overflow-y-auto {
+          overflow: visible !important;
+          height: auto !important;
+          max-height: none !important;
+        }
       }
     `
     document.head.appendChild(style)
@@ -431,6 +456,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   // ── Render ─────────────────────────────────────────────────────────────────────
   return createPortal(
     <div
+      id="article-report-portal"
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:p-0"
       onClick={e => e.target === e.currentTarget && !isFullscreen && onClose()}
     >
