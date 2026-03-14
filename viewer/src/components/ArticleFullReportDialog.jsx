@@ -9,7 +9,7 @@
  * - Actions : copier, télécharger .md, imprimer/PDF, régénérer, plein écran, fermer
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X, Maximize2, Minimize2, Copy, Download, Printer,
@@ -126,6 +126,21 @@ function MermaidBlock({ code, isStreaming }) {
   )
 }
 
+// ── Vue finale gelée ──────────────────────────────────────────────────────────
+// Montée une seule fois quand le stream est terminé.
+// Reçoit des props stables (md, components) → aucun re-render, aucun flash Mermaid.
+const FinalReportView = memo(function FinalReportView({ md, components }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+      components={components}
+    >
+      {md}
+    </ReactMarkdown>
+  )
+})
+
 // ── Entity avatar (bande en-tête) ─────────────────────────────────────────────
 
 const CHIP_STYLE = {
@@ -146,6 +161,10 @@ export default function ArticleFullReportDialog({ article, onClose }) {
   const [isLoading, setIsLoading]       = useState(true)
   const [error, setError]               = useState(null)
   const [copied, setCopied]             = useState(false)
+  // frozenMd : snapshot du markdown au moment où le stream se termine.
+  // La FinalReportView est montée avec ce snapshot et ne change plus jamais.
+  const [frozenMd,  setFrozenMd]        = useState(null)
+  const frozenComponentsRef             = useRef(null)  // components capturés à la fin du stream
   const abortRef = useRef(null)
 
   const entities     = article.entities ?? {}
@@ -216,6 +235,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     const ac = new AbortController()
     abortRef.current = ac
     setReportMd('')
+    setFrozenMd(null)   // réinitialiser la vue gelée pour repartir en streaming
     setIsLoading(true)
     setError(null)
 
@@ -279,6 +299,18 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     return () => abortRef.current?.abort()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Gel du markdown à la fin du stream ────────────────────────────────────────
+  // On capture cleanMd au moment précis où isLoading passe à false.
+  // frozenMd ne changera plus jusqu'au prochain startStream → FinalReportView stable.
+  useEffect(() => {
+    if (!isLoading && cleanMd) {
+      // Capturer le snapshot du markdown ET les composants (référence stable)
+      // pour que memo(FinalReportView) ne se re-rende jamais après le gel.
+      frozenComponentsRef.current = mdComponents
+      setFrozenMd(cleanMd)
+    }
+  }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Escape key ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const h = e => { if (e.key === 'Escape' && !isFullscreen) onClose() }
@@ -317,6 +349,50 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     window.dispatchEvent(new CustomEvent('wudd:openArticleChatbot', {
       detail: { titre, sources, date, url, entities, resume, reportMd: cleanMd },
     }))
+  }
+
+  // Impression via iframe isolé : évite de combattre le CSS du modal
+  const handlePrint = () => {
+    const rootEl = document.getElementById('article-report-print-root')
+    if (!rootEl) return
+
+    // Collecter les CSS de l'app (même origine) pour que Tailwind s'applique
+    const cssLinks = [...document.head.querySelectorAll('link[rel="stylesheet"]')]
+      .map(l => `<link rel="stylesheet" href="${l.href}">`)
+      .join('\n')
+
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:297mm;border:0;'
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentDocument
+    doc.open()
+    doc.write(`<!DOCTYPE html><html lang="fr"><head>
+<meta charset="utf-8">
+<title>Rapport — ${titre.replace(/</g, '&lt;')}</title>
+${cssLinks}
+<style>
+  body { margin: 0; padding: 2cm; background: white; color: black; }
+  .no-print { display: none !important; }
+  .overflow-y-auto { overflow: visible !important; height: auto !important; max-height: none !important; }
+  svg { width: 100% !important; height: auto !important; max-width: 100% !important; }
+  img { max-width: 100% !important; }
+  #article-report-print-root {
+    display: block !important; width: 100% !important; height: auto !important;
+    overflow: visible !important; background: white !important;
+    border-radius: 0 !important; box-shadow: none !important; border: none !important;
+  }
+</style>
+</head>
+<body>${rootEl.innerHTML}</body>
+</html>`)
+    doc.close()
+
+    iframe.onload = () => {
+      iframe.contentWindow.focus()
+      iframe.contentWindow.print()
+      setTimeout(() => iframe.remove(), 1000)
+    }
   }
 
   const handleDownload = () => {
@@ -497,7 +573,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
             <button onClick={handleDownload} className={btnCls} title="Télécharger .md">
               <Download size={14} />
             </button>
-            <button onClick={() => window.print()} className={btnCls} title="Imprimer / Exporter PDF">
+            <button onClick={handlePrint} className={btnCls} title="Imprimer / Exporter PDF">
               <Printer size={14} />
             </button>
             <button
@@ -556,8 +632,17 @@ export default function ArticleFullReportDialog({ article, onClose }) {
             </div>
           )}
 
-          {cleanMd && (
-            <div className="w-full max-w-none">
+          {frozenMd ? (
+            /* ── Vue finale gelée ─────────────────────────────────────────────
+               Montée une seule fois après la fin du stream.
+               Props stables → aucun re-render → Mermaid se rend dans le calme. */
+            <div key="final" className="w-full max-w-none">
+              <FinalReportView md={frozenMd} components={frozenComponentsRef.current} />
+            </div>
+          ) : cleanMd ? (
+            /* ── Vue streaming ────────────────────────────────────────────────
+               Mise à jour à chaque token — Mermaid affiche un placeholder. */
+            <div key="streaming" className="w-full max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
@@ -565,12 +650,9 @@ export default function ArticleFullReportDialog({ article, onClose }) {
               >
                 {cleanMd}
               </ReactMarkdown>
-              {/* Curseur clignotant pendant le streaming */}
-              {isLoading && (
-                <span className="inline-block w-1.5 h-4 bg-blue-500 dark:bg-blue-400 animate-pulse rounded-sm align-middle" />
-              )}
+              <span className="inline-block w-1.5 h-4 bg-blue-500 dark:bg-blue-400 animate-pulse rounded-sm align-middle" />
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>,
