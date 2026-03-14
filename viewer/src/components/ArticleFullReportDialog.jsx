@@ -37,35 +37,49 @@ function sanitizeMermaidCode(raw) {
     .trim()
 }
 
-function MermaidBlock({ code }) {
+function MermaidBlock({ code, isStreaming }) {
   const containerRef = useRef(null)
   const id           = useRef(`mermaid-rpt-${Math.random().toString(36).slice(2)}`)
-  const [errMsg, setErrMsg] = useState(null)
-  const [rendered,  setRendered]  = useState(false)
+  const [errMsg,   setErrMsg]   = useState(null)
+  const [rendered, setRendered] = useState(false)
 
   const clean = sanitizeMermaidCode(code)
 
+  // Ne tenter le rendu qu'une fois le stream terminé — évite le thrashing
+  // de layout à chaque token (le code Mermaid est partiel pendant le stream)
   useEffect(() => {
+    if (isStreaming) return            // attendre la fin du stream
     if (!containerRef.current) return
     setErrMsg(null)
     setRendered(false)
 
-    // Validation syntaxique avant rendu (évite les exceptions non catchées)
+    // Annuler si le composant est démonté avant la fin du rendu
+    let cancelled = false
+
     mermaid.parse(clean)
       .then(() => mermaid.render(id.current, clean))
       .then(({ svg }) => {
-        if (containerRef.current) {
+        if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg
           setRendered(true)
         }
       })
       .catch(e => {
+        if (cancelled) return
         const msg = e?.message ?? 'Syntaxe invalide'
-        // Extrait la ligne utile (supprime le stack trace verbeux)
         const firstLine = msg.split('\n').find(l => l.trim()) ?? msg
         setErrMsg(firstLine.length > 120 ? firstLine.slice(0, 120) + '…' : firstLine)
       })
-  }, [clean])
+
+    return () => { cancelled = true }
+  }, [clean, isStreaming])
+
+  // Pendant le stream : placeholder stable (hauteur fixe, pas de layout shift)
+  if (isStreaming) {
+    return (
+      <div className="my-6 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+    )
+  }
 
   if (errMsg) {
     return (
@@ -84,7 +98,7 @@ function MermaidBlock({ code }) {
   return (
     <div
       ref={containerRef}
-      className={`my-6 flex justify-center overflow-x-auto w-full ${rendered ? '' : 'min-h-[2rem]'}`}
+      className={`my-6 flex justify-center overflow-x-auto w-full ${rendered ? '' : 'h-10 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse'}`}
     />
   )
 }
@@ -314,7 +328,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     },
     code: ({ className, children }) => {
       if (className === 'language-mermaid') {
-        return <MermaidBlock code={String(children).trim()} />
+        return <MermaidBlock code={String(children).trim()} isStreaming={isLoading} />
       }
       const isBlock = className || String(children).includes('\n')
       if (!isBlock) {
