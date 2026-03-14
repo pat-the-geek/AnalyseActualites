@@ -383,14 +383,14 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     >
       <div
         id="article-report-print-root"
-        className={`flex flex-col shadow-2xl bg-white/92 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/45 dark:border-white/[0.09] transition-all duration-200 ${
+        className={`flex flex-col shadow-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 transition-all duration-200 ${
           isFullscreen
             ? 'fixed inset-0 rounded-none'
             : 'w-[80vw] max-w-5xl h-[88vh] rounded-2xl'
         } overflow-hidden`}
       >
         {/* ── Title bar ─────────────────────────────────────────────────────── */}
-        <div className="no-print flex items-center gap-3 px-5 py-3 border-b border-slate-200/60 dark:border-slate-700/60 shrink-0 bg-white/50 dark:bg-slate-900/50">
+        <div className="no-print flex items-center gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-900">
           <FileText size={17} className="text-blue-500 shrink-0" />
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{titre}</h2>
@@ -445,18 +445,6 @@ export default function ArticleFullReportDialog({ article, onClose }) {
           </div>
         )}
 
-        {/* ── Main article image ────────────────────────────────────────────── */}
-        {mainImageUrl && (
-          <div className="shrink-0 max-h-52 overflow-hidden bg-slate-100 dark:bg-slate-800">
-            <img
-              src={mainImageUrl}
-              alt={titre}
-              className="w-full max-h-52 object-cover"
-              loading="eager"
-              onError={e => { e.currentTarget.closest('div').style.display = 'none' }}
-            />
-          </div>
-        )}
 
         {/* ── Report content ────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
