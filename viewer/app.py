@@ -4332,45 +4332,16 @@ def api_article_full_report():
         f"## Entités nommées détectées\n{entity_context}\n\n"
         f"## {source_label.capitalize()}\n{source_text}\n\n"
         "---\n\n"
-        "## Instructions pour le rapport\n\n"
-        "Génère un rapport Markdown structuré, développé au maximum, selon le plan suivant :\n\n"
-        "### 1. En-tête du rapport\n"
-        "- Titre H1 reprenant le titre de l'article\n"
-        + (f"- Inclure l'image principale immédiatement après le titre :\n  {image_md}" if image_url else "")
-        + "- Ligne de métadonnées inline (source · date · sentiment)\n"
-        "- Paragraphe d'accroche résumant l'enjeu principal (2-4 phrases)\n\n"
-        "### 2. Contexte et enjeux (H2)\n"
-        "- 2 à 4 paragraphes développant le contexte (historique, géopolitique, économique ou technologique)\n"
-        "- **Mets en gras les noms d'entités** (PERSON, ORG, GPE, PRODUCT, EVENT) dans le texte\n\n"
-        "### 3. Analyse détaillée (H2)\n"
-        "- Corps principal divisé en sous-sections H3 thématiques selon le contenu\n"
-        "- **Mets en gras les noms d'entités** dans le texte\n"
-        "- Développe les arguments, cite les faits, les chiffres, les déclarations\n\n"
-        "### 4. Acteurs impliqués (H2)\n"
-        "- Tableau Markdown : | Entité | Type | Rôle dans l'article |\n"
-        "- Inclure toutes les entités nommées pertinentes\n\n"
-        "### 5. Diagrammes Mermaid\n"
-        "Inclure UNIQUEMENT les diagrammes pour lesquels les données sont présentes.\n"
-        "⚠️ RÈGLE ABSOLUE pour tous les diagrammes Mermaid :\n"
-        "- Remplace TOUS les caractères accentués par leurs équivalents sans accent dans les labels Mermaid\n"
-        "  (é→e, è→e, ê→e, à→a, ù→u, ô→o, î→i, ç→c, œ→oe, etc.)\n"
-        "- Les labels contenant des espaces DOIVENT être entre guillemets doubles : [\"Mon label\"]\n"
-        "- En Markdown du rapport (hors blocs Mermaid), les accents restent autorisés\n\n"
-        "a) **Chronologie** (si ≥ 2 événements datés mentionnés) :\n"
-        "```mermaid\ntimeline\n    title Chronologie\n    ...\n```\n\n"
-        "b) **Graphe de relations** (si ≥ 3 entités avec relations explicites) :\n"
-        "```mermaid\ngraph LR\n    A[\"Entite A\"] --> B[\"Entite B\"]\n```\n\n"
-        "c) **Données chiffrées** (si l'article contient des statistiques comparables) :\n"
-        "```mermaid\nxychart-beta\n    ...\n```\n\n"
-        "### 6. Points clés et conclusion (H2)\n"
-        "- 4 à 7 bullet points synthétisant les enseignements principaux\n"
-        "- Un paragraphe de conclusion avec perspective\n\n"
-        f"### 7. Source\n"
-        f"- Lien vers l'article source : {source_link}\n\n"
-        "---\n\n"
-        "Génère uniquement le contenu Markdown du rapport. "
-        "Ne génère pas de balises <think>. "
-        "Sois exhaustif et développe chaque section au maximum."
+        "Génère un rapport complet en Markdown français avec ces sections dans l'ordre :\n"
+        f"1. Titre H1{(' + ' + image_md.strip()) if image_url else ''} + métadonnées (source · date) + accroche\n"
+        "2. ## Contexte et enjeux — 2-4 paragraphes, **entités en gras**\n"
+        "3. ## Analyse détaillée — sous-sections H3, **entités en gras**, faits et chiffres\n"
+        "4. ## Acteurs impliqués — tableau | Entité | Type | Rôle |\n"
+        "5. ## Diagrammes (si données disponibles) — Mermaid timeline/graph/xychart. "
+        "⚠️ Labels Mermaid : sans accents (e=é,a=à,c=ç,u=ù), espaces entre guillemets [\"label\"]\n"
+        "6. ## Points clés — 4-7 bullets + conclusion\n"
+        f"7. ## Source — {source_link}\n\n"
+        "Règles : Markdown uniquement, pas de balises <think>, développe chaque section au maximum."
     )
 
     # ── 5. Stream via EurIA or Claude ─────────────────────────────────────────
@@ -4392,10 +4363,11 @@ def api_article_full_report():
         if not api_url or not bearer:
             return jsonify({"error": "URL ou bearer manquant dans .env (AI_PROVIDER=euria)"}), 503
         payload = {
-            "messages":   [{"role": "user", "content": prompt}],
-            "model":      "qwen3",
-            "stream":     True,
-            "max_tokens": 16000,
+            "messages":        [{"role": "user", "content": prompt}],
+            "model":           "qwen3",
+            "stream":          True,
+            "max_tokens":      16000,
+            "enable_thinking": False,
         }
         api_headers = {
             "Authorization": f"Bearer {bearer}",

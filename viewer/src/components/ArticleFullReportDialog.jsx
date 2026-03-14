@@ -177,7 +177,11 @@ export default function ArticleFullReportDialog({ article, onClose }) {
 
   // ── Derived state ─────────────────────────────────────────────────────────────
   // Strip <think>…</think> blocks emitted by Qwen3
-  const cleanMd = reportMd.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  // Filtre les blocs <think> fermés ET les blocs ouverts non fermés (stream coupé en cours de pensée)
+  const cleanMd = reportMd
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/<think>[\s\S]*/g, '')
+    .trim()
 
   // Build entity chip list (all types, PERSON/ORG/PRODUCT first)
   const chipList = []
