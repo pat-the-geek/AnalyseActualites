@@ -351,48 +351,64 @@ export default function ArticleFullReportDialog({ article, onClose }) {
     }))
   }
 
-  // Impression via iframe isolé : évite de combattre le CSS du modal
+  // Impression via window.open avec CSS auto-contenu.
+  // L'iframe était non fiable : onload pouvait tirer avant l'attachement du handler,
+  // et en mode Vite dev les CSS sont injectés par JS (pas de <link>) → page blanche.
   const handlePrint = () => {
-    const rootEl = document.getElementById('article-report-print-root')
-    if (!rootEl) return
+    const contentEl = document.querySelector('#article-report-print-root .overflow-y-auto')
+    if (!contentEl) return
 
-    // Collecter les CSS de l'app (même origine) pour que Tailwind s'applique
-    const cssLinks = [...document.head.querySelectorAll('link[rel="stylesheet"]')]
-      .map(l => `<link rel="stylesheet" href="${l.href}">`)
-      .join('\n')
+    const win = window.open('', '_blank')
+    if (!win) return   // popup bloqué par le navigateur
 
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:297mm;border:0;'
-    document.body.appendChild(iframe)
+    const meta = [sources, date, sentiment, ton].filter(Boolean).join(' · ')
 
-    const doc = iframe.contentDocument
-    doc.open()
-    doc.write(`<!DOCTYPE html><html lang="fr"><head>
+    win.document.write(`<!DOCTYPE html><html lang="fr"><head>
 <meta charset="utf-8">
-<title>Rapport — ${titre.replace(/</g, '&lt;')}</title>
-${cssLinks}
+<title>${titre.replace(/</g, '&lt;')}</title>
 <style>
-  body { margin: 0; padding: 2cm; background: white; color: black; }
-  .no-print { display: none !important; }
-  .overflow-y-auto { overflow: visible !important; height: auto !important; max-height: none !important; }
-  svg { width: 100% !important; height: auto !important; max-width: 100% !important; }
-  img { max-width: 100% !important; }
-  #article-report-print-root {
-    display: block !important; width: 100% !important; height: auto !important;
-    overflow: visible !important; background: white !important;
-    border-radius: 0 !important; box-shadow: none !important; border: none !important;
-  }
+  *    { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         font-size: 14px; line-height: 1.75; color: #1e293b;
+         max-width: 860px; margin: 0 auto; padding: 2cm; background: #fff; }
+  h1   { font-size: 1.75em; font-weight: 700; border-bottom: 2px solid #e2e8f0;
+         padding-bottom: .4em; margin: 1.6em 0 .8em; }
+  h2   { font-size: 1.35em; font-weight: 600; margin: 1.4em 0 .6em; }
+  h3   { font-size: 1.1em;  font-weight: 600; margin: 1.2em 0 .5em; }
+  h4   { font-size: 1em;    font-weight: 600; margin: 1em 0 .4em; }
+  p    { margin: .75em 0; }
+  ul, ol { padding-left: 1.8em; margin: .75em 0; }
+  li   { margin: .25em 0; }
+  blockquote { border-left: 4px solid #3b82f6; padding-left: 1em;
+               color: #64748b; font-style: italic; margin: 1em 0; }
+  code { background: #f1f5f9; padding: .15em .4em; border-radius: .3em;
+         font-family: 'Courier New', monospace; font-size: .88em; }
+  pre  { background: #f1f5f9; padding: 1em; border-radius: .5em;
+         overflow-x: auto; margin: 1em 0; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92em; }
+  th, td { border: 1px solid #e2e8f0; padding: .45em .85em; text-align: left; }
+  th   { background: #f8fafc; font-weight: 600; }
+  img  { max-width: 100%; height: auto; display: block; margin: .5em 0; }
+  svg  { width: 100% !important; height: auto !important;
+         max-width: 100% !important; display: block !important; }
+  a    { color: #2563eb; }
+  hr   { border: 0; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+  figcaption { font-size: .82em; color: #94a3b8; text-align: center;
+               margin-top: .3em; font-style: italic; }
+  .meta { font-size: .82em; color: #64748b; margin-bottom: 1.5em; }
+  @media print { body { padding: 0; } }
 </style>
 </head>
-<body>${rootEl.innerHTML}</body>
-</html>`)
-    doc.close()
-
-    iframe.onload = () => {
-      iframe.contentWindow.focus()
-      iframe.contentWindow.print()
-      setTimeout(() => iframe.remove(), 1000)
-    }
+<body>
+<h1>${titre.replace(/</g, '&lt;')}</h1>
+${meta ? `<p class="meta">${meta.replace(/</g, '&lt;')}</p>` : ''}
+${contentEl.innerHTML}
+</body></html>`)
+    win.document.close()
+    win.focus()
+    // Courte pause pour laisser le navigateur rendre avant d'ouvrir la dialog d'impression
+    setTimeout(() => { win.print(); win.close() }, 300)
   }
 
   const handleDownload = () => {
