@@ -26,15 +26,19 @@ mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose
 // ── Mermaid block ─────────────────────────────────────────────────────────────
 
 function MermaidBlock({ code }) {
-  const ref = useRef(null)
-  const id  = useRef(`mermaid-rpt-${Math.random().toString(36).slice(2)}`)
+  const ref    = useRef(null)
+  const id     = useRef(`mermaid-rpt-${Math.random().toString(36).slice(2)}`)
+  const [err, setErr] = useState(null)
 
   useEffect(() => {
     if (!ref.current) return
+    setErr(null)
     mermaid.render(id.current, code)
       .then(({ svg }) => { if (ref.current) ref.current.innerHTML = svg })
-      .catch(err => { if (ref.current) ref.current.textContent = `Erreur Mermaid : ${err.message}` })
+      .catch(() => { setErr(true) })
   }, [code])
+
+  if (err) return null   // Diagramme invalide : on masque silencieusement
 
   return <div ref={ref} className="my-6 flex justify-center overflow-x-auto" />
 }
