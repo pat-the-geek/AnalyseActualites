@@ -4384,7 +4384,7 @@ def api_article_full_report():
         _claude = _CC(api_key=api_key)
 
         def generate():
-            yield from _claude.stream(prompt=prompt, timeout=300)
+            yield from _claude.stream(prompt=prompt, max_tokens=16000, timeout=300)
 
     else:
         api_url = os.environ.get("URL", "")
