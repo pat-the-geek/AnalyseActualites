@@ -4243,6 +4243,184 @@ def api_chat_save():
         return jsonify({"error": f"Erreur écriture : {e}"}), 500
 
 
+@app.route("/api/article/full-report")
+def api_article_full_report():
+    """Génère en streaming un rapport complet approfondi sur un article.
+
+    Paramètres GET :
+      url        — URL de l'article source (fetch HTML + extraction texte)
+      titre      — Titre de l'article
+      sources    — Source / média
+      date       — Date de publication
+      resume     — Résumé existant (fallback si URL inaccessible ou derrière paywall)
+      entities   — JSON dict {TYPE: [valeur, …]}
+      sentiment  — Sentiment (positif/neutre/négatif)
+      ton        — Ton éditorial
+      image_url  — URL de l'image principale de l'article
+
+    Retourne un flux SSE (text/event-stream) identique au format EurIA / OpenAI.
+    """
+    import requests as _req
+    from bs4 import BeautifulSoup as _BS
+
+    url         = request.args.get("url",        "").strip()
+    titre       = request.args.get("titre",      "").strip()
+    sources     = request.args.get("sources",    "").strip()
+    date        = request.args.get("date",       "").strip()
+    resume_ex   = request.args.get("resume",     "").strip()
+    entities_js = request.args.get("entities",   "{}").strip()
+    sentiment   = request.args.get("sentiment",  "").strip()
+    ton         = request.args.get("ton",        "").strip()
+    image_url   = request.args.get("image_url",  "").strip()
+
+    try:
+        entities = json.loads(entities_js)
+    except (json.JSONDecodeError, ValueError):
+        entities = {}
+
+    if not url and not resume_ex:
+        return jsonify({"error": "url ou resume requis"}), 400
+
+    # ── 1. Fetch article content from URL ─────────────────────────────────────
+    source_text = ""
+    url_ok = False
+    if url:
+        try:
+            resp = _req.get(
+                url, timeout=15,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; WUDD-bot/1.0)"},
+            )
+            resp.raise_for_status()
+            soup = _BS(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
+            source_text = " ".join(soup.get_text(separator=" ").split())[:20000]
+            url_ok = bool(source_text.strip())
+        except Exception:
+            pass  # fallback on resume below
+
+    if not source_text.strip():
+        source_text = resume_ex
+    if not source_text.strip():
+        return jsonify({"error": "Aucun texte source disponible (URL inaccessible et résumé absent)"}), 400
+
+    # ── 2. Entity context for the prompt ─────────────────────────────────────
+    entity_lines = []
+    for etype, vals in entities.items():
+        if isinstance(vals, list) and vals:
+            entity_lines.append(f"  - {etype} : {', '.join(str(v) for v in vals[:10])}")
+    entity_context = "\n".join(entity_lines) if entity_lines else "  Aucune entité extraite."
+
+    # ── 3. Metadata string ────────────────────────────────────────────────────
+    meta_parts = []
+    if titre:     meta_parts.append(f"Titre : {titre}")
+    if sources:   meta_parts.append(f"Source : {sources}")
+    if date:      meta_parts.append(f"Date : {date}")
+    if sentiment: meta_parts.append(f"Sentiment : {sentiment}")
+    if ton:       meta_parts.append(f"Ton éditorial : {ton}")
+    meta_str = "\n".join(meta_parts) or "(non renseigné)"
+
+    source_label = "texte complet de l'article" if url_ok else "résumé de l'article"
+    image_md = f"![Image principale]({image_url})\n\n" if image_url else ""
+    source_link = f"[{url}]({url})" if url else "(non disponible)"
+
+    # ── 4. Prompt ─────────────────────────────────────────────────────────────
+    prompt = (
+        f"Tu es un analyste en intelligence médiatique. "
+        f"À partir du {source_label} ci-dessous, génère un **rapport approfondi en Markdown** en français.\n\n"
+        f"## Métadonnées\n{meta_str}\n\n"
+        f"## Entités nommées détectées\n{entity_context}\n\n"
+        f"## {source_label.capitalize()}\n{source_text}\n\n"
+        "---\n\n"
+        "## Instructions pour le rapport\n\n"
+        "Génère un rapport Markdown structuré, développé au maximum, selon le plan suivant :\n\n"
+        "### 1. En-tête du rapport\n"
+        "- Titre H1 reprenant le titre de l'article\n"
+        + (f"- Inclure l'image principale immédiatement après le titre :\n  {image_md}" if image_url else "")
+        + "- Ligne de métadonnées inline (source · date · sentiment)\n"
+        "- Paragraphe d'accroche résumant l'enjeu principal (2-4 phrases)\n\n"
+        "### 2. Contexte et enjeux (H2)\n"
+        "- 2 à 4 paragraphes développant le contexte (historique, géopolitique, économique ou technologique)\n"
+        "- **Mets en gras les noms d'entités** (PERSON, ORG, GPE, PRODUCT, EVENT) dans le texte\n\n"
+        "### 3. Analyse détaillée (H2)\n"
+        "- Corps principal divisé en sous-sections H3 thématiques selon le contenu\n"
+        "- **Mets en gras les noms d'entités** dans le texte\n"
+        "- Développe les arguments, cite les faits, les chiffres, les déclarations\n\n"
+        "### 4. Acteurs impliqués (H2)\n"
+        "- Tableau Markdown : | Entité | Type | Rôle dans l'article |\n"
+        "- Inclure toutes les entités nommées pertinentes\n\n"
+        "### 5. Diagrammes Mermaid\n"
+        "Inclure UNIQUEMENT les diagrammes pour lesquels les données sont présentes.\n"
+        "⚠️ RÈGLE ABSOLUE pour tous les diagrammes Mermaid :\n"
+        "- Remplace TOUS les caractères accentués par leurs équivalents sans accent dans les labels Mermaid\n"
+        "  (é→e, è→e, ê→e, à→a, ù→u, ô→o, î→i, ç→c, œ→oe, etc.)\n"
+        "- Les labels contenant des espaces DOIVENT être entre guillemets doubles : [\"Mon label\"]\n"
+        "- En Markdown du rapport (hors blocs Mermaid), les accents restent autorisés\n\n"
+        "a) **Chronologie** (si ≥ 2 événements datés mentionnés) :\n"
+        "```mermaid\ntimeline\n    title Chronologie\n    ...\n```\n\n"
+        "b) **Graphe de relations** (si ≥ 3 entités avec relations explicites) :\n"
+        "```mermaid\ngraph LR\n    A[\"Entite A\"] --> B[\"Entite B\"]\n```\n\n"
+        "c) **Données chiffrées** (si l'article contient des statistiques comparables) :\n"
+        "```mermaid\nxychart-beta\n    ...\n```\n\n"
+        "### 6. Points clés et conclusion (H2)\n"
+        "- 4 à 7 bullet points synthétisant les enseignements principaux\n"
+        "- Un paragraphe de conclusion avec perspective\n\n"
+        f"### 7. Source\n"
+        f"- Lien vers l'article source : {source_link}\n\n"
+        "---\n\n"
+        "Génère uniquement le contenu Markdown du rapport. "
+        "Ne génère pas de balises <think>. "
+        "Sois exhaustif et développe chaque section au maximum."
+    )
+
+    # ── 5. Stream via EurIA or Claude ─────────────────────────────────────────
+    provider = os.environ.get("AI_PROVIDER", "euria").strip().lower()
+
+    if provider == "claude":
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "ANTHROPIC_API_KEY manquante dans .env (AI_PROVIDER=claude)"}), 503
+        from utils.api_client import ClaudeClient as _CC
+        _claude = _CC(api_key=api_key)
+
+        def generate():
+            yield from _claude.stream(prompt=prompt, timeout=300)
+
+    else:
+        api_url = os.environ.get("URL", "")
+        bearer  = os.environ.get("bearer", "")
+        if not api_url or not bearer:
+            return jsonify({"error": "URL ou bearer manquant dans .env (AI_PROVIDER=euria)"}), 503
+        payload = {
+            "messages": [{"role": "user", "content": prompt}],
+            "model":    "qwen3",
+            "stream":   True,
+        }
+        api_headers = {
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type":  "application/json",
+        }
+
+        def generate():
+            try:
+                r = _req.post(
+                    api_url, json=payload, headers=api_headers,
+                    stream=True, timeout=300,
+                )
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        yield line.decode("utf-8") + "\n\n"
+            except Exception as exc:
+                yield f'data: {json.dumps({"error": str(exc)})}\n\n'
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_app(path):
