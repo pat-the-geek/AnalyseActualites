@@ -25,22 +25,68 @@ mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose
 
 // ── Mermaid block ─────────────────────────────────────────────────────────────
 
+/** Nettoie le code Mermaid avant rendu (artifacts markdown fréquents) */
+function sanitizeMermaidCode(raw) {
+  return raw
+    .replace(/^```mermaid\s*/i, '')   // backticks résiduels (début)
+    .replace(/```\s*$/,         '')   // backticks résiduels (fin)
+    .replace(/&amp;/g,          '&')  // entités HTML
+    .replace(/&lt;/g,           '<')
+    .replace(/&gt;/g,           '>')
+    .replace(/\r\n/g,           '\n') // CRLF → LF
+    .trim()
+}
+
 function MermaidBlock({ code }) {
-  const ref    = useRef(null)
-  const id     = useRef(`mermaid-rpt-${Math.random().toString(36).slice(2)}`)
-  const [err, setErr] = useState(null)
+  const containerRef = useRef(null)
+  const id           = useRef(`mermaid-rpt-${Math.random().toString(36).slice(2)}`)
+  const [errMsg, setErrMsg] = useState(null)
+  const [rendered,  setRendered]  = useState(false)
+
+  const clean = sanitizeMermaidCode(code)
 
   useEffect(() => {
-    if (!ref.current) return
-    setErr(null)
-    mermaid.render(id.current, code)
-      .then(({ svg }) => { if (ref.current) ref.current.innerHTML = svg })
-      .catch(() => { setErr(true) })
-  }, [code])
+    if (!containerRef.current) return
+    setErrMsg(null)
+    setRendered(false)
 
-  if (err) return null   // Diagramme invalide : on masque silencieusement
+    // Validation syntaxique avant rendu (évite les exceptions non catchées)
+    mermaid.parse(clean)
+      .then(() => mermaid.render(id.current, clean))
+      .then(({ svg }) => {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg
+          setRendered(true)
+        }
+      })
+      .catch(e => {
+        const msg = e?.message ?? 'Syntaxe invalide'
+        // Extrait la ligne utile (supprime le stack trace verbeux)
+        const firstLine = msg.split('\n').find(l => l.trim()) ?? msg
+        setErrMsg(firstLine.length > 120 ? firstLine.slice(0, 120) + '…' : firstLine)
+      })
+  }, [clean])
 
-  return <div ref={ref} className="my-6 flex justify-center overflow-x-auto" />
+  if (errMsg) {
+    return (
+      <div className="my-6 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">
+          ⚠ Diagramme Mermaid non rendu — erreur de syntaxe
+        </p>
+        <p className="text-xs text-amber-600 dark:text-amber-500 font-mono mb-3 break-all">{errMsg}</p>
+        <pre className="text-xs text-slate-600 dark:text-slate-400 font-mono whitespace-pre-wrap bg-white dark:bg-slate-900 rounded-lg p-3 border border-amber-100 dark:border-amber-900 overflow-x-auto">
+          {clean}
+        </pre>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={`my-6 flex justify-center overflow-x-auto w-full ${rendered ? '' : 'min-h-[2rem]'}`}
+    />
+  )
 }
 
 // ── Entity avatar (bande en-tête) ─────────────────────────────────────────────
@@ -357,7 +403,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
         className={`flex flex-col shadow-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 transition-all duration-200 ${
           isFullscreen
             ? 'fixed inset-0 rounded-none'
-            : 'w-[80vw] max-w-5xl h-[88vh] rounded-2xl'
+            : 'w-[92vw] max-w-[1400px] h-[92vh] rounded-2xl'
         } overflow-hidden`}
       >
         {/* ── Title bar ─────────────────────────────────────────────────────── */}
@@ -434,7 +480,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
 
 
         {/* ── Report content ────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 bg-white dark:bg-slate-900">
+        <div className="flex-1 overflow-y-auto px-10 py-6 bg-white dark:bg-slate-900">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-sm text-rose-700 dark:text-rose-300">
               Erreur : {error}
@@ -449,7 +495,7 @@ export default function ArticleFullReportDialog({ article, onClose }) {
           )}
 
           {cleanMd && (
-            <div className="max-w-3xl mx-auto">
+            <div className="w-full max-w-none">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
