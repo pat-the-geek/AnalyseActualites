@@ -60,24 +60,29 @@ function MermaidBlock({ code, isStreaming }) {
       .then(() => mermaid.render(id.current, clean))
       .then(({ svg }) => {
         if (!cancelled && containerRef.current) {
-          containerRef.current.innerHTML = svg
-          // Rendre le SVG responsive : supprime width/height fixes,
-          // force 100 % de largeur tout en conservant le viewBox
-          const svgEl = containerRef.current.querySelector('svg')
-          if (svgEl) {
-            const vb = svgEl.getAttribute('viewBox')
-            if (!vb) {
-              // Construire un viewBox depuis les dimensions existantes
-              const w = svgEl.getAttribute('width')  || svgEl.style.width  || '800'
-              const h = svgEl.getAttribute('height') || svgEl.style.height || '400'
-              svgEl.setAttribute('viewBox', `0 0 ${parseFloat(w)} ${parseFloat(h)}`)
+          // Rendre le SVG responsive AVANT injection dans le DOM :
+          // on manipule la chaîne pour éviter tout recalcul de layout
+          // qui remettrait les dimensions fixes (flex reflow, Mermaid style attr…)
+          const responsiveSvg = svg.replace(/<svg([^>]*)>/i, (_, attrs) => {
+            const vbMatch = attrs.match(/viewBox="([^"]*)"/i)
+            const wMatch  = attrs.match(/width="([^"]*)"/i)
+            const hMatch  = attrs.match(/height="([^"]*)"/i)
+
+            // Construire un viewBox si absent
+            let extra = ''
+            if (!vbMatch && wMatch && hMatch) {
+              extra = ` viewBox="0 0 ${parseFloat(wMatch[1])} ${parseFloat(hMatch[1])}"`
             }
-            svgEl.setAttribute('width',  '100%')
-            svgEl.removeAttribute('height')
-            svgEl.style.width    = '100%'
-            svgEl.style.height   = 'auto'
-            svgEl.style.maxWidth = '100%'
-          }
+
+            // Supprimer width, height et tout style inline existant
+            const cleaned = attrs
+              .replace(/\s+width="[^"]*"/gi,  '')
+              .replace(/\s+height="[^"]*"/gi, '')
+              .replace(/\s+style="[^"]*"/gi,  '')
+
+            return `<svg${cleaned}${extra} width="100%" style="width:100%;height:auto;max-width:100%;display:block;">`
+          })
+          containerRef.current.innerHTML = responsiveSvg
           setRendered(true)
         }
       })
@@ -115,7 +120,7 @@ function MermaidBlock({ code, isStreaming }) {
   return (
     <div
       ref={containerRef}
-      className={`my-6 flex justify-center overflow-x-auto w-full ${rendered ? '' : 'h-10 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse'}`}
+      className={`my-6 w-full overflow-x-auto ${rendered ? '' : 'h-10 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse'}`}
     />
   )
 }
