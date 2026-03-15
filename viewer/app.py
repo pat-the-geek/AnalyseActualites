@@ -1393,7 +1393,10 @@ def api_entities_articles():
                     if not isinstance(entities, dict):
                         continue
                     values = entities.get(entity_type, [])
-                    if not (isinstance(values, list) and entity_value in values):
+                    ev_lower = entity_value.lower()
+                    if not (isinstance(values, list) and any(
+                        isinstance(v, str) and v.lower() == ev_lower for v in values
+                    )):
                         continue
                     url = (article.get("URL") or "").strip()
                     resume_key = article.get("Résumé", "")[:150].strip()
@@ -1541,7 +1544,10 @@ def api_entity_context():
                         if not isinstance(ents, dict):
                             continue
                         values = ents.get(entity_type, [])
-                        if not (isinstance(values, list) and entity_value in values):
+                        _ev_lower = entity_value.lower()
+                        if not (isinstance(values, list) and any(
+                            isinstance(v, str) and v.lower() == _ev_lower for v in values
+                        )):
                             continue
                         url = (article.get("URL") or "").strip()
                         if url and url in seen_urls:
@@ -1802,19 +1808,23 @@ def api_entities_cooccurrences():
                 continue
 
     # ── Passe 1 : co-occurrences L1 ──────────────────────────────────────────
+    entity_value_lower = entity_value.lower()
     cooc_l1: dict[tuple[str, str], int] = {}
     for article in all_articles:
         entities = article.get("entities", {})
         if not isinstance(entities, dict):
             continue
         values = entities.get(entity_type, [])
-        if not isinstance(values, list) or entity_value not in values:
+        # Comparaison insensible à la casse pour robustesse vis-à-vis de la normalisation
+        if not isinstance(values, list) or not any(
+            v.lower() == entity_value_lower for v in values if isinstance(v, str)
+        ):
             continue
         for etype, evals in entities.items():
             if not isinstance(evals, list):
                 continue
             for ev in evals:
-                if etype == entity_type and ev == entity_value:
+                if etype == entity_type and ev.lower() == entity_value_lower:
                     continue
                 key = (etype, ev)
                 cooc_l1[key] = cooc_l1.get(key, 0) + 1
@@ -1861,7 +1871,7 @@ def api_entities_cooccurrences():
                         co_key = (etype, ev)
                         if co_key == l1_key:
                             continue
-                        if co_key == (entity_type, entity_value):
+                        if etype == entity_type and ev.lower() == entity_value_lower:
                             continue  # évite l'arête de retour vers le centre
                         cooc_l2[(l1_key, co_key)] = cooc_l2.get((l1_key, co_key), 0) + 1
 
@@ -2841,7 +2851,10 @@ def api_synthesize_topic():
                     entity_match = False
                     if entity_type and entity_value:
                         values = entities.get(entity_type, []) if isinstance(entities, dict) else []
-                        entity_match = entity_value in values
+                        _ev_l = entity_value.lower()
+                        entity_match = any(
+                            isinstance(v, str) and v.lower() == _ev_l for v in values
+                        )
                     text_match = search_term in resume
                     if entity_match or text_match:
                         matching_articles.append(article)
@@ -3504,7 +3517,10 @@ def api_watched_get():
 
                 for w in watched:
                     vals = entities.get(w["type"], [])
-                    if isinstance(vals, list) and w["value"] in vals:
+                    _wv_lower = w["value"].lower()
+                    if isinstance(vals, list) and any(
+                        isinstance(v, str) and v.lower() == _wv_lower for v in vals
+                    ):
                         key = f"{w['type']}:{w['value']}"
                         if art_dt and art_dt >= cutoff_7d:
                             counts_7d[key] = counts_7d.get(key, 0) + 1
