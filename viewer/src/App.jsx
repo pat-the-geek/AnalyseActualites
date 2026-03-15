@@ -6,7 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import EntitySearchModal from './components/EntitySearchModal'
 import EntityDashboard from './components/EntityDashboard'
 import ScriptConsolePanel from './components/ScriptConsolePanel'
-import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight, ChevronDown, MoreHorizontal, MessageSquare } from 'lucide-react'
+import { Search, Settings, Sun, Moon, Monitor, BarChart2, Terminal, Menu, Clock, TrendingUp, Star, Eye, Share2, Layers, Bell, ArrowLeftRight, ChevronDown, MoreHorizontal, MessageSquare, Newspaper } from 'lucide-react'
 import AlertsPanel from './components/AlertsPanel'
 import ExportPanel from './components/ExportPanel'
 import TopArticlesPanel from './components/TopArticlesPanel'
@@ -217,6 +217,12 @@ export default function App() {
   const [fileContent, setFileContent] = useState(null)
   const [contentLoading, setContentLoading] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchTypeMenuOpen, setSearchTypeMenuOpen] = useState(false)
+  const [searchMode, setSearchMode] = useState('file')
+  const [articleSearchQuery, setArticleSearchQuery] = useState({ query: '', version: 0 })
+  const articleSearchVersionRef = useRef(0)
+  const [articleFocusSignal, setArticleFocusSignal] = useState(0)
+  const articleFocusSignalRef = useRef(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [typeFilter, setTypeFilter] = useState('all')
   const [nameSearch, setNameSearch] = useState('')
@@ -443,6 +449,10 @@ export default function App() {
     setFileContent(null)
     setContentLoading(true)
     setLoadingProgress(0)
+    setArticleSearchQuery({ query: '', version: 0 })
+    articleSearchVersionRef.current = 0
+    setArticleFocusSignal(0)
+    articleFocusSignalRef.current = 0
     if (window.innerWidth < 768) setSidebarOpen(false)
 
     fetch(`/api/stream-content?path=${encodeURIComponent(file.path)}`)
@@ -743,6 +753,9 @@ export default function App() {
           onAnnotate={handleAnnotate}
           sidebarOpen={sidebarOpen}
           availableProviders={availableProviders}
+          articleSearchQuery={articleSearchQuery}
+          articleFocusSignal={articleFocusSignal}
+          onMobileSearchClose={() => setArticleFocusSignal(0)}
         />
       </div>
 
@@ -783,15 +796,15 @@ export default function App() {
 
           {/* 3 — Recherche : centre = zone pouce prioritaire */}
           <button
-            onClick={() => setSearchOpen(true)}
-            title="Recherche plein texte"
+            onClick={() => { setSearchTypeMenuOpen(true) }}
+            title="Recherche"
             className={`flex flex-1 flex-col items-center justify-center gap-[2px] transition-colors active:opacity-60 ${
-              searchOpen
+              searchOpen || searchTypeMenuOpen
                 ? 'text-blue-600 dark:text-blue-400'
                 : 'text-slate-400 dark:text-slate-500'
             }`}
           >
-            <Search size={24} strokeWidth={searchOpen ? 2.2 : 1.8} />
+            <Search size={24} strokeWidth={searchOpen || searchTypeMenuOpen ? 2.2 : 1.8} />
             <span className="text-[10px] font-medium leading-none">Recherche</span>
           </button>
 
@@ -844,10 +857,79 @@ export default function App() {
       {consoleOpen && (
         <ScriptConsolePanel onClose={() => setConsoleOpen(false)} onDone={refreshFiles} />
       )}
+      {/* Sélecteur type de recherche — mobile uniquement */}
+      {searchTypeMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end"
+          onClick={() => setSearchTypeMenuOpen(false)}
+        >
+          <div
+            className="w-full bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl border-t border-slate-200/60 dark:border-white/10"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+            </div>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300 px-4 pt-2 pb-3 text-center">
+              Que souhaitez-vous rechercher ?
+            </p>
+            <div className="flex flex-col gap-2 px-4 pb-5">
+              <button
+                onClick={() => { setSearchMode('file'); setSearchTypeMenuOpen(false); setSearchOpen(true) }}
+                className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-left active:opacity-70 transition-opacity"
+              >
+                <Search size={20} className="text-blue-500 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-slate-800 dark:text-slate-100">Recherche fichier</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Trouver des fichiers contenant un mot-clé</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedFile && selectedFile.type === 'json') {
+                    articleFocusSignalRef.current += 1
+                    setArticleFocusSignal(articleFocusSignalRef.current)
+                    setSearchTypeMenuOpen(false)
+                    if (window.innerWidth < 768) setSidebarOpen(false)
+                  }
+                }}
+                disabled={!selectedFile || selectedFile?.type !== 'json'}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-opacity ${
+                  selectedFile && selectedFile.type === 'json'
+                    ? 'bg-slate-100 dark:bg-slate-700 active:opacity-70'
+                    : 'bg-slate-50 dark:bg-slate-800/50 opacity-40 cursor-not-allowed'
+                }`}
+              >
+                <Newspaper size={20} className="text-amber-500 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-slate-800 dark:text-slate-100">Recherche article</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {selectedFile && selectedFile.type === 'json'
+                      ? `Dans : ${selectedFile.name}`
+                      : "Ouvrez d'abord un fichier JSON"}
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {searchOpen && (
         <SearchOverlay
           onClose={() => setSearchOpen(false)}
-          onSelect={(file) => { selectFile(file); setSearchOpen(false) }}
+          mode={searchMode}
+          currentFile={selectedFile}
+          onSelect={(result) => {
+            if (searchMode === 'article') {
+              articleSearchVersionRef.current += 1
+              setArticleSearchQuery({ query: result._query || '', version: articleSearchVersionRef.current })
+            } else {
+              selectFile(result)
+            }
+            setSearchOpen(false)
+          }}
         />
       )}
       {settingsOpen && (

@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 from pathlib import Path
+import pytest
 from utils.cache import get_cache
 from utils.config import get_config
 
@@ -45,5 +46,7 @@ def test_flux_config():
     with open(flux_config_path, "r", encoding="utf-8") as f:
         flux_list = json.load(f)
     assert isinstance(flux_list, list)
+    if not flux_list:
+        pytest.skip("flux_json_sources.json est vide (URLs privées non configurées)")
     assert "title" in flux_list[0]
     assert "url" in flux_list[0]

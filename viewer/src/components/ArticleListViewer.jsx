@@ -564,8 +564,9 @@ function TimelineItem({ article }) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export default function ArticleListViewer({ content, annotations, onAnnotate, filePath, availableProviders }) {
-  const [searchQuery, setSearchQuery]         = useState('')
+export default function ArticleListViewer({ content, annotations, onAnnotate, filePath, availableProviders, searchInjection = null, focusSignal = 0, onMobileSearchClose }) {
+  const [searchQuery, setSearchQuery]         = useState(searchInjection?.query || '')
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [sortBy, setSortBy]                   = useState('date-desc')
   const [viewStyle, setViewStyle]             = useState('grid') // 'grid' | 'large' | 'timeline'
   const [selectedTypes, setSelectedTypes]     = useState(new Set())
@@ -576,6 +577,25 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
   const [sourcesOpen, setSourcesOpen]         = useState(false)
   const [annotFilter, setAnnotFilter]         = useState('tous') // 'tous' | 'importants' | 'non-lus'
   const searchRef = useRef(null)
+  const mobileSearchRef = useRef(null)
+
+  // ── Injection de la query externe (depuis SearchOverlay) ─────────────────
+  useEffect(() => {
+    if (searchInjection?.query && searchInjection.version > 0) {
+      setSearchQuery(searchInjection.query)
+      setTimeout(() => searchRef.current?.focus(), 100)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInjection?.version])
+
+  // ── Signal d’activation de la recherche mobile ────────────────────────
+  useEffect(() => {
+    if (focusSignal > 0) {
+      setMobileSearchOpen(true)
+      setTimeout(() => mobileSearchRef.current?.focus(), 100)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSignal])
 
   // ── Défilement vers le premier article non lu ─────────────────────────────
   const gridRef        = useRef(null)
@@ -763,6 +783,35 @@ export default function ArticleListViewer({ content, annotations, onAnnotate, fi
           </button>
         )}
       </div>
+
+      {/* ── Barre de recherche mobile : fixed dans le viewport ── */}
+      {(mobileSearchOpen || searchQuery) && (
+        <div className="md:hidden fixed left-0 right-0 z-[60] flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900 border-b-2 border-blue-500 shadow-lg"
+          style={{ top: 'env(safe-area-inset-top, 0px)' }}
+        >
+          <Search size={15} className="text-blue-500 shrink-0" />
+          <input
+            ref={mobileSearchRef}
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Rechercher dans les résumés…"
+            className="flex-1 bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+            autoFocus
+          />
+          {searchQuery && (
+            <span className="text-xs font-medium text-slate-400 shrink-0">
+              {displayedArticles.length} / {articles?.length ?? 0}
+            </span>
+          )}
+          <button
+            onClick={() => { setSearchQuery(''); setMobileSearchOpen(false); onMobileSearchClose?.() }}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 shrink-0 p-1"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* ── Toolbar : recherche + tri + vue + export — masqué sur mobile ── */}
       <div className="hidden md:flex md:flex-row gap-2 mb-4 sticky top-0 z-10 -mx-6 px-6 py-3 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-white/30 dark:border-slate-700/30">
