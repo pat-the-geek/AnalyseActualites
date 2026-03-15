@@ -100,20 +100,20 @@ mindmap
       Flux JSON par URL HTTP
       Multi-flux cloisonnés
     Résumé IA
-      EurIA (Qwen3) ou Claude
+      EurIA / Qwen3 ou Claude
       20 lignes · français
       3 images par article
     Analyse thématique
       12 thématiques sociétales
       Statistiques de couverture
       Classement automatique
-    Mots-clés & alertes
+    Mots-clés et alertes
       Surveillance quotidienne
       Rapport JSON + résumé IA
       Configurable dans config/
     Analyse sémantique
       Sémantique lexicale
-        Mots-clés & thématiques
+        Mots-clés et thématiques
         12 thématiques sociétales
         Surveillance quotidienne RSS
       Sémantique référentielle
@@ -129,7 +129,7 @@ mindmap
       Cron intégré au conteneur
       Sorties JSON · Markdown · PDF
       Zéro dépendance côté hôte
-    Terminal IA (local AI agent)
+    Terminal IA - local AI agent
       Interrogation en langage naturel
       Lecture et modification des JSON locaux
       RAG · tool-calling agent
@@ -137,9 +137,9 @@ mindmap
     Viewer web
       Navigation par flux
       JSON · Markdown · images
-      Recherche plein texte ⌘K
-      Édition & sauvegarde inline
-      Gestion flux & planification
+      Recherche plein texte Cmd K
+      Édition et sauvegarde inline
+      Gestion flux et planification
 ```
 
 ---
