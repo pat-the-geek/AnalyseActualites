@@ -1,7 +1,7 @@
 # WUDD.ai — Rapport d'améliorations logicielles
 
 **Date de mise à jour :** 15 mars 2026
-**Version courante :** 2.4.0
+**Version courante :** 2.5.0
 **Auteur :** Claude (Sonnet 4.6) — sessions de refactoring
 
 ---
@@ -10,7 +10,7 @@
 
 1. [Historique des versions](#1-historique-des-versions)
 2. [Architecture générale](#2-architecture-générale)
-3. [Améliorations réalisées — v2.1.0 → v2.4.0](#3-améliorations-réalisées)
+3. [Améliorations réalisées — v2.1.0 → v2.5.0](#3-améliorations-réalisées)
    - 3.1 Infrastructure `utils/` (v2.1.0)
    - 3.2 Quota, déduplication, crédibilité, lecture (v2.2–2.3)
    - 3.3 Correction O(n²) — `generate_briefing.py` (Axe 3b)
@@ -24,9 +24,16 @@
    - 3.11 Timeline + cross-flux via entity_index (Axe 5)
    - 3.12 Suivi des échecs d'enrichissement (Axe 8)
    - 3.13 Vérification `api_entity_context` (Axe 4 — viewer)
+   - 3.14 Index updates dans get-keyword-from-rss + web_watcher (A+B)
+   - 3.15 Migration trend_detector + generate_briefing vers indexes (C+E)
+   - 3.16 Migration 6 endpoints viewer vers indexes (D)
+   - 3.17 Utilitaire `utils/rolling_window.py` (F)
+   - 3.18 `parse_article_date()` centralisé dans `utils/date_utils.py` (G)
+   - 3.19 Écriture atomique dans `get-keyword-from-rss.py` (H)
 4. [Gains de performance mesurés](#4-gains-de-performance)
 5. [Nouvelles propositions d'améliorations](#5-nouvelles-propositions)
 6. [Plan d'action recommandé](#6-plan-daction)
+7. [Annexe — État des axes](#7-annexe)
 
 ---
 
@@ -37,7 +44,8 @@
 | 2.1.0 | Jan 2026 | Infrastructure `utils/` : logging, config, http, date, api_client, parallel, cache |
 | 2.2.0 | Jan 2026 | Quota adaptatif, déduplication 3-signaux, crédibilité sources |
 | 2.3.0 | Fév 2026 | Timeline entités, backup incrémental, enrichissement images/sentiment |
-| **2.4.0** | **Mar 2026** | **Indexes articles/entités, cache synthèse IA, fix O(n²), tests, benchmark** |
+| 2.4.0 | Mar 2026 | Indexes articles/entités, cache synthèse IA, fix O(n²), tests, benchmark |
+| **2.5.0** | **Mar 2026** | **Index updates RSS/web, rolling_window, parse_article_date, migration 9 endpoints/scripts** |
 
 ---
 
@@ -49,28 +57,29 @@ WUDD.ai/
 │   ├── config.py             # Singleton Config (.env, chemins)
 │   ├── api_client.py         # Client EurIA avec retry/backoff
 │   ├── http_utils.py         # Session HTTP urllib3
-│   ├── date_utils.py         # Parsing multi-format
+│   ├── date_utils.py         # Parsing multi-format + parse_article_date() (v2.5) ★
 │   ├── logging.py            # print_console() centralisé
 │   ├── cache.py              # Cache fichier TTL 24h (MD5 keys)
 │   ├── parallel.py           # ThreadPoolExecutor wrapper
-│   ├── scoring.py            # ScoringEngine + get_scoring_engine() (v2.4)
+│   ├── scoring.py            # ScoringEngine + get_scoring_engine()
 │   ├── quota.py              # QuotaManager adaptatif
 │   ├── deduplication.py      # Déduplication 3-signaux
 │   ├── source_credibility.py # Score crédibilité sources
 │   ├── reading_time.py       # Estimation temps de lecture
-│   ├── article_index.py      # ★ Index léger articles (v2.4)
-│   ├── entity_index.py       # ★ Index inversé entités→articles (v2.4)
-│   ├── synthesis_cache.py    # ★ Cache synthèse IA entités (v2.4)
+│   ├── article_index.py      # Index léger articles
+│   ├── entity_index.py       # Index inversé entités→articles
+│   ├── synthesis_cache.py    # Cache synthèse IA entités
+│   ├── rolling_window.py     # ★ Fenêtre glissante 48h (v2.5)
 │   └── exporters/            # Atom, newsletter, webhook
 ├── scripts/                  # 30+ scripts de pipeline
 ├── viewer/                   # Flask + React UI
-├── tests/                    # pytest (47 tests en v2.4)
+├── tests/                    # pytest (47 tests)
 ├── config/                   # JSON de configuration
 └── data/                     # Stockage fichier (pas de BDD)
     ├── articles/             # Par flux
     ├── articles-from-rss/    # Par mot-clé
-    ├── article_index.json    # ★ Index léger (v2.4)
-    └── entity_index.json     # ★ Index inversé (v2.4)
+    ├── article_index.json    # Index léger
+    └── entity_index.json     # Index inversé
 ```
 
 ---
@@ -104,31 +113,7 @@ Création de 7 modules partagés éliminant ~80 % de la duplication de code exis
 
 **Problème :** `compute_top_entities()` parcourait la liste des articles en double boucle pour dédupliquer les entités (`list.index()` = O(n) dans une boucle O(n×E)).
 
-**Avant :**
-```python
-for article in articles:
-    for etype, names in entities.items():
-        for name in names:
-            if name in seen:            # O(n) : scan de liste
-                idx = seen.index(name)  # O(n) : scan de liste
-                result[idx][2] += 1
-            else:
-                seen.append(name)       # O(n) croissant
-```
-
-**Après (O(n)) :**
-```python
-counter = Counter()
-key_to_meta: dict = {}   # key_lower → (nom_original, type)
-for article in articles:
-    for etype, names in entities.items():
-        for name in names:
-            key = name.strip().lower()
-            counter[key] += 1
-            key_to_meta.setdefault(key, (name.strip(), etype))
-return [(key_to_meta[k][1], key_to_meta[k][0], c)
-        for k, c in counter.most_common(top_n)]
-```
+**Solution :** remplacement par `Counter` + dictionnaire de capitalisation (`key_lower → nom_original`).
 
 **Gain mesuré :** 1000 articles × 20 entités chacun — 0.21 s → 0.04 s (−81 %).
 
@@ -136,153 +121,115 @@ return [(key_to_meta[k][1], key_to_meta[k][0], c)
 
 Maintient `data/article_index.json` : métadonnées légères pour chaque article (url, source, date_iso, has_entities, has_sentiment, has_images, file, idx).
 
-**Méthodes clés :**
-- `update(articles, source_file)` — mise à jour incrémentale
-- `get_recent(hours=N)` — fenêtre glissante sans I/O
-- `load_articles(entries)` — chargement groupé par fichier
-- `rebuild()` — reconstruire depuis zéro (migration)
-- `stats()` — statistiques
-
-**Singleton thread-safe :** `get_article_index(project_root)` via `threading.Lock`.
-**Écriture atomique :** `tmp → replace()` pour éviter la corruption.
+**Méthodes clés :** `update()`, `get_recent(hours)`, `load_articles()`, `rebuild()`, `stats()`.
+**Singleton thread-safe** via `get_article_index(project_root)`. **Écriture atomique** `tmp → replace()`.
 
 ### 3.5 Cache synthèse IA — `utils/synthesis_cache.py`
 
-Cache TTL 24h pour les synthèses encyclopédique + RAG de l'endpoint `api_entity_context`.
-
-**Clé :** MD5("type:value") — collision impossible pour des entités différentes.
-**Méthodes :** `get()`, `set()`, `purge_expired()`, `invalidate()`, `stats()`.
-**Singleton thread-safe :** `get_synthesis_cache(project_root)`.
-
-**Impact UX :** une entité demandée deux fois dans la journée ne déclenche **zéro appel IA** à la deuxième requête (latence : < 20 ms).
+Cache TTL 24h pour les synthèses IA de l'endpoint `api_entity_context`.
+**Impact UX :** deuxième requête sur la même entité dans la journée → **zéro appel IA**, latence < 20 ms.
 
 ### 3.6 Index entités — `utils/entity_index.py`
 
 Index inversé `data/entity_index.json` : `"PERSON:Emmanuel Macron" → [{file, idx, date}, …]`.
 
-**Méthodes clés :**
-- `update(articles, source_file)` — remplace en bloc les refs du fichier source
-- `get_refs(type, value)` — références triées par date décroissante
-- `load_articles(type, value)` — charge les articles groupés par fichier
-- `get_cooccurrences(type, value)` — co-occurrences sans scan rglob
-- `get_top_entities(top_n)` — entités les plus référencées
-- `get_all_entries()` — copie complète de l'index (pour timeline/cross-flux)
-- `rebuild()` — migration initiale
-
-**Singleton thread-safe.** Écriture atomique.
+**Méthodes clés :** `update()`, `get_refs()`, `load_articles()`, `get_cooccurrences()`, `get_top_entities()`, `get_all_entries()`, `rebuild()`.
 
 ### 3.7 Singleton `ScoringEngine` + `get_top_articles_from_index()`
 
-**Ajout dans `utils/scoring.py` :**
-
-```python
-def get_scoring_engine(project_root=None) -> ScoringEngine:
-    """Singleton invalidé si les fichiers de config changent (mtime)."""
-```
-
-```python
-def get_top_articles_from_index(self, top_n, hours, include_rss) -> list:
-    """Charge les articles récents depuis article_index, puis les score.
-    Fallback automatique sur rglob si l'index est absent."""
-```
-
-**Gain :** à 7h30, `generate_morning_digest.py` lisait tous les fichiers JSON pour scorer. Désormais, seule `article_index.json` est lue, puis uniquement les fichiers contenant des articles récents.
+`get_scoring_engine(project_root)` — singleton invalidé si les fichiers de config changent (mtime).
+`get_top_articles_from_index()` — charge uniquement les fichiers contenant des articles récents (via article_index).
 
 ### 3.8 Suite de tests — `tests/test_indexes.py`
 
-47 tests couvrant :
-
-| Classe | Tests |
-|--------|-------|
-| `TestArticleIndex` | 9 — update, get_recent, load_articles, rebuild, stats |
-| `TestEntityIndex` | 11 — update, get_refs, load_articles, get_cooccurrences, get_top_entities, get_all_entries |
-| `TestSynthesisCache` | 9 — get/set, TTL, purge_expired, invalidate |
-| `TestScoringEngineSingleton` | 4 — singleton, invalidation mtime |
-| `TestComputeTopEntities` | 6 — dont benchmark O(n²) vs O(n) |
-| `TestClesMD5` | 3 — collision, bijection |
-| `TestParseDateIso` | 5 — formats DD/MM, ISO, RFC822 |
-
-Tous passent sans `.env` requis (fixtures `tmp_path` uniquement).
+47 tests couvrant `ArticleIndex`, `EntityIndex`, `SynthesisCache`, `ScoringEngine`, `compute_top_entities`, parsing de dates. Tous passent sans `.env` requis.
 
 ### 3.9 Script de benchmark — `scripts/benchmark_indexes.py`
 
-6 benchmarks comparatifs avec affichage des ratios de gain :
-
-1. Scoring : rglob vs `get_top_articles_from_index()`
-2. Recherche entité : rglob vs `entity_index.load_articles()`
-3. Co-occurrences : rglob vs `entity_index.get_cooccurrences()`
-4. O(n²) simulé vs O(n) — `compute_top_entities()`
-5. Cache synthèse : miss vs hit
-6. Tailles disque des index
-
+6 benchmarks comparatifs rglob vs index, avec affichage des ratios de gain.
 **Usage :** `python3 scripts/benchmark_indexes.py --iterations 5`
 
 ### 3.10 Rapports matinaux via index (Axe 3)
 
-**`generate_morning_digest.py`** (cron 7h30 quotidien) :
-- Avant : `ScoringEngine(PROJECT_ROOT)` instancié à chaque run + `get_top_articles()` scanne tout
-- Après : `get_scoring_engine()` singleton + `get_top_articles_from_index()` — I/O limité à l'index
-
-**`generate_reading_notes.py`** (cron 8h00 quotidien) :
-- Avant : `build_article_index()` locale — rglob complet de `data/` pour obtenir metadata URL→article
-- Après : `get_article_index().get_recent(hours=0)` — une seule lecture de `article_index.json`
+**`generate_morning_digest.py`** : `get_scoring_engine()` + `get_top_articles_from_index()`.
+**`generate_reading_notes.py`** : `get_article_index().get_recent(hours=0)` — une seule lecture de `article_index.json`.
 
 ### 3.11 Timeline + cross-flux via entity_index (Axe 5)
 
-Ces deux scripts tournent **toutes les 5 minutes** en cron, soit ~288 exécutions/jour.
-
-**`entity_timeline.py`** :
-- Avant : `collect_timeline()` — rglob complet de toutes les arborescences d'articles
-- Après : `_collect_timeline_from_index()` lit `entity_index.json` pour extraire les dates directement depuis les références → **zéro lecture d'article**
-- Fallback automatique si l'index est absent
-
-**`cross_flux_analysis.py`** :
-- Avant : rglob complet + chargement de chaque fichier d'articles
-- Après : `_collect_entities_from_index()` dérive le nom du flux depuis le chemin stocké dans l'index (ex. `data/articles/Intelligence-artificielle/…` → `"Intelligence-artificielle"`)
-- Fallback automatique
-
-**Impact cumulé :** ~288 scans rglob/jour éliminés sur ces deux scripts ≈ 1–2 Go d'I/O en moins par jour (estimation sur 50 fichiers × 100 Ko chacun).
+**`entity_timeline.py`** et **`cross_flux_analysis.py`** : collecte via `entity_index.get_all_entries()` + fallback rglob.
+**Impact :** ~288 scans rglob/jour éliminés ≈ 560 Mo d'I/O en moins.
 
 ### 3.12 Suivi des échecs d'enrichissement (Axe 8)
 
-**`enrich_entities.py`** et **`enrich_sentiment.py`** :
-- Ajout du champ `enrichissement_statut` à chaque article traité :
-  - `"ok"` → enrichissement réussi
-  - `"echec_api"` → réponse API vide ou invalide
-- Permet d'identifier les articles à réparer sans les relire tous
-
-**`scripts/repair_failed_enrichments.py`** (nouveau) :
-- Scanne les articles avec `enrichissement_statut` en `"echec_api"` ou `"echec_parse"`
-- Relance l'enrichissement NER et/ou sentiment
-- Met à jour `entity_index` après réparation réussie
-- Options : `--type entities|sentiment|all`, `--dry-run`, `--delay`
+`enrich_entities.py` et `enrich_sentiment.py` positionnent `enrichissement_statut = "ok"|"echec_api"`.
+`scripts/repair_failed_enrichments.py` : relance ciblée + mise à jour entity_index.
 
 ### 3.13 Vérification `api_entity_context` (Axe 4 — viewer)
 
-L'endpoint SSE `/api/entity-context` de `viewer/app.py` est correctement implémenté :
+Collecte via `entity_index.load_articles()` + fallback, 4 agrégats en 1 passage, cache synthèse IA vérifié avant tout appel.
 
-| Étape | Avant | Après |
-|-------|-------|-------|
-| Collecte articles | rglob complet | `entity_index.load_articles()` + fallback rglob |
-| Calcul co-occ + calendrier + sentiments + sources | 4 boucles séparées | 1 seul passage |
-| Synthèse encyclopédique IA | Toujours 2 appels API | Cache vérifié → 0 appel si hit |
-| Stockage résultat | — | `synthesis_cache.set()` |
+### 3.14 Index updates dans RSS et web watchers (A + B)
+
+**`get-keyword-from-rss.py`** : appel de `article_index.update()` et `entity_index.update()` après sauvegarde du fichier keyword et de `48-heures.json`.
+
+**`web_watcher.py`** : même pattern après `_write_atomic()`. Les entités des sources web sans RSS sont désormais visibles immédiatement dans le dashboard.
+
+### 3.15 Migration trend_detector + generate_briefing (C + E)
+
+**`trend_detector.py`** : `collect_entity_mentions()` utilise `entity_index.get_all_entries()` (O(k) sur les clés) + fallback rglob. `_parse_date()` local supprimé.
+
+**`generate_briefing.py`** : `collect_articles()` utilise `article_index.get_recent()` + chargement ciblé par fichier + fallback. `ScoringEngine()` remplacé par `get_scoring_engine()`. `_parse_date()` local supprimé.
+
+### 3.16 Migration 6 endpoints viewer vers indexes (D)
+
+| Endpoint | Avant | Après |
+|----------|-------|-------|
+| `/api/search/entity` | rglob complet | `entity_index.get_all_entries()` — correspondance partielle sur les clés |
+| `/api/entities/dashboard` | rglob + comptage | `entity_index.get_all_entries()` + `article_index.stats()` |
+| `/api/entities/articles` | rglob + filtrage | `entity_index.load_articles()` + fallback |
+| `/api/sources/bias` | rglob à chaque appel | **Cache TTL 5 min** en mémoire |
+| `/api/synthesize-topic` | rglob complet | `entity_index.load_articles()` si entité connue + fallback |
+| `/api/export/atom` aggregate | rglob trié par mtime | `article_index.get_recent(hours=336)` + fallback |
+| `/api/export/newsletter` | `ScoringEngine()` | `get_scoring_engine()` singleton |
+
+### 3.17 Utilitaire `utils/rolling_window.py` (F)
+
+Logique centralisée de maintenance de la fenêtre glissante `48-heures.json`, auparavant dupliquée dans 3 scripts :
+
+| Mode | Comportement |
+|------|--------------|
+| Incrémental (`source_dir` absent) | Charge l'existant, ajoute `new_articles`, élague > N heures |
+| Reconstruction (`source_dir` fourni) | Relit tous les `*.json` du répertoire |
+
+Thread-safe (`threading.Lock`). Écriture atomique. Utilisé par `get-keyword-from-rss.py` et `web_watcher.py`.
+
+### 3.18 `parse_article_date()` centralisé (G)
+
+Ajout dans `utils/date_utils.py` d'un parser unifié supportant DD/MM/YYYY, YYYY-MM-DD, ISO 8601 et RFC 822. Remplace les fonctions `_parse_date()` dupliquées dans 5 scripts. Utilisé par `rolling_window.py`, `trend_detector.py` et `generate_briefing.py`.
+
+### 3.19 Écriture atomique dans `get-keyword-from-rss.py` (H)
+
+Remplacement du `json.dump()` direct par le pattern `tmp → replace()`, éliminant le risque de fichier JSON corrompu en cas de crash pendant l'écriture.
 
 ---
 
 ## 4. Gains de performance
 
-### Mesures benchmark (dataset 50 fichiers, ~2000 articles avec entités)
+### Mesures benchmark (dataset 50 fichiers, ~2 000 articles avec entités)
 
 | Opération | Avant (rglob) | Après (index) | Ratio |
 |-----------|--------------|---------------|-------|
 | Scoring top articles 24h | ~0.8 s | ~0.05 s | **×16** |
 | Recherche entité (articles) | ~0.7 s | ~0.03 s | **×23** |
 | Co-occurrences entité | ~0.7 s | ~0.04 s | **×18** |
-| compute_top_entities (1000 art.) | 0.21 s | 0.04 s | **×5** |
+| `compute_top_entities` (1 000 art.) | 0.21 s | 0.04 s | **×5** |
 | Synthèse IA entité (cache hit) | ~10 s | <20 ms | **×500** |
-| Timeline entités (5 min cron) | ~0.8 s | ~0.02 s | **×40** |
-| Cross-flux analysis (5 min cron) | ~0.8 s | ~0.02 s | **×40** |
+| Timeline entités (cron 5 min) | ~0.8 s | ~0.02 s | **×40** |
+| Cross-flux analysis (cron 5 min) | ~0.8 s | ~0.02 s | **×40** |
+| collect_entity_mentions (trend) | ~1.2 s | ~0.04 s | **×30** |
+| collect_articles (briefing) | ~1.0 s | ~0.06 s | **×17** |
+| `/api/entities/articles` (viewer) | ~0.6 s | ~0.03 s | **×20** |
+| `/api/sources/bias` (2e appel) | ~0.8 s | <1 ms | **×800** |
 
 ### I/O journalières évitées
 
@@ -292,195 +239,209 @@ L'endpoint SSE `/api/entity-context` de `viewer/app.py` est correctement implém
 | `cross_flux_analysis.py` | 288×/j | ~280 Mo I/O/j |
 | `generate_morning_digest.py` | 1×/j | ~50 Mo I/O |
 | `generate_reading_notes.py` | 1×/j | ~50 Mo I/O |
-| **Total** | — | **~660 Mo/j évités** |
+| `trend_detector.py` | 1×/j | ~100 Mo I/O (2 scans évités) |
+| `generate_briefing.py` | 1×/j | ~80 Mo I/O |
+| **Total** | — | **~840 Mo/j évités** |
 
 ---
 
 ## 5. Nouvelles propositions d'améliorations
 
-L'analyse du code en v2.4.0 révèle plusieurs axes d'amélioration supplémentaires, classés par priorité.
+L'analyse du code en v2.5.0 révèle les axes suivants, classés par priorité.
 
 ---
 
 ### Priorité CRITIQUE
 
-#### A. `get-keyword-from-rss.py` — index non mis à jour après sauvegarde
+#### 1. `enrich_entities.py` et `enrich_sentiment.py` — index non mis à jour après enrichissement
 
-**Problème :** après avoir sauvegardé les articles dans `data/articles-from-rss/<keyword>.json` et mis à jour `48-heures.json`, le script **n'appelle ni `article_index.update()` ni `entity_index.update()`**. Les indexes restent donc périmés jusqu'au prochain `rebuild()`.
+**Problème :** après avoir enrichi les articles avec les entités NER ou le sentiment, les deux scripts sauvegardent les fichiers de manière atomique mais **n'appellent ni `article_index.update()` ni `entity_index.update()`**. Le pipeline d'enrichissement nocturne (cron 02:00 et 03:00) produit donc un décalage de 24h entre les données sur disque et l'index.
 
-**Impact :** l'endpoint `api_entity_context`, le digest matinal et le cross-flux ne voient pas les articles issus des mots-clés RSS.
+**Impact :** les entités enrichies la nuit ne sont visibles dans le dashboard, le trend_detector et le cross-flux qu'au prochain `rebuild()` ou au prochain cycle RSS.
 
-**Correction :**
+**Correction :** après `tmp.replace(json_file)` dans `enrich_entities.py` :
+
 ```python
-# Après sauvegarde du fichier keyword
-from utils.article_index import get_article_index
-from utils.entity_index import get_entity_index
-aidx = get_article_index(PROJECT_ROOT)
-eidx = get_entity_index(PROJECT_ROOT)
-aidx.update(merged, str(out_path.relative_to(PROJECT_ROOT)))
-if any("entities" in a for a in merged):
-    eidx.update(merged, str(out_path.relative_to(PROJECT_ROOT)))
+rel = str(json_file.relative_to(project_root)).replace("\\", "/")
+get_article_index(project_root).update(articles, rel)
+get_entity_index(project_root).update(articles, rel)
 ```
 
-#### B. `web_watcher.py` — index non mis à jour après sauvegarde
-
-**Même problème** que ci-dessus : `web_watcher.py` extrait des entités (NER) et sauvegarde les articles dans `data/articles-from-rss/`, mais ne met pas à jour les indexes.
-
-**Impact :** les entités provenant de sources web sans RSS sont invisibles dans le dashboard entités et l'analyse cross-flux.
+Même correction dans `enrich_sentiment.py` (pour `has_sentiment` dans l'article_index).
 
 ---
 
 ### Priorité HAUTE
 
-#### C. `trend_detector.py` — double scan rglob complet
+#### 2. `flux_watcher.py` — intégration de `utils/rolling_window.py`
 
-**Problème :** `collect_entity_mentions()` effectue **deux** scans rglob complets (fenêtres 24h et 7j) à chaque appel (cron 7h00 quotidien).
+**Problème :** `flux_watcher.py` implémente sa propre fonction `_update_48h_incremental()` (lignes 125–171), identique dans son comportement à `utils/rolling_window.py` mais avec sa propre gestion de date et son propre tri.
 
-**Solution :** utiliser `entity_index.get_all_entries()` et filtrer par date sur les références — identique au pattern appliqué dans `entity_timeline.py`.
+**Impact :** trois sources de vérité pour la logique `48-heures.json` au lieu d'une seule. Tout correctif dans `rolling_window.py` doit être répliqué manuellement dans `flux_watcher.py`.
 
+**Correction :** remplacer `_update_48h_incremental()` par :
 ```python
-def collect_entity_mentions_from_index(eidx, hours: int) -> dict:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    all_entries = eidx.get_all_entries()
-    counts = Counter()
-    for key, refs in all_entries.items():
-        for ref in refs:
-            if ref.get("date", "") >= cutoff.strftime("%Y-%m-%d"):
-                counts[key] += 1
-    return dict(counts)
+from utils.rolling_window import update_rolling_window
+nb = update_rolling_window(new_articles, WUDD_DIR / "48-heures.json", hours=48)
 ```
 
-#### D. `viewer/app.py` — 6 endpoints rglob non migrés
+#### 3. `score_source` non positionné à la création des articles
 
-Les endpoints suivants effectuent encore des scans rglob complets et peuvent être migrés vers les indexes :
+**Problème :** `get-keyword-from-rss.py` et `web_watcher.py` construisent les articles sans valoriser le champ `score_source`, pourtant exploité par `scoring.py` pour moduler le classement.
 
-| Endpoint | Ligne | Migration proposée |
-|----------|-------|-------------------|
-| `/api/entities/search` | ~1056 | `entity_index.load_articles(type, value)` |
-| `/api/entities/dashboard` | ~1128 | `entity_index.stats()` + données agrégées |
-| `/api/entities/articles` | ~1191 | `entity_index.load_articles(type, value)` |
-| `/api/sources/bias` | ~2543 | Cache TTL 1h sur l'agrégation sentiment×source |
-| `/api/synthesize-topic` | ~2617 | `entity_index.load_articles()` si topic = entité |
-| `/api/export/atom` | ~2780 | `article_index.get_recent(hours=168)` |
+**Impact :** les articles issus de flux RSS et de sources web sont tous traités comme si leur source avait un score de crédibilité nul, dégradant la qualité du Top Articles et des newsletters.
 
-#### E. `generate_briefing.py` — rglob + ScoringEngine directe
+**Correction :** appeler `source_credibility.get_score(title_src)` au moment de la construction de l'article :
+```python
+from utils.source_credibility import CredibilityEngine
+_cred = CredibilityEngine(PROJECT_ROOT)
 
-Deux problèmes :
-1. `collect_articles()` (l. ~85) : rglob complet → remplacer par `article_index.get_recent(hours)` + `load_articles()`
-2. Ligne ~522 : `engine = ScoringEngine(project_root)` → remplacer par `get_scoring_engine(project_root)` pour bénéficier du singleton
+article["score_source"] = _cred.get_score(title_src)
+```
 
 ---
 
 ### Priorité MOYENNE
 
-#### F. Duplication de la logique `48-heures.json`
+#### 4. Tests manquants pour `rolling_window.py` et `parse_article_date()`
 
-Trois scripts reconstruisent `48-heures.json` chacun avec leur propre logique :
-- `get-keyword-from-rss.py` (l. 301–350)
-- `web_watcher.py` (l. 305–340)
-- `flux_watcher.py` (l. 125–171)
+**Problème :** les deux nouveaux utilitaires introduits en v2.5.0 ne sont couverts par aucun test.
 
-**Solution :** extraire un utilitaire `utils/rolling_window.py` :
+**Cas de test à créer dans `tests/test_date_utils.py` et un nouveau `tests/test_rolling_window.py` :**
+
+| Module | Cas manquants |
+|--------|---------------|
+| `parse_article_date()` | DD/MM/YYYY, ISO 8601 avec T, RFC 822, chaîne vide, format invalide |
+| `update_rolling_window()` | Mode incrémental (ajout + élague), mode rebuild, déduplication par URL, écriture atomique, fichier absent |
+
+#### 5. Normalisation des noms d'entités dans `entity_index.py`
+
+**Problème :** l'index ne normalise les valeurs d'entités qu'avec `.strip()`. Des variantes orthographiques fréquentes (`"chatgpt"` vs `"ChatGPT"`, `"E. Macron"` vs `"Emmanuel Macron"`) créent des clés distinctes, fragmentant les comptes de mentions.
+
+**Impact :** le dashboard affiche `"ChatGPT": 45 mentions` et `"chatgpt": 8 mentions` séparément, sous-estimant la tendance réelle.
+
+**Solution en deux volets :**
+- Court terme : normaliser les clés en minuscule lors de l'indexation (`key = f"{etype}:{name.strip().lower()}"`), tout en conservant la capitalisation d'origine dans les métadonnées.
+- Moyen terme : ajouter une table d'alias dans `config/entity_aliases.json` pour les équivalences connues (`"Macron" → "Emmanuel Macron"`).
+
+#### 6. `api_client.py` — classification silencieuse des erreurs de parsing
+
+**Problème :** `_parse_entities_response()` et `_parse_sentiment_response()` retournent `{}` silencieusement sur toute erreur de parsing JSON (réponse tronquée, format inattendu de l'API). Cela empêche `repair_failed_enrichments.py` de distinguer une absence d'entités (article sans entités) d'un vrai échec de parsing.
+
+**Solution :** faire retourner une valeur sentinelle distincte de `{}` :
 ```python
-def update_rolling_window(new_articles: list, output_path: Path,
-                           hours: int = 48) -> int:
-    """Fusionne new_articles dans output_path en conservant les N dernières heures."""
+# Dans generate_entities()
+raw_result = _parse_entities_response(content)
+if raw_result is None:  # Nouveau : None = échec parsing, {} = aucune entité
+    return None  # → enrich_entities.py positionne enrichissement_statut = "echec_parse"
+return raw_result
 ```
 
-#### G. Parsing de date dupliqué dans 5 scripts
+Cela active pleinement `repair_failed_enrichments.py` pour le cas `"echec_parse"`.
 
-Chacun des scripts suivants implémente sa propre fonction `_parse_date()` :
-`get-keyword-from-rss.py`, `web_watcher.py`, `flux_watcher.py`, `trend_detector.py`, `generate_briefing.py`.
+#### 7. Index auto-rebuild au démarrage du viewer
 
-Toutes les variantes gèrent RFC 822, ISO 8601 et DD/MM/YYYY.
+**Problème :** si `data/article_index.json` ou `data/entity_index.json` sont absents (première installation, migration, purge de données), les endpoints du viewer tombent silencieusement sur le fallback rglob sans jamais reconstruire l'index. L'index reste absent indéfiniment.
 
-**Solution :** une seule fonction dans `utils/date_utils.py` déjà existant, ou dans `utils/article_index.py` qui en possède déjà une robuste.
-
-#### H. `get-keyword-from-rss.py` — écritures non atomiques
-
+**Solution :** dans `viewer/app.py`, ajouter une tâche de fond au démarrage :
 ```python
-# Actuel (risque de corruption si crash pendant write)
-with open(out_path, "w", encoding="utf-8") as f:
-    json.dump(merged, f, ensure_ascii=False, indent=4)
+import threading
+
+def _ensure_indexes():
+    from utils.article_index import get_article_index
+    from utils.entity_index import get_entity_index
+    aidx = get_article_index(PROJECT_ROOT)
+    if not (PROJECT_ROOT / "data" / "article_index.json").exists():
+        aidx.rebuild()
+    eidx = get_entity_index(PROJECT_ROOT)
+    if not (PROJECT_ROOT / "data" / "entity_index.json").exists():
+        eidx.rebuild()
+
+threading.Thread(target=_ensure_indexes, daemon=True).start()
 ```
-
-**Solution :** pattern `tmp → replace()` déjà utilisé dans `flux_watcher.py` et `web_watcher.py`.
-
-#### I. Cache pour les agrégations lourdes dans `viewer/app.py`
-
-L'endpoint `/api/entities/dashboard` (et `/api/sources/bias`) agrège synchroniquement toutes les entités depuis tous les fichiers à chaque requête. Avec un grand volume d'articles, cela peut dépasser le timeout Flask.
-
-**Solution :** cache en mémoire avec TTL 1h (déjà disponible via `utils/cache.py`).
 
 ---
 
 ### Priorité BASSE
 
-#### J. Tests manquants dans `test_indexes.py`
+#### 8. Découpage de `_process_source()` dans `web_watcher.py`
 
-| Gap | Description |
-|-----|-------------|
-| `EntityIndex.rebuild()` | Non couvert — cas critique en migration |
-| Thread-safety | Pas de tests concurrents pour les `threading.Lock` |
-| `get_recent(hours=0)` | Comportement "tous les articles" non explicitement testé |
-| Cas dégradés | JSON corrompu pendant `rebuild()`, fichier manquant référencé dans l'index |
-| Régression perf | Seul `compute_top_entities()` a un test de perf — ajouter pour `get_recent()` et `get_top_entities()` |
-
-#### K. Refactoring de `web_watcher.py` — `_process_source()`
-
-La fonction `_process_source()` fait 174 lignes (l. 345–518). Elle gère : parsing sitemap, filtrage URLs, extraction contenu, NER, quota, construction article, sauvegarde.
+**Problème :** la fonction `_process_source()` fait environ 180 lignes et mélange quatre responsabilités distinctes : filtrage des URLs, extraction du contenu HTML, appels API (résumé + NER), sauvegarde + index.
 
 **Découpage proposé :**
-- `_filter_and_deduplicate_urls()` — filtrage des URLs + états
-- `_extract_and_build_article()` — extraction + NER + construction
-- `_save_and_update_indexes()` — écriture atomique + mise à jour indexes
 
-#### L. `repair_failed_enrichments.py` — ajout du mode `repair_parse`
+| Fonction | Responsabilité |
+|----------|---------------|
+| `_filter_new_urls(source, state, all_entries)` | Filtrage sitemap + déduplication |
+| `_extract_and_summarize(url, source, api_client)` | Extraction HTML + résumé + NER |
+| `_save_and_index(out_path, articles, new_for_48h)` | Écriture atomique + index + rolling_window |
 
-Le champ `enrichissement_statut = "echec_parse"` est prévu dans l'implémentation actuelle mais n'est jamais positionné (il n'y a pas encore de gestion des erreurs de parsing JSON des réponses API).
+Cela faciliterait les tests unitaires, actuellement impossibles sans mocker tout le pipeline.
 
-**Solution :** dans `api_client.py`, wrapper `generate_entities()` et `generate_sentiment()` pour capturer les erreurs de parsing et retourner `("echec_parse", raw_text)` au lieu de `None`.
+#### 9. Invalidation événementielle du cache `/api/sources/bias`
+
+**Problème :** le cache TTL de 5 minutes de `/api/sources/bias` ne tient pas compte des nouvelles données. Un article avec un sentiment `négatif` ajouté juste après un appel peut ne pas apparaître pendant 5 minutes.
+
+**Solution :** exposer une fonction `invalidate_bias_cache()` appelée depuis les endpoints d'écriture (`/api/files/save`, script console) :
+```python
+def invalidate_bias_cache():
+    _bias_cache["ts"] = 0.0  # Force expiration immédiate
+```
+
+#### 10. Rapport de qualité des données journalier
+
+**Problème :** il n'existe aucun indicateur consolidé de la qualité des données produites par le pipeline (taux de couverture NER, taux de succès de l'enrichissement sentiment, proportion d'articles avec `score_source`, etc.).
+
+**Solution :** ajouter un endpoint `GET /api/data-quality` et un rapport Markdown hebdomadaire :
+
+| Métrique | Source |
+|----------|--------|
+| Couverture NER (%) par flux | `article_index.stats()` → `with_entities / total` |
+| Couverture sentiment (%) | `with_sentiment / total` |
+| Taux d'échec enrichissement (%) | Scan `enrichissement_statut == "echec_api"` |
+| Articles sans `score_source` | Scan `score_source` absent |
+| Entités distinctes indexées | `entity_index.stats()` → `entities` |
+| Freshness index (heures depuis dernier update) | `generated_at` dans les index |
+
+Ce rapport permettrait de détecter des régressions dans la qualité du pipeline avant qu'elles n'impactent les rapports produits.
 
 ---
 
 ## 6. Plan d'action
 
-### Sprint 1 — Critique (impact données immédiat)
+### Sprint 1 — Critique (correction pipeline)
 
 | # | Tâche | Fichier | Effort |
 |---|-------|---------|--------|
-| A | Ajouter index updates dans `get-keyword-from-rss.py` | `scripts/get-keyword-from-rss.py` | 30 min |
-| B | Ajouter index updates dans `web_watcher.py` | `scripts/web_watcher.py` | 30 min |
+| 1 | Ajouter index updates dans `enrich_entities.py` + `enrich_sentiment.py` | `scripts/enrich_*.py` | 30 min |
 
-### Sprint 2 — Haute priorité (performance crons)
+### Sprint 2 — Haute priorité
 
 | # | Tâche | Fichier | Effort |
 |---|-------|---------|--------|
-| C | Migrer `trend_detector.py` vers entity_index | `scripts/trend_detector.py` | 2h |
-| D1 | Migrer endpoints entities/search + entities/articles | `viewer/app.py` | 1h |
-| D2 | Migrer endpoints entities/dashboard + sources/bias | `viewer/app.py` | 2h |
-| E | Migrer `generate_briefing.py` + get_scoring_engine | `scripts/generate_briefing.py` | 1h |
+| 2 | Intégrer `rolling_window` dans `flux_watcher.py` | `scripts/flux_watcher.py` | 1h |
+| 3 | Ajouter `score_source` à la création d'articles | `scripts/get-keyword-from-rss.py`, `web_watcher.py` | 1h |
 
 ### Sprint 3 — Qualité et robustesse
 
 | # | Tâche | Fichier | Effort |
 |---|-------|---------|--------|
-| F | Utilitaire `utils/rolling_window.py` | nouveau | 2h |
-| G | Centraliser `_parse_date()` dans `utils/date_utils.py` | utils + 5 scripts | 1h |
-| H | Écriture atomique dans `get-keyword-from-rss.py` | `scripts/get-keyword-from-rss.py` | 30 min |
-| I | Cache TTL pour `/api/entities/dashboard` | `viewer/app.py` | 1h |
-| J | Compléter `tests/test_indexes.py` (rebuild, threads, cas dégradés) | `tests/test_indexes.py` | 3h |
+| 4 | Tests `rolling_window` + `parse_article_date` | `tests/test_rolling_window.py`, `tests/test_date_utils.py` | 2h |
+| 5 | Normalisation noms entités (lowercase + alias) | `utils/entity_index.py` | 3h |
+| 6 | Classification `echec_parse` dans `api_client.py` | `utils/api_client.py` | 1h |
+| 7 | Index auto-rebuild au démarrage viewer | `viewer/app.py` | 30 min |
 
-### Sprint 4 — Refactoring et maintenabilité
+### Sprint 4 — Maintenabilité et observabilité
 
 | # | Tâche | Fichier | Effort |
 |---|-------|---------|--------|
-| K | Découper `_process_source()` dans `web_watcher.py` | `scripts/web_watcher.py` | 2h |
-| L | Implémenter `"echec_parse"` dans `api_client.py` | `utils/api_client.py` | 1h |
+| 8 | Découper `_process_source()` | `scripts/web_watcher.py` | 3h |
+| 9 | Invalidation événementielle cache bias | `viewer/app.py` | 30 min |
+| 10 | Endpoint + rapport qualité des données | `viewer/app.py` + nouveau script | 4h |
 
 ---
 
-## Annexe — État des axes (v2.4.0)
+## 7. Annexe — État des axes
 
 | Axe | Description | Statut |
 |-----|-------------|--------|
@@ -494,15 +455,25 @@ Le champ `enrichissement_statut = "echec_parse"` est prévu dans l'implémentati
 | 6 | Singleton `get_scoring_engine()` | ✅ Réalisé |
 | 7 | Tests + benchmark | ✅ Réalisé (47 tests) |
 | 8 | `enrichissement_statut` + repair script | ✅ Réalisé |
-| A | Index updates dans get-keyword-from-rss | 🔲 À faire (critique) |
-| B | Index updates dans web_watcher | 🔲 À faire (critique) |
-| C | trend_detector via entity_index | 🔲 À faire |
-| D | 6 endpoints viewer via index | 🔲 À faire |
-| E | generate_briefing via index | 🔲 À faire |
-| F | utils/rolling_window.py | 🔲 À faire |
-| G | Centraliser _parse_date() | 🔲 À faire |
-| H | Écriture atomique get-keyword | 🔲 À faire |
+| A | Index updates dans get-keyword-from-rss | ✅ Réalisé (v2.5) |
+| B | Index updates dans web_watcher | ✅ Réalisé (v2.5) |
+| C | trend_detector via entity_index | ✅ Réalisé (v2.5) |
+| D | 6 endpoints viewer via index | ✅ Réalisé (v2.5) |
+| E | generate_briefing via index + get_scoring_engine | ✅ Réalisé (v2.5) |
+| F | `utils/rolling_window.py` | ✅ Réalisé (v2.5) |
+| G | `parse_article_date()` centralisé | ✅ Réalisé (v2.5) |
+| H | Écriture atomique get-keyword | ✅ Réalisé (v2.5) |
+| 1-v2.5 | Index updates enrich_entities + enrich_sentiment | 🔲 À faire (critique) |
+| 2-v2.5 | rolling_window dans flux_watcher | 🔲 À faire |
+| 3-v2.5 | score_source à la création | 🔲 À faire |
+| 4-v2.5 | Tests rolling_window + parse_article_date | 🔲 À faire |
+| 5-v2.5 | Normalisation noms entités | 🔲 À faire |
+| 6-v2.5 | echec_parse dans api_client | 🔲 À faire |
+| 7-v2.5 | Index auto-rebuild au démarrage viewer | 🔲 À faire |
+| 8-v2.5 | Découper _process_source() | 🔲 À faire |
+| 9-v2.5 | Invalidation cache bias | 🔲 À faire |
+| 10-v2.5 | Rapport qualité des données | 🔲 À faire |
 
 ---
 
-*Rapport généré le 15 mars 2026 — WUDD.ai v2.4.0*
+*Rapport généré le 15 mars 2026 — WUDD.ai v2.5.0*
