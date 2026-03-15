@@ -1,13 +1,23 @@
-# Prompts EurIA — WUDD.ai
+# Prompts EurIA / Claude — WUDD.ai
 
-> Documentation complète des prompts utilisés avec l'API EurIA (Qwen3) et Claude (Anthropic)
-> Dernière mise à jour : 12 mars 2026
+> Documentation complète des prompts utilisés avec l'API EurIA (Infomaniak / Qwen3) **ou** Claude (Anthropic)
+> Le provider est sélectionnable via la variable `AI_PROVIDER` dans `.env` (`euria` par défaut, `claude` en option).
+> Dernière mise à jour : 15 mars 2026
 
 ---
 
 ## Vue d'ensemble
 
-Le projet utilise l'API EurIA d'Infomaniak (modèle Qwen3) — et optionnellement Claude d'Anthropic — pour **douze opérations** :
+Le projet prend en charge **deux providers IA interchangeables** pour l'ensemble des douze opérations :
+
+| Provider | Modèle | Configuration |
+|---|---|---|
+| **EurIA** (défaut) | Qwen3 | `AI_PROVIDER=euria` + `bearer=…` dans `.env` |
+| **Claude** | claude-3-5-sonnet / claude-3-7-sonnet | `AI_PROVIDER=claude` + `CLAUDE_API_KEY=…` dans `.env` |
+
+> La bascule entre les deux providers s'effectue uniquement via `.env` — aucune modification du code n'est nécessaire. Le Viewer permet également un override par requête (menu Réglages → Provider).
+
+Les deux providers couvrent les **douze opérations** :
 
 1. **Résumé d'article** — synthèse d'un texte HTML extrait, max 20 lignes
 2. **Rapport synthétique** — rapport Markdown structuré à partir d'un JSON d'articles

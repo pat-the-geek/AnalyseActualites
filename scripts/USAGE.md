@@ -73,9 +73,39 @@ python3 scripts/repair_failed_summaries.py --dry-run
 
 ---
 
-### 8. generate_48h_report.py
+### 8. repair_failed_enrichments.py
 
-**Description** : Génère chaque soir un rapport de veille analytique basé sur les **Top 10 entités nommées** des 48 dernières heures. Lit `data/articles-from-rss/_WUDD.AI_/48-heures.json` (produit par `get-keyword-from-rss.py`), pré-calcule les entités les plus citées (personnes, organisations, pays, produits, événements), sélectionne les 5 articles les plus récents par entité, et génère un rapport structuré via l'API EurIA.
+**Description** : Détecte et réessaie l'enrichissement (NER et/ou sentiment) des articles dont le champ `enrichissement_statut` vaut `echec_api` ou `echec_parse`. Met également à jour l'`entity_index` après chaque réparation NER réussie. Utile après une indisponibilité temporaire de l'API (EurIA ou Claude).
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+| --- | --- | --- |
+| `--type entities\|sentiment\|all` | Type d'enrichissement à réparer | `all` |
+| `--dry-run` | Simulation sans appel API ni écriture | désactivé |
+| `--delay SECS` | Délai entre chaque appel API (secondes) | 1.0 |
+
+**Utilisation** :
+
+```bash
+# Réparer NER et sentiment pour tous les fichiers
+python3 scripts/repair_failed_enrichments.py
+
+# NER uniquement
+python3 scripts/repair_failed_enrichments.py --type entities
+
+# Sentiment uniquement
+python3 scripts/repair_failed_enrichments.py --type sentiment
+
+# Simulation sans appel API
+python3 scripts/repair_failed_enrichments.py --dry-run
+```
+
+**Automatisation (cron)** — planifiable après `enrich_entities.py` (ex. 03:30) pour traiter les échecs de la nuit.
+
+**Sortie** : Sauvegarde atomique des fichiers JSON modifiés + mise à jour de l'`entity_index`.
+
+**Description** : Génère chaque soir un rapport de veille analytique basé sur les **Top 10 entités nommées** des 48 dernières heures. Lit `data/articles-from-rss/_WUDD.AI_/48-heures.json` (produit par `get-keyword-from-rss.py`), pré-calcule les entités les plus citées (personnes, organisations, pays, produits, événements), sélectionne les 5 articles les plus récents par entité, et génère un rapport structuré via l'API IA (EurIA ou Claude).
 
 **Arguments** :
 
@@ -213,7 +243,7 @@ python3 scripts/trend_detector.py --top 15 --threshold 3.0 --no-notify
 
 ### 12. enrich_reading_time.py
 
-**Description** : Calcule et ajoute le **temps de lecture estimé** (en minutes) à chaque article de `data/articles/` et `data/articles-from-rss/`. Basé sur 230 mots/minute (référence INSERM, adulte francophone). Traitement 100 % local, aucun appel EurIA. Champs ajoutés : `temps_lecture_minutes` (float) et `temps_lecture_label` (chaîne lisible, ex. `"3 min"`).
+**Description** : Calcule et ajoute le **temps de lecture estimé** (en minutes) à chaque article de `data/articles/` et `data/articles-from-rss/`. Basé sur 230 mots/minute (référence INSERM, adulte francophone). Traitement 100 % local, aucun appel EurIA ni Claude. Champs ajoutés : `temps_lecture_minutes` (float) et `temps_lecture_label` (chaîne lisible, ex. `"3 min"`).
 
 **Arguments** :
 
@@ -307,11 +337,37 @@ python3 scripts/cross_flux_analysis.py --dry-run
 
 ---
 
-## Générer les résumés d'un flux
+### 15. benchmark_indexes.py
+
+**Description** : Mesure les gains de performance des index WUDD.ai en comparant les opérations clés **avant** (scan `rglob`) et **après** (lecture de l'index) :
+
+1. `ScoringEngine.get_top_articles()` vs `get_top_articles_from_index()`
+2. `EntityIndex.load_articles()` vs scan rglob complet
+3. `compute_top_entities()` O(n) vs simulation O(n²)
+4. État du cache de synthèse IA (`SynthesisCache.stats()`)
+
+**Arguments** :
+
+| Argument | Description | Défaut |
+|---|---|---|
+| `--iterations N` | Nombre de répétitions par benchmark (meilleur temps retenu) | 3 |
+
+**Utilisation** :
 
 ```bash
-python3 scripts/Get_data_from_JSONFile_AskSummary_v2.py --flux Economie-numerique --date_debut 2026-02-01 --date_fin 2026-02-17
+# Benchmark par défaut (3 itérations)
+python3 scripts/benchmark_indexes.py
+
+# 5 itérations pour plus de précision
+python3 scripts/benchmark_indexes.py --iterations 5
 ```
+
+**Prérequis** : Les index doivent être construits. Lancer d'abord :
+```bash
+python3 scripts/migrate_build_indexes.py
+```
+
+**Sortie** : Rapport console avec temps avant/après et facteur d'accélération (ex. `×12 plus rapide`) pour chaque opération.
 
 ## Générer le rapport Markdown d'un flux
 
@@ -346,7 +402,7 @@ cd scripts/
 
 ### 1. Get_data_from_JSONFile_AskSummary.py
 
-**Description** : Script principal qui collecte des articles depuis un flux JSON, génère des résumés via l'API EurIA, et crée un rapport Markdown.
+**Description** : Script principal qui collecte des articles depuis un flux JSON, génère des résumés via l'API IA (EurIA ou Claude), et crée un rapport Markdown.
 
 **Utilisation** :
 ```bash
@@ -448,7 +504,7 @@ cd scripts/
 
 ### 4. enrich_entities.py
 
-**Description** : Enrichit les fichiers JSON d'articles existants avec les **entités nommées (NER)** extraites via l'API EurIA. Parcourt `data/articles/` (flux) et `data/articles-from-rss/` (mots-clés) et ajoute le champ `entities` à chaque article qui dispose d'un `Résumé`.
+**Description** : Enrichit les fichiers JSON d'articles existants avec les **entités nommées (NER)** extraites via l'API IA (EurIA ou Claude). Parcourt `data/articles/` (flux) et `data/articles-from-rss/` (mots-clés) et ajoute le champ `entities` à chaque article qui dispose d'un `Résumé`.
 
 **Utilisation** :
 ```bash
@@ -560,7 +616,7 @@ python3 analyse_thematiques.py
 
 > **Module :** `utils/quota.py` | **Config :** `config/quota.json` | **État :** `data/quota_state.json`
 
-Le système de quota régule automatiquement le nombre d'articles importés par jour via l'API EurIA. Il applique quatre plafonds indépendants et trie les mots-clés de façon adaptative pour garantir la diversité des sources.
+Le système de quota régule automatiquement le nombre d'articles importés par jour via l'API IA (EurIA ou Claude). Il applique quatre plafonds indépendants et trie les mots-clés de façon adaptative pour garantir la diversité des sources.
 
 ### Paramètres (`config/quota.json`)
 
@@ -654,9 +710,10 @@ python3 nom_du_script.py
 ### Interface graphique ne s'affiche pas
 Les scripts utilisent `tkinter` qui nécessite un environnement graphique. Sur serveur headless, adaptez le code pour passer les chemins en arguments.
 
-### Erreur API EurIA
+### Erreur API EurIA / Claude
 Vérifiez :
-- Le token `bearer` dans le fichier `.env`
+- Le token `bearer` (EurIA) ou `CLAUDE_API_KEY` (Claude) dans le fichier `.env`
+- La variable `AI_PROVIDER` (`euria` ou `claude`) dans `.env`
 - La validité de l'URL de l'API
 - Votre connexion internet
 

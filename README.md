@@ -18,7 +18,7 @@
   </a>
 </p>
 
-> **What's up, Doc?** — Plateforme de veille intelligente inspirée de Bugs Bunny : collecte, analyse et synthèse d'actualités via l'API EurIA (Infomaniak / Qwen3), à partir de flux JSON accessibles par URL HTTP.
+> **What's up, Doc?** — Plateforme de veille intelligente inspirée de Bugs Bunny : collecte, analyse et synthèse d'actualités via l'API EurIA (Infomaniak / Qwen3) ou Claude (Anthropic), à partir de flux JSON accessibles par URL HTTP.
 
 ---
 
@@ -83,7 +83,7 @@ WUDD.ai analyse l'information selon trois couches sémantiques complémentaires 
 Associer un texte à des mots-clés, c'est identifier de quoi il parle — son sujet, son domaine, son champ thématique. C'est la couche la plus basique du sens. WUDD.ai l'implémente via la surveillance quotidienne de 133+ sources RSS par mots-clés configurables, et la classification thématique des articles en 12 thématiques sociétales.
 
 **2. La sémantique référentielle — les entités**
-Reconnaître qu'un mot désigne une personne, un lieu, une organisation, un produit… c'est aller plus loin : on ne cherche plus seulement le thème mais les acteurs du réel que le texte convoque. C'est ce qu'on appelle la reconnaissance d'entités nommées (NER — Named Entity Recognition). WUDD.ai l'implémente via l'extraction automatique de 18 types d'entités (PERSON, ORG, GPE, PRODUCT, EVENT, DATE…) par l'API EurIA, visualisées dans le Dashboard Entités avec carte géographique et galerie d'images.
+Reconnaître qu'un mot désigne une personne, un lieu, une organisation, un produit… c'est aller plus loin : on ne cherche plus seulement le thème mais les acteurs du réel que le texte convoque. C'est ce qu'on appelle la reconnaissance d'entités nommées (NER — Named Entity Recognition). WUDD.ai l'implémente via l'extraction automatique de 18 types d'entités (PERSON, ORG, GPE, PRODUCT, EVENT, DATE…) par l'API EurIA ou Claude, visualisées dans le Dashboard Entités avec carte géographique et galerie d'images.
 
 **3. La sémantique relationnelle — le liant**
 Ce qui rend le système vraiment sémantique, c'est quand il commence à percevoir les relations entre entités : qui fait quoi, qui est lié à qui, quelle entité est associée à quel événement. C'est là que le sens devient structuré comme une connaissance. WUDD.ai l'implémente via un graphe de co-occurrences interactif (L1 et L2), accessible depuis le panneau de détail de chaque entité, permettant une navigation relationnelle continue à travers le réseau sémantique du corpus.
@@ -100,7 +100,7 @@ mindmap
       Flux JSON par URL HTTP
       Multi-flux cloisonnés
     Résumé IA
-      API EurIA · Qwen3
+      EurIA (Qwen3) ou Claude
       20 lignes · français
       3 images par article
     Analyse thématique
@@ -153,7 +153,7 @@ mindmap
 ### Pipeline de traitement
 
 ```
-Flux JSON (HTTP) → Extraction HTML → Résumé EurIA/Qwen3 → JSON → Enrichissement NER → Markdown annoté / PDF
+Flux JSON (HTTP) → Extraction HTML → Résumé IA (EurIA/Qwen3 ou Claude) → JSON → Enrichissement NER → Markdown annoté / PDF
 ```
 
 ### Arborescence du projet
@@ -206,7 +206,7 @@ WUDD.ai/
 ### Prérequis
 
 - Python 3.10+
-- Compte Infomaniak avec accès à l'API EurIA
+- Compte Infomaniak avec accès à l'API EurIA **et/ou** clé API Claude (Anthropic) — au moins l'une des deux est requise
 - Docker (pour l'orchestration automatisée)
 
 ### Dépendances
@@ -331,7 +331,7 @@ python3 scripts/enrich_entities.py --flux Intelligence-artificielle
 python3 scripts/enrich_entities.py --dry-run
 ```
 
-Ajoute un champ `entities` à chaque article possédant un champ `Résumé`, en interrogeant l'API EurIA. Le champ contient un dictionnaire de 18 types d'entités nommées :
+Ajoute un champ `entities` à chaque article possédant un champ `Résumé`, en interrogeant l'API EurIA ou Claude (selon le provider configuré dans `.env`). Le champ contient un dictionnaire de 18 types d'entités nommées :
 
 | Types | Exemples |
 |---|---|
@@ -351,6 +351,26 @@ Ajoute un champ `entities` à chaque article possédant un champ `Résumé`, en 
 
 Les articles déjà enrichis sont ignorés (sauf avec `--force`). La sauvegarde est atomique : écriture dans un `.tmp` puis remplacement. Voir [scripts/USAGE.md](scripts/USAGE.md) pour la liste complète des arguments.
 
+### Réparer les enrichissements NER/sentiment en erreur
+
+Si des articles ont été enrichis avec un statut d'échec (`enrichissement_statut: echec_api`), le script `repair_failed_enrichments.py` relance automatiquement l'enrichissement NER et/ou sentiment :
+
+```bash
+# Réparer NER et sentiment (tous les fichiers)
+python3 scripts/repair_failed_enrichments.py
+
+# NER uniquement
+python3 scripts/repair_failed_enrichments.py --type entities
+
+# Sentiment uniquement
+python3 scripts/repair_failed_enrichments.py --type sentiment
+
+# Simulation sans appel API ni écriture
+python3 scripts/repair_failed_enrichments.py --dry-run
+```
+
+Le script détecte les articles dont le champ `enrichissement_statut` contient `echec_api` ou `echec_parse`, relance l'enrichissement via l'API IA configurée (EurIA ou Claude), et met à jour l'`entity_index` pour les réparations NER réussies.
+
 ### Réparer les résumés en erreur
 
 Si des articles ont été traités avec un résumé d'erreur (ex. indisponibilité API temporaire), le script `repair_failed_summaries.py` les régénère automatiquement :
@@ -366,7 +386,7 @@ python3 scripts/repair_failed_summaries.py --dir data/articles/Intelligence-arti
 python3 scripts/repair_failed_summaries.py --dry-run
 ```
 
-Le script détecte les articles dont le champ `Résumé` contient un message d'erreur, re-récupère le texte HTML de l'article, et relance la génération via l'API EurIA. La sauvegarde est atomique.
+Le script détecte les articles dont le champ `Résumé` contient un message d'erreur, re-récupère le texte HTML de l'article, et relance la génération via l'API IA configurée (EurIA ou Claude). La sauvegarde est atomique.
 
 ### Radar thématique
 

@@ -40,7 +40,7 @@ WUDD.ai/
 | Layer | Technology |
 |---|---|
 | Language | Python 3.10+ |
-| AI API | Infomaniak EurIA (Qwen3) — OpenAI-compatible endpoint |
+| AI API | **EurIA** (Infomaniak / Qwen3, défaut) **ou Claude** (Anthropic) — sélectionnable via `AI_PROVIDER` dans `.env` |
 | HTTP | `requests` + `urllib3` (retry/backoff) |
 | HTML parsing | `beautifulsoup4` |
 | Config / secrets | `python-dotenv` |
@@ -192,6 +192,8 @@ The Docker container installs `archives/crontab` at startup and runs `cron -f` i
 | `enrich_sentiment.py` | Round-robin sentiment enrichment — adds `sentiment`, `score_sentiment`, `ton_editorial`, `score_ton` | `--flux`, `--keyword`, `--dry-run`, `--delay`, `--force` |
 | `trend_detector.py` | Detect trending entities and generate `data/alertes.json` | `--dry-run` |
 | `repair_failed_summaries.py` | Re-generate summaries that contain error messages | `--dir`, `--dry-run`, `--delay` |
+| `repair_failed_enrichments.py` | Re-run NER/sentiment enrichment for articles with `enrichissement_statut=echec_api` | `--type entities\|sentiment\|all`, `--dry-run`, `--delay` |
+| `benchmark_indexes.py` | Benchmark index performance vs rglob scans (scoring, entity search, compute_top_entities) | `--iterations N` |
 | `check_cron_health.py` | Cron health probe | (none) |
 | `generate_keyword_reports.py` | Monthly Markdown report per RSS keyword (current month) | (none) |
 | `generate_48h_report.py` | Daily Top 10 named-entity report from last 48h articles | `--dry-run` |
@@ -214,7 +216,7 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | Module | Purpose |
 |---|---|
 | `utils/config.py` | Singleton `Config` class — loads `.env`, validates vars, provides typed paths |
-| `utils/api_client.py` | EurIA API client with retry/backoff logic — `generate_summary()`, `generate_entities()` (NER), `generate_sentiment()`, `generate_report()` |
+| `utils/api_client.py` | Dual-provider AI client (EurIA or Claude) with retry/backoff logic — `generate_summary()`, `generate_entities()` (NER), `generate_sentiment()`, `generate_report()`. Provider selected via `AI_PROVIDER` env var. |
 | `utils/http_utils.py` | HTTP session with `urllib3` retry adapter |
 | `utils/date_utils.py` | Multi-format date parsing and validation |
 | `utils/logging.py` | Centralized timestamped logging (`print_console()`) |
@@ -225,6 +227,7 @@ All utility modules are importable as `from utils.X import Y`. They are the corr
 | `utils/deduplication.py` | `Deduplicator` — detects near-duplicate articles using 3 signals: URL MD5 + résumé MD5 + Jaccard bigrammes (threshold 0.80). Methods: `deduplicate()`, `deduplicate_incremental()`, `is_duplicate()` |
 | `utils/source_credibility.py` | `CredibilityEngine` — source credibility score (0–100) from `config/sources_credibility.json`; influences article ranking via `scoring.py` multiplier. Methods: `get_score()`, `get_multiplier()`, `rate_articles()` |
 | `utils/reading_time.py` | Reading time estimation at 230 wpm (francophone average). Returns `temps_lecture_minutes` (float) and `temps_lecture_label` (str). Functions: `estimate_reading_time()`, `enrich_reading_time()` |
+| `utils/rolling_window.py` | Shared rolling-window helper — maintains `48-heures.json` incrementally or by full rebuild from source dir. Used by `flux_watcher.py`, `get-keyword-from-rss.py` and `web_watcher.py`. Function: `update_rolling_window(new_articles, output_path, hours, source_dir)` |
 | `utils/exporters/atom_feed.py` | Atom XML feed generation (`generate_atom_feed()`, `generate_atom_from_flux()`) |
 | `utils/exporters/newsletter.py` | Newsletter HTML generation + SMTP send (`generate_newsletter_html()`, `send_newsletter()`) |
 | `utils/exporters/webhook.py` | Webhook notifications — Discord, Slack, Ntfy (`send_discord()`, `send_slack()`, `send_ntfy()`) |
