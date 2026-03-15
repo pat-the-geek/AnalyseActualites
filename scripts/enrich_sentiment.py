@@ -153,9 +153,12 @@ def enrich_file(json_file: Path, client, dry_run: bool, force: bool, delay: floa
         result = client.generate_sentiment(resume)
         if result:
             article.update(result)
+            article["enrichissement_statut"] = "ok"
             enriched += 1
             modified = True
         else:
+            article["enrichissement_statut"] = "echec_api"
+            modified = True
             default_logger.warning("  Analyse sentiment vide, article ignoré")
             skipped += 1
 

@@ -330,6 +330,16 @@ class EntityIndex:
             for (etype, ev), cnt in cooc.most_common(top_n)
         ]
 
+    def get_all_entries(self) -> dict[str, list[dict]]:
+        """Retourne une copie de l'index complet {entity_key: [{file, idx, date}]}.
+
+        Utilisé par entity_timeline.py et cross_flux_analysis.py pour construire
+        leurs agrégats sans scan rglob.
+        """
+        with self._lock:
+            self._load()
+        return {k: list(v) for k, v in self._data.get("index", {}).items()}
+
     def count_entities(self) -> int:
         """Retourne le nombre d'entités distinctes indexées."""
         with self._lock:

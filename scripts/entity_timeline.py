@@ -77,13 +77,76 @@ def _parse_date(date_str: str) -> datetime | None:
 
 # ── Collecte ──────────────────────────────────────────────────────────────────
 
+def _collect_timeline_from_index(
+    project_root: Path,
+    days: int,
+    entity_filter: str | None,
+    type_filter: str | None,
+) -> dict[str, dict[str, int]] | None:
+    """Construit la timeline depuis l'entity_index sans scan rglob.
+
+    Retourne None si l'index est absent ou vide (→ fallback rglob).
+    """
+    try:
+        from utils.entity_index import get_entity_index
+        eidx = get_entity_index(project_root)
+        all_entries = eidx.get_all_entries()
+    except Exception:
+        return None
+
+    if not all_entries:
+        return None  # Index vide → fallback rglob
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=days) if days > 0 else None
+
+    monitored = _MONITORED_TYPES
+    if type_filter and type_filter.upper() in _MONITORED_TYPES:
+        monitored = {type_filter.upper()}
+
+    entity_filter_lower = entity_filter.lower() if entity_filter else None
+
+    timeline: dict[str, dict[str, int]] = {}
+
+    for key, refs in all_entries.items():
+        if ":" not in key:
+            continue
+        etype, _, value = key.partition(":")
+        if etype not in monitored:
+            continue
+        if entity_filter_lower and entity_filter_lower not in value.lower():
+            continue
+
+        date_counts: dict[str, int] = defaultdict(int)
+        for ref in refs:
+            date_str = ref.get("date", "")
+            if not date_str or len(date_str) < 10:
+                continue
+            date_str = date_str[:10]
+            if cutoff:
+                try:
+                    dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    if dt < cutoff:
+                        continue
+                except ValueError:
+                    continue
+            date_counts[date_str] += 1
+
+        if date_counts:
+            timeline[key] = dict(date_counts)
+
+    return timeline
+
+
 def collect_timeline(
     project_root: Path,
     days: int = 30,
     entity_filter: str | None = None,
     type_filter: str | None = None,
 ) -> dict[str, dict[str, int]]:
-    """Scanne tous les fichiers d'articles et construit la série chronologique.
+    """Construit la série chronologique des mentions d'entités.
+
+    Essaie d'abord l'entity_index (O(1) lecture), puis fallback scan rglob.
 
     Args:
         project_root  : racine du projet
@@ -94,6 +157,13 @@ def collect_timeline(
     Returns:
         { "TYPE:valeur" : { "YYYY-MM-DD" : count, ... }, ... }
     """
+    # Tentative via entity_index (évite le scan rglob complet)
+    result = _collect_timeline_from_index(project_root, days, entity_filter, type_filter)
+    if result is not None:
+        default_logger.info("  [entity_index] Timeline construite sans scan rglob")
+        return result
+
+    default_logger.info("  [rglob] Index absent — scan complet des fichiers")
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days) if days > 0 else None
 

@@ -34,7 +34,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from utils.api_client import get_ai_client
 from utils.config import get_config
 from utils.logging import print_console
-from utils.scoring import ScoringEngine
+from utils.scoring import get_scoring_engine
 
 # Types d'entités pertinentes pour le classement
 ENTITY_TYPES_PERTINENTS = {"PERSON", "ORG", "GPE", "PRODUCT", "EVENT", "NORP", "FAC", "LOC"}
@@ -424,8 +424,8 @@ def generate_morning_digest(
     print_console(f"{len(articles_48h)} articles chargés depuis 48-heures.json")
 
     # 2. Top 5 articles les mieux scorés (fenêtre 24h, toutes sources)
-    engine = ScoringEngine(PROJECT_ROOT)
-    top_articles = engine.get_top_articles(top_n=5, hours=24, include_rss=True)
+    engine = get_scoring_engine(PROJECT_ROOT)
+    top_articles = engine.get_top_articles_from_index(top_n=5, hours=24, include_rss=True)
     if not top_articles:
         # Fallback : scorer directement les articles 48h sans filtre temporel
         top_articles = engine.score_and_sort(list(articles_48h), top_n=5)
