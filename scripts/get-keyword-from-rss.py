@@ -29,10 +29,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.api_client import get_ai_client
+from utils.article_index import get_article_index
+from utils.deduplication import Deduplicator
+from utils.entity_index import get_entity_index
 from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_images
 from utils.logging import print_console
 from utils.quota import get_quota_manager
-from utils.deduplication import Deduplicator
+from utils.rolling_window import update_rolling_window
 
 # Constantes
 
@@ -289,65 +292,42 @@ for kw, articles in results.items():
             f"  Déduplication : {dedup.stats['removed']} doublon(s) supprimé(s) pour '{kw}'"
         )
     merged = existing_list + unique_new
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(merged, f, ensure_ascii=False, indent=4)
+    # Écriture atomique (H)
+    _tmp_kw = out_path.with_suffix(".tmp")
+    _tmp_kw.write_text(json.dumps(merged, ensure_ascii=False, indent=4), encoding="utf-8")
+    _tmp_kw.replace(out_path)
     print_console(f"✓ {len(merged)} articles pour le mot-clé '{kw}' dans {out_path}")
+    # Mise à jour des indexes article + entités (A)
+    try:
+        _rel_kw = str(out_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+        get_article_index(PROJECT_ROOT).update(merged, _rel_kw)
+        if any("entities" in a for a in merged):
+            get_entity_index(PROJECT_ROOT).update(merged, _rel_kw)
+    except Exception as _e:
+        print_console(f"  Avertissement : index non mis à jour ({_e})", level="warning")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Génération du fichier 48-heures.json dans data/articles-from-rss/_WUDD.AI_/
-# Agrège tous les articles créés dans les dernières 48h depuis tous les fichiers
-# JSON du répertoire articles-from-rss/ (sans doublon, triés par date décroissante)
+# Reconstruit la fenêtre depuis tous les fichiers JSON d'articles-from-rss/
 # ─────────────────────────────────────────────────────────────────────────────
 print_console("Génération du fichier 48-heures.json (_WUDD.AI_)...")
 
 WUDD_DIR = OUTPUT_DIR / "_WUDD.AI_"
 WUDD_DIR.mkdir(parents=True, exist_ok=True)
-
-two_days_ago = now - timedelta(hours=48)
-seen_urls: set = set()
-articles_48h: list = []
-
-for json_file in sorted(OUTPUT_DIR.glob("*.json")):
-    try:
-        with open(json_file, "r", encoding="utf-8") as f:
-            file_articles = json.load(f)
-        for article in file_articles:
-            url = article.get("URL", "")
-            if not url or url in seen_urls:
-                continue
-            pub_date_str = article.get("Date de publication", "")
-            try:
-                pub_dt = datetime.strptime(pub_date_str, "%d/%m/%Y")  # format standard DD/MM/YYYY
-            except Exception:
-                try:
-                    pub_dt = datetime.strptime(pub_date_str[:25], "%a, %d %b %Y %H:%M:%S")  # ancien format RFC 2822 (rétrocompat)
-                except Exception:
-                    continue
-            if pub_dt >= two_days_ago:
-                seen_urls.add(url)
-                articles_48h.append(article)
-    except Exception as e:
-        print_console(f"Erreur lecture {json_file.name} pour 48h : {e}", level="error")
-
-
-def _parse_date_safe(article: dict) -> datetime:
-    date_str = article.get("Date de publication", "")
-    try:
-        return datetime.strptime(date_str, "%d/%m/%Y")  # format standard DD/MM/YYYY
-    except Exception:
-        try:
-            return datetime.strptime(date_str[:25], "%a, %d %b %Y %H:%M:%S")  # ancien format RFC 2822 (rétrocompat)
-        except Exception:
-            return datetime.min
-
-
-articles_48h.sort(key=_parse_date_safe, reverse=True)
-
 wudd_path = WUDD_DIR / "48-heures.json"
-with open(wudd_path, "w", encoding="utf-8") as f:
-    json.dump(articles_48h, f, ensure_ascii=False, indent=4)
 
-print_console(f"✓ {len(articles_48h)} articles des dernières 48h sauvegardés dans {wudd_path}")
+nb_48h = update_rolling_window([], wudd_path, hours=48, source_dir=OUTPUT_DIR)
+print_console(f"✓ {nb_48h} articles des dernières 48h dans {wudd_path}")
+
+# Mise à jour de l'index pour 48-heures.json
+try:
+    _wudd_articles = json.loads(wudd_path.read_text(encoding="utf-8"))
+    _rel_wudd = str(wudd_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+    get_article_index(PROJECT_ROOT).update(_wudd_articles, _rel_wudd)
+    if any("entities" in a for a in _wudd_articles):
+        get_entity_index(PROJECT_ROOT).update(_wudd_articles, _rel_wudd)
+except Exception as _e_48:
+    print_console(f"  Avertissement : index 48h non mis à jour ({_e_48})", level="warning")
 
 # Marquer la progression comme terminée
 _progress["finished_at"] = datetime.now(timezone.utc).isoformat()
