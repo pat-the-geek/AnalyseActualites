@@ -65,12 +65,15 @@ _ENTITY_TYPES = [
 ]
 
 
-def _parse_entities_response(raw: str) -> dict:
+def _parse_entities_response(raw: str) -> Optional[dict]:
     """Extrait un dict d'entités depuis une réponse brute de l'API.
 
     Gère les blocs ```json … ```, les balises <think>…</think> (Qwen3)
     et les réponses contenant du texte parasite autour du JSON.
-    Retourne {} si l'extraction échoue.
+
+    Retourne :
+      - dict (éventuellement vide {}) si le parsing réussit
+      - None si la réponse ne contient aucun JSON valide (erreur de parsing)
     """
     # Supprimer les blocs <think>…</think>
     text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE).strip()
@@ -88,12 +91,12 @@ def _parse_entities_response(raw: str) -> dict:
         obj_match = re.search(r"\{[\s\S]*\}", text)
         if not obj_match:
             default_logger.warning("Impossible d'extraire du JSON depuis la réponse NER")
-            return {}
+            return None  # echec_parse : pas de JSON du tout
         try:
             raw_entities = json.loads(obj_match.group(0))
         except json.JSONDecodeError:
             default_logger.warning("JSON NER invalide après extraction")
-            return {}
+            return None  # echec_parse : JSON malformé
 
     if not isinstance(raw_entities, dict):
         return {}
@@ -113,7 +116,7 @@ def _parse_entities_response(raw: str) -> dict:
         if dedup:
             result[etype] = dedup
 
-    return result
+    return result  # {} = réponse valide mais aucune entité trouvée
 
 
 _SENTIMENT_VALUES = {"positif", "neutre", "négatif"}
@@ -122,8 +125,13 @@ _TON_VALUES = {"factuel", "alarmiste", "promotionnel", "critique", "analytique"}
 _PROMPT_SENTIMENT_TEMPLATE = _SENTIMENT_SYSTEM_INSTRUCTIONS + "\n\nTexte :\n{resume}"
 
 
-def _parse_sentiment_response(raw: str) -> dict:
-    """Extrait un dict sentiment/ton depuis une réponse brute de l'API."""
+def _parse_sentiment_response(raw: str) -> Optional[dict]:
+    """Extrait un dict sentiment/ton depuis une réponse brute de l'API.
+
+    Retourne :
+      - dict (éventuellement vide {}) si le parsing réussit
+      - None si la réponse ne contient aucun JSON valide (erreur de parsing)
+    """
     text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE).strip()
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if fence:
@@ -133,11 +141,13 @@ def _parse_sentiment_response(raw: str) -> dict:
     except json.JSONDecodeError:
         obj = re.search(r"\{[\s\S]*\}", text)
         if not obj:
-            return {}
+            default_logger.warning("Impossible d'extraire du JSON depuis la réponse sentiment")
+            return None  # echec_parse : pas de JSON du tout
         try:
             data = json.loads(obj.group(0))
         except json.JSONDecodeError:
-            return {}
+            default_logger.warning("JSON sentiment invalide après extraction")
+            return None  # echec_parse : JSON malformé
     if not isinstance(data, dict):
         return {}
     result = {}
@@ -358,7 +368,7 @@ class EurIAClient:
         self,
         resume: str,
         timeout: int = 60
-    ) -> dict:
+    ) -> Optional[dict]:
         """Extrait les entités nommées (NER) d'un texte via l'API IA.
 
         Args:
@@ -366,8 +376,9 @@ class EurIAClient:
             timeout: Timeout en secondes (défaut : 60)
 
         Returns:
-            Dictionnaire { type_entité: [valeur, …] }.
-            Retourne {} silencieusement en cas d'échec (ne bloque pas le pipeline).
+            Dictionnaire { type_entité: [valeur, …] } en cas de succès (peut être {}).
+            None si le parsing de la réponse échoue (echec_parse).
+            {} si l'appel API lui-même échoue (echec_api).
         """
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
@@ -375,16 +386,16 @@ class EurIAClient:
         prompt = _PROMPT_ENTITIES.format(resume=resume.strip())
         try:
             raw = self.ask(prompt, max_attempts=3, timeout=timeout, max_tokens=800)
-            return _parse_entities_response(raw)
+            return _parse_entities_response(raw)  # None = echec_parse, {} = no entities
         except Exception as e:
             default_logger.warning(f"Extraction NER échouée : {e}")
-            return {}
+            return {}  # echec_api : l'appel réseau a échoué
 
     def generate_sentiment(
         self,
         resume: str,
         timeout: int = 30
-    ) -> dict:
+    ) -> Optional[dict]:
         """Analyse le sentiment et le ton éditorial d'un article.
 
         Args:
@@ -392,13 +403,9 @@ class EurIAClient:
             timeout : Timeout en secondes (défaut: 30)
 
         Returns:
-            {
-              "sentiment"     : "positif" | "neutre" | "négatif",
-              "score_sentiment": int 1-5  (1=très négatif, 3=neutre, 5=très positif),
-              "ton_editorial" : "factuel" | "alarmiste" | "promotionnel" | "critique" | "analytique",
-              "score_ton"     : int 1-5  (1=très biaisé, 5=très factuel)
-            }
-            Retourne {} silencieusement si l'analyse échoue.
+            Dict avec les champs sentiment/score_sentiment/ton_editorial/score_ton.
+            None si le parsing de la réponse échoue (echec_parse).
+            {} si l'appel API lui-même échoue (echec_api).
         """
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
@@ -406,10 +413,10 @@ class EurIAClient:
         prompt = _PROMPT_SENTIMENT_TEMPLATE.format(resume=resume.strip()[:3000])
         try:
             raw = self.ask(prompt, max_attempts=2, timeout=timeout, max_tokens=150)
-            return _parse_sentiment_response(raw)
+            return _parse_sentiment_response(raw)  # None = echec_parse
         except Exception as e:
             default_logger.warning(f"Analyse sentiment échouée : {e}")
-            return {}
+            return {}  # echec_api : l'appel réseau a échoué
 
     def synthesize_topic(
         self,
@@ -729,8 +736,13 @@ class ClaudeClient:
         result = re.sub(r'^#{1,3}\s*[Rr]é[sc]?umé\s*[:\-]?\s*\n?', '', result).strip()
         return result
 
-    def generate_entities(self, resume: str, timeout: int = 60) -> dict:
-        """Extraction NER — utilise Haiku avec prompt caching sur les instructions."""
+    def generate_entities(self, resume: str, timeout: int = 60) -> Optional[dict]:
+        """Extraction NER — utilise Haiku avec prompt caching sur les instructions.
+
+        Returns:
+            Dict d'entités, {} si aucune entité trouvée, None si echec_parse,
+            {} si echec_api (exception réseau).
+        """
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
         try:
@@ -741,13 +753,17 @@ class ClaudeClient:
                 timeout=timeout,
                 max_tokens=800,
             )
-            return _parse_entities_response(raw)
+            return _parse_entities_response(raw)  # None = echec_parse
         except Exception as e:
             default_logger.warning(f"[Claude] Extraction NER échouée : {e}")
-            return {}
+            return {}  # echec_api : l'appel réseau a échoué
 
-    def generate_sentiment(self, resume: str, timeout: int = 30) -> dict:
-        """Sentiment & ton éditorial — utilise Haiku avec prompt caching sur les instructions."""
+    def generate_sentiment(self, resume: str, timeout: int = 30) -> Optional[dict]:
+        """Sentiment & ton éditorial — utilise Haiku avec prompt caching sur les instructions.
+
+        Returns:
+            Dict sentiment/ton, {} si echec_api, None si echec_parse.
+        """
         if not resume or not isinstance(resume, str) or not resume.strip():
             return {}
         try:
@@ -758,10 +774,10 @@ class ClaudeClient:
                 timeout=timeout,
                 max_tokens=150,
             )
-            return _parse_sentiment_response(raw)
+            return _parse_sentiment_response(raw)  # None = echec_parse
         except Exception as e:
             default_logger.warning(f"[Claude] Analyse sentiment échouée : {e}")
-            return {}
+            return {}  # echec_api : l'appel réseau a échoué
 
     def synthesize_topic(self, topic: str, articles: list, timeout: int = 120) -> str:
         """Synthèse RAG multi-sources — utilise Sonnet (user-facing)."""

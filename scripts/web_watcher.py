@@ -43,6 +43,9 @@ from utils.entity_index import get_entity_index
 from utils.logging import print_console
 from utils.quota import get_quota_manager
 from utils.rolling_window import update_rolling_window
+from utils.source_credibility import CredibilityEngine
+
+_credibility = CredibilityEngine(PROJECT_ROOT)
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -308,40 +311,33 @@ def _extract_page(url: str) -> dict | None:
 
 # ─── Traitement d'une source ─────────────────────────────────────────────────
 
-def _process_source(
+def _fetch_source_urls(
     source: dict,
-    state: dict,
-    api_client,
-    quota,
-    dry_run: bool,
-) -> int:
-    """Traite une source : sitemap → nouvelles URLs → extraction → résumé → sauvegarde.
+    src_state: dict,
+) -> list[tuple[str, str]]:
+    """Lit le sitemap et retourne les nouvelles URLs filtrées, triées par lastmod décroissant.
 
-    Retourne le nombre d'articles ajoutés.
+    Args:
+        source    : définition de la source (config/web_sources.json)
+        src_state : état de la source {"processed_urls": [...]}
+
+    Returns:
+        Liste de (url, lastmod) — nouvelles URLs non encore traitées, max max_per_run.
     """
-    name        = source["name"]
-    title_src   = source["title"]
     sitemap_url = source["sitemap_url"]
     url_pattern = source["url_pattern"]
-    keyword     = source["keyword"]
     langue      = source.get("langue", "en")
     max_per_run = source.get("max_per_run", 5)
     base_url    = source.get("base_url", "").rstrip("/")
 
-    print_console(f"\n[web_watcher] ── {title_src} ──────────────────────────────")
+    processed_set = {_normalize_url(u) for u in src_state.get("processed_urls", [])}
 
-    # État local de cette source
-    src_state = state.setdefault(name, {"processed_urls": []})
-    processed_set = {_normalize_url(u) for u in src_state["processed_urls"]}
-
-    # Lecture du sitemap
     all_entries = _fetch_sitemap(sitemap_url)
     if not all_entries:
-        print_console(f"  Sitemap vide ou inaccessible.", level="warning")
-        return 0
+        print_console("  Sitemap vide ou inaccessible.", level="warning")
+        return []
     print_console(f"  {len(all_entries)} URLs dans le sitemap.")
 
-    # Filtrage par url_pattern + exclusion des déjà traitées
     pat = re.compile(url_pattern)
     new_entries: list[tuple[str, str]] = []
     for url, lastmod in all_entries:
@@ -352,16 +348,135 @@ def _process_source(
     print_console(f"  {len(new_entries)} nouvelles URLs correspondant au pattern.")
 
     if not new_entries:
+        return []
+
+    # Trier par lastmod décroissant (plus récentes en premier), limiter à max_per_run
+    new_entries.sort(
+        key=lambda e: _parse_date(e[1], langue=langue) if e[1] else datetime.min,
+        reverse=True,
+    )
+    return new_entries[:max_per_run]
+
+
+def _process_article(
+    url: str,
+    lastmod: str,
+    source: dict,
+    api_client,
+    quota,
+    src_state: dict,
+    processed_set: set,
+    existing_urls: set,
+) -> dict | None:
+    """Traite une URL : extraction → filtre mot-clé → résumé + NER → article dict.
+
+    Met à jour src_state et processed_set dans tous les cas (traité ou ignoré).
+
+    Returns:
+        Article dict si l'article a été produit, None si ignoré/erreur.
+    """
+    keyword   = source["keyword"]
+    title_src = source["title"]
+    langue    = source.get("langue", "en")
+
+    print_console(f"  → {url[:90]}")
+
+    # Doublon tardif
+    if url in existing_urls:
+        src_state["processed_urls"].append(url)
+        processed_set.add(_normalize_url(url))
+        return None
+
+    # Extraction du contenu de la page
+    page = _extract_page(url)
+    if not page:
+        src_state["processed_urls"].append(url)
+        processed_set.add(_normalize_url(url))
+        return None
+
+    # Filtre par mot-clé sur le titre
+    keyword_filter = source.get("keyword_filter") or [keyword]
+    if not any(kw.lower() in page["title"].lower() for kw in keyword_filter):
+        print_console(
+            f"    ✗ Hors sujet (aucun mot-clé parmi {keyword_filter[:3]} dans le titre) — ignoré"
+        )
+        src_state["processed_urls"].append(url)
+        processed_set.add(_normalize_url(url))
+        return None
+
+    # Date de publication
+    pub_date_str = page["pub_date_str"] or lastmod
+    pub_dt = _parse_date(pub_date_str, langue=langue)
+    pub_date_fmt = _fmt_ddmmyyyy(pub_dt)
+
+    # Résumé via API IA
+    lang_label = "français" if langue == "fr" else "français (article source en anglais)"
+    context = f"Source : {title_src}\nURL : {url}\n\n{page['text']}"
+    resume = api_client.generate_summary(context, max_lines=15, language=lang_label)
+
+    # Extraction des entités nommées (NER)
+    print_console("    Extraction des entités nommées…")
+    entities = api_client.generate_entities(resume)
+
+    # Vérification quota par entité (après NER, avant sauvegarde)
+    if entities:
+        ok, saturated = quota.can_process_entities(entities)
+        if not ok:
+            print_console(
+                f"  Quota entités saturé ({', '.join(saturated[:3])}) — article ignoré.",
+                level="warning",
+            )
+            src_state["processed_urls"].append(url)
+            processed_set.add(_normalize_url(url))
+            return None
+
+    # Construction de l'article (format standard WUDD.ai)
+    article: dict = {
+        "Date de publication": pub_date_fmt,
+        "Sources": title_src,
+        "URL": url,
+        "Résumé": resume,
+        "Images": page["images"],
+        "score_source": _credibility.get_score(title_src),
+    }
+    if entities:
+        article["entities"] = entities
+    if page["title"]:
+        article["Titre"] = page["title"]
+
+    quota.record_article(keyword, title_src, entities)
+    src_state["processed_urls"].append(url)
+    processed_set.add(_normalize_url(url))
+
+    print_console(f"    ✓ {(page['title'] or url)[:70]}")
+    return article
+
+
+def _process_source(
+    source: dict,
+    state: dict,
+    api_client,
+    quota,
+    dry_run: bool,
+) -> int:
+    """Orchestre le traitement d'une source : découverte → extraction → sauvegarde.
+
+    Retourne le nombre d'articles ajoutés.
+    """
+    name      = source["name"]
+    title_src = source["title"]
+    keyword   = source["keyword"]
+
+    print_console(f"\n[web_watcher] ── {title_src} ──────────────────────────────")
+
+    src_state     = state.setdefault(name, {"processed_urls": []})
+    processed_set = {_normalize_url(u) for u in src_state["processed_urls"]}
+
+    to_process = _fetch_source_urls(source, src_state)
+    if not to_process:
         return 0
 
-    # Trier par lastmod décroissant (plus récentes en premier)
-    def _lm_key(entry: tuple) -> datetime:
-        return _parse_date(entry[1], langue=langue) if entry[1] else datetime.min
-
-    new_entries.sort(key=_lm_key, reverse=True)
-    to_process = new_entries[:max_per_run]
-
-    # Fichier de sortie
+    # Fichier de sortie pour ce keyword
     out_path = OUTPUT_DIR / f"{keyword.replace(' ', '-').lower()}.json"
     existing_articles: list = []
     existing_urls: set = set()
@@ -376,109 +491,42 @@ def _process_source(
     new_for_48h: list = []
 
     for url, lastmod in to_process:
-        # En dry-run : juste afficher l'URL, pas d'appel API ni de vérification quota
         if dry_run:
             print_console(f"  [dry-run] {url[:90]}")
             continue
 
-        # Vérification quota global
         if quota.is_global_exhausted():
             print_console("  Quota global épuisé — arrêt.", level="warning")
             break
 
-        # Vérification quota par keyword/source
         if not quota.can_process(keyword, title_src):
             print_console(f"  Quota '{keyword}' atteint — arrêt.", level="warning")
             break
 
-        print_console(f"  → {url[:90]}")
-
-        # Doublon tardif (peut arriver si deux runs se chevauchent)
-        if url in existing_urls:
-            src_state["processed_urls"].append(url)
-            processed_set.add(_normalize_url(url))
+        article = _process_article(
+            url, lastmod, source, api_client, quota,
+            src_state, processed_set, existing_urls,
+        )
+        if article is None:
             continue
-
-        # Extraction du contenu
-        page = _extract_page(url)
-        if not page:
-            src_state["processed_urls"].append(url)
-            processed_set.add(_normalize_url(url))
-            continue
-
-        # Filtre par mot-clé sur le titre uniquement (keyword_filter ou keyword de la source)
-        keyword_filter = source.get("keyword_filter") or [keyword]
-        title_lower = page["title"].lower()
-        if not any(kw.lower() in title_lower for kw in keyword_filter):
-            print_console(f"    ✗ Hors sujet (aucun mot-clé trouvé dans le titre parmi {keyword_filter[:3]}) — ignoré")
-            src_state["processed_urls"].append(url)
-            processed_set.add(_normalize_url(url))
-            continue
-
-        # Date : contenu de page > lastmod sitemap > maintenant
-        # La langue de la source détermine l'interprétation des dates ambiguës :
-        # - 'en' : MM/DD/YYYY prioritaire (ex. 03/09 → mars 9)
-        # - 'fr' : DD/MM/YYYY prioritaire (ex. 03/09 → 3 septembre)
-        pub_date_str = page["pub_date_str"] or lastmod
-        pub_dt = _parse_date(pub_date_str, langue=langue)
-        pub_date_fmt = _fmt_ddmmyyyy(pub_dt)
-
-        # Résumé EurIA
-        lang_label = "français" if langue == "fr" else "français (article source en anglais)"
-        context = f"Source : {title_src}\nURL : {url}\n\n{page['text']}"
-        resume = api_client.generate_summary(context, max_lines=15, language=lang_label)
-
-        # Extraction des entités nommées (NER) — inline comme get-keyword-from-rss.py
-        print_console(f"    Extraction des entités nommées…")
-        entities = api_client.generate_entities(resume)
-
-        # Vérification quota par entité (après NER, avant sauvegarde)
-        if entities:
-            ok, saturated = quota.can_process_entities(entities)
-            if not ok:
-                print_console(
-                    f"  Quota entités saturé ({', '.join(saturated[:3])}) — article ignoré.",
-                    level="warning",
-                )
-                src_state["processed_urls"].append(url)
-                processed_set.add(_normalize_url(url))
-                continue
-
-        # Construction de l'article (format standard du projet)
-        article: dict = {
-            "Date de publication": pub_date_fmt,
-            "Sources": title_src,
-            "URL": url,
-            "Résumé": resume,
-            "Images": page["images"],
-        }
-        if entities:
-            article["entities"] = entities
-        if page["title"]:
-            article["Titre"] = page["title"]
 
         existing_articles.append(article)
         existing_urls.add(url)
         new_for_48h.append(article)
-        src_state["processed_urls"].append(url)
-        processed_set.add(_normalize_url(url))
-        quota.record_article(keyword, title_src, entities)
         added += 1
-
-        titre_court = (page["title"] or url)[:70]
-        print_console(f"    ✓ {titre_court}")
 
     # Sauvegarde
     if added > 0:
-        def _sort_key(a: dict) -> datetime:
-            try:
-                return datetime.strptime(a.get("Date de publication", ""), "%d/%m/%Y")
-            except Exception:
-                return datetime.min
-
-        existing_articles.sort(key=_sort_key, reverse=True)
+        existing_articles.sort(
+            key=lambda a: (
+                datetime.strptime(a.get("Date de publication", ""), "%d/%m/%Y")
+                if a.get("Date de publication") else datetime.min
+            ),
+            reverse=True,
+        )
         _write_atomic(out_path, existing_articles)
-        # Mise à jour des indexes article + entités (B)
+
+        # Mise à jour des indexes article + entités
         try:
             _rel_kw = str(out_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
             get_article_index(PROJECT_ROOT).update(existing_articles, _rel_kw)
@@ -486,11 +534,13 @@ def _process_source(
                 get_entity_index(PROJECT_ROOT).update(existing_articles, _rel_kw)
         except Exception as _e:
             print_console(f"  Avertissement : index non mis à jour ({_e})", level="warning")
-        # Mise à jour 48-heures.json via rolling_window (F)
+
+        # Mise à jour 48-heures.json via rolling_window
         WUDD_DIR.mkdir(parents=True, exist_ok=True)
         wudd_path = WUDD_DIR / "48-heures.json"
         nb_48h = update_rolling_window(new_for_48h, wudd_path, hours=48)
         print_console(f"48-heures.json : +{len(new_for_48h)} web | {nb_48h} total dans la fenêtre 48h")
+
         # Mise à jour de l'index pour 48-heures.json
         try:
             _wudd_articles = json.loads(wudd_path.read_text(encoding="utf-8"))
@@ -500,6 +550,7 @@ def _process_source(
                 get_entity_index(PROJECT_ROOT).update(_wudd_articles, _rel_wudd)
         except Exception as _e_48:
             print_console(f"  Avertissement : index 48h non mis à jour ({_e_48})", level="warning")
+
         print_console(f"  → {added} article(s) sauvegardé(s) dans {out_path.name}")
 
     return added

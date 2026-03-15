@@ -34,13 +34,55 @@ from typing import Optional
 
 from .logging import default_logger
 
-_INDEX_VERSION = 1
+_INDEX_VERSION = 2
 _INDEX_FILENAME = "entity_index.json"
 
 # Types d'entités indexés (filtrage des types peu utiles pour la recherche)
 _INDEXED_ENTITY_TYPES = {
     "PERSON", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", "NORP", "FAC",
 }
+
+
+def _cap_score(s: str) -> int:
+    """Score de capitalisation : préfère les formes avec des majuscules initiales.
+
+    Retourne -1 pour les formes entièrement en majuscules (ALL_CAPS),
+    sinon le nombre de caractères alphabétiques en majuscule.
+
+    Exemples :
+        "emmanuel macron" → 0
+        "Emmanuel Macron" → 2   ← préféré
+        "EMMANUEL MACRON" → -1  (pénalisé)
+        "OpenAI"          → 2   ← préféré
+    """
+    if not s:
+        return 0
+    alpha_chars = [c for c in s if c.isalpha()]
+    if not alpha_chars:
+        return 0
+    upper_count = sum(1 for c in alpha_chars if c.isupper())
+    if upper_count == len(alpha_chars):
+        return -1  # Tout en majuscules → pénalisé
+    return upper_count
+
+
+def _normalize_entity_key(etype: str, name: str) -> str:
+    """Retourne la clé d'index normalisée (valeur en minuscules)."""
+    return f"{etype}:{name.strip().lower()}"
+
+
+def _update_caps(caps: dict, key: str, name: str) -> None:
+    """Met à jour le dict caps avec la forme de capitalisation préférée.
+
+    Conserve la forme ayant le meilleur _cap_score, ou la forme existante
+    en cas d'égalité (stable).
+    """
+    name = name.strip()
+    if not name:
+        return
+    existing = caps.get(key)
+    if existing is None or _cap_score(name) > _cap_score(existing):
+        caps[key] = name
 
 
 class EntityIndex:
@@ -55,7 +97,7 @@ class EntityIndex:
         self.project_root = project_root
         self._index_path = project_root / "data" / _INDEX_FILENAME
         self._lock = threading.Lock()
-        self._data: dict = {"version": _INDEX_VERSION, "index": {}}
+        self._data: dict = {"version": _INDEX_VERSION, "index": {}, "caps": {}}
         self._loaded = False
 
     # ── Chargement / sauvegarde ─────────────────────────────────────────────
@@ -67,10 +109,14 @@ class EntityIndex:
             try:
                 raw = json.loads(self._index_path.read_text(encoding="utf-8"))
                 if isinstance(raw, dict) and raw.get("version") == _INDEX_VERSION:
+                    # S'assurer que le champ caps existe (migration partielle)
+                    if "caps" not in raw:
+                        raw["caps"] = {}
                     self._data = raw
                 else:
                     default_logger.warning(
-                        "entity_index.json : version incompatible, reconstruction nécessaire."
+                        "entity_index.json : version incompatible ou ancienne (v1), "
+                        "reconstruction nécessaire. Lancez normalize_entity_index.py."
                     )
             except (json.JSONDecodeError, OSError) as e:
                 default_logger.warning(f"Impossible de charger entity_index.json : {e}")
@@ -118,6 +164,7 @@ class EntityIndex:
         with self._lock:
             self._load()
             index = self._data.setdefault("index", {})
+            caps = self._data.setdefault("caps", {})
 
             # Retirer toutes les références existantes pour ce fichier source
             # (nécessaire pour 48-heures.json qui est réécrit intégralement)
@@ -148,7 +195,8 @@ class EntityIndex:
                     for name in names:
                         if not isinstance(name, str) or not name.strip():
                             continue
-                        key = f"{etype}:{name.strip()}"
+                        key = _normalize_entity_key(etype, name)
+                        _update_caps(caps, key, name)
                         ref = {"file": source_file, "idx": file_idx, "date": date_short}
                         index.setdefault(key, []).append(ref)
                         added += 1
@@ -166,6 +214,7 @@ class EntityIndex:
             self.project_root / "data" / "articles-from-rss",
         ]
         new_index: dict[str, list[dict]] = {}
+        new_caps: dict[str, str] = {}
         total_refs = 0
 
         for scan_dir in scan_dirs:
@@ -197,7 +246,8 @@ class EntityIndex:
                             for name in names:
                                 if not isinstance(name, str) or not name.strip():
                                     continue
-                                key = f"{etype}:{name.strip()}"
+                                key = _normalize_entity_key(etype, name)
+                                _update_caps(new_caps, key, name)
                                 ref = {"file": rel, "idx": file_idx, "date": date_short}
                                 new_index.setdefault(key, []).append(ref)
                                 total_refs += 1
@@ -205,7 +255,7 @@ class EntityIndex:
                     continue
 
         with self._lock:
-            self._data = {"version": _INDEX_VERSION, "index": new_index}
+            self._data = {"version": _INDEX_VERSION, "index": new_index, "caps": new_caps}
             self._save()
             self._loaded = True
             return total_refs
@@ -217,16 +267,26 @@ class EntityIndex:
 
         Args:
             entity_type  : ex. "PERSON", "ORG", "GPE"
-            entity_value : ex. "Emmanuel Macron"
+            entity_value : ex. "Emmanuel Macron" (insensible à la casse)
 
         Returns:
             Liste de dict {file, idx, date}, triée par date décroissante.
         """
         with self._lock:
             self._load()
-        key = f"{entity_type}:{entity_value}"
+        key = _normalize_entity_key(entity_type, entity_value)
         refs = self._data.get("index", {}).get(key, [])
         return sorted(refs, key=lambda r: r.get("date", ""), reverse=True)
+
+    def get_display_name(self, entity_type: str, entity_value: str) -> str:
+        """Retourne la forme canonique d'affichage de l'entité (caps).
+
+        Fallback : retourne entity_value tel quel si aucune forme capitalisée connue.
+        """
+        with self._lock:
+            self._load()
+        key = _normalize_entity_key(entity_type, entity_value)
+        return self._data.get("caps", {}).get(key, entity_value.strip())
 
     def load_articles(
         self,
@@ -288,15 +348,18 @@ class EntityIndex:
 
         Returns:
             Liste de dict {type, value, count} triée par count décroissant.
+            Le champ "value" contient la forme d'affichage capitalisée (caps).
         """
         with self._lock:
             self._load()
+        caps = self._data.get("caps", {})
         counter = Counter({k: len(v) for k, v in self._data.get("index", {}).items()})
         results = []
         for key, count in counter.most_common(top_n):
             if ":" in key:
-                etype, _, evalue = key.partition(":")
-                results.append({"type": etype, "value": evalue, "count": count})
+                etype, _, evalue_lower = key.partition(":")
+                display = caps.get(key, evalue_lower)
+                results.append({"type": etype, "value": display, "count": count})
         return results
 
     def get_cooccurrences(
@@ -323,10 +386,16 @@ class EntityIndex:
                 if not isinstance(evals, list):
                     continue
                 for ev in evals:
-                    if not (etype == entity_type and ev == entity_value):
+                    # Exclure l'entité cible (comparaison insensible à la casse)
+                    if not (etype == entity_type and ev.strip().lower() == entity_value.strip().lower()):
                         cooc[(etype, ev)] += 1
+        caps = self._data.get("caps", {})
         return [
-            {"type": etype, "value": ev, "count": cnt}
+            {
+                "type": etype,
+                "value": caps.get(_normalize_entity_key(etype, ev), ev),
+                "count": cnt,
+            }
             for (etype, ev), cnt in cooc.most_common(top_n)
         ]
 

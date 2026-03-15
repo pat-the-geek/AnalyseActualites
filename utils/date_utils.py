@@ -116,12 +116,13 @@ def parse_article_date(date_str: str) -> Optional[datetime]:
     if not date_str:
         return None
     date_str = date_str.strip()
-    for fmt, length in (("%d/%m/%Y", 10), ("%Y-%m-%d", 10)):
-        try:
-            return datetime.strptime(date_str[:length], fmt)
-        except ValueError:
-            continue
-    for fmt, length in (("%Y-%m-%dT%H:%M:%SZ", 20), ("%Y-%m-%dT%H:%M:%S", 19)):
+    # Formats ISO longs testés en premier pour éviter qu'ISO court tronque les heures
+    for fmt, length in (
+        ("%Y-%m-%dT%H:%M:%SZ", 20),
+        ("%Y-%m-%dT%H:%M:%S", 19),
+        ("%d/%m/%Y", 10),
+        ("%Y-%m-%d", 10),
+    ):
         try:
             return datetime.strptime(date_str[:length], fmt)
         except ValueError:
