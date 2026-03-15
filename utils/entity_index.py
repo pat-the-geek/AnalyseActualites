@@ -402,12 +402,25 @@ class EntityIndex:
     def get_all_entries(self) -> dict[str, list[dict]]:
         """Retourne une copie de l'index complet {entity_key: [{file, idx, date}]}.
 
-        Utilisé par entity_timeline.py et cross_flux_analysis.py pour construire
-        leurs agrégats sans scan rglob.
+        Les clés utilisent la forme d'affichage canonique (caps) pour la valeur,
+        afin que les appelants obtiennent "ORG:OpenAI" et non "ORG:openai".
+
+        Utilisé par entity_timeline.py, cross_flux_analysis.py et le viewer
+        pour construire leurs agrégats sans scan rglob.
         """
         with self._lock:
             self._load()
-        return {k: list(v) for k, v in self._data.get("index", {}).items()}
+        caps = self._data.get("caps", {})
+        result = {}
+        for k, v in self._data.get("index", {}).items():
+            if ":" in k:
+                etype, _, name_lower = k.partition(":")
+                display = caps.get(k, name_lower)
+                display_key = f"{etype}:{display}"
+            else:
+                display_key = k
+            result[display_key] = list(v)
+        return result
 
     def count_entities(self) -> int:
         """Retourne le nombre d'entités distinctes indexées."""
