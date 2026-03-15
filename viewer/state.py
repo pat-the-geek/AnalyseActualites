@@ -5,6 +5,10 @@ WUDD.ai Viewer — état global partagé entre les blueprints Flask.
 import threading
 import time as _time
 
+# Verrou pour les annotations manuelles (data/annotations.json)
+# Partagé entre entities.py et export.py
+_annotations_lock = threading.Lock()
+
 # Suivi du process RSS keyword (un seul à la fois)
 _rss_job: dict = {
     "process": None,
