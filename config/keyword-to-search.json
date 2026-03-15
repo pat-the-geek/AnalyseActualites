@@ -21,7 +21,11 @@
   {
     "keyword": "Anthropic",
     "or": [
-      "Claude"
+      "Claude code",
+      "Dario Amodei",
+      "Claude Sonnet",
+      "Claude haiku",
+      "Claude AI"
     ]
   },
   {
@@ -182,6 +186,11 @@
   },
   {
     "and": [],
+    "keyword": "Perplexity",
+    "or": []
+  },
+  {
+    "and": [],
     "keyword": "Quantique",
     "or": []
   },
@@ -269,10 +278,5 @@
       "Visual Studio Code",
       "Multi-Agent Development"
     ]
-  },
-  {
-    "keyword": "Perplexity",
-    "or": [],
-    "and": []
   }
 ]
