@@ -28,7 +28,7 @@ import re
 import sys
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
@@ -38,8 +38,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.api_client import get_ai_client
+from utils.article_index import get_article_index
+from utils.entity_index import get_entity_index
 from utils.logging import print_console
 from utils.quota import get_quota_manager
+from utils.rolling_window import update_rolling_window
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -300,44 +303,7 @@ def _extract_page(url: str) -> dict | None:
     }
 
 
-# ─── Mise à jour 48-heures.json ──────────────────────────────────────────────
-
-def _update_48h(new_articles: list) -> None:
-    """Ajoute les nouveaux articles à 48-heures.json et élague les > 48h."""
-    wudd_path = WUDD_DIR / "48-heures.json"
-    two_days_ago = datetime.utcnow() - timedelta(hours=48)
-
-    existing: list = []
-    if wudd_path.exists():
-        try:
-            existing = json.loads(wudd_path.read_text(encoding="utf-8"))
-        except Exception:
-            existing = []
-
-    seen_urls = {a.get("URL", "") for a in existing}
-    for article in new_articles:
-        if article.get("URL", "") not in seen_urls:
-            existing.append(article)
-            seen_urls.add(article["URL"])
-
-    def _dt(a: dict) -> datetime:
-        date_str = a.get("Date de publication", "")
-        # Format DD/MM/YYYY (produit par get-keyword-from-rss et web_watcher)
-        try:
-            return datetime.strptime(date_str[:10], "%d/%m/%Y")
-        except Exception:
-            pass
-        # Format RFC 2822 (produit par flux_watcher)
-        try:
-            return datetime.strptime(date_str[:25], "%a, %d %b %Y %H:%M:%S")
-        except Exception:
-            pass
-        return datetime.utcnow()
-
-    fresh = [a for a in existing if _dt(a) >= two_days_ago]
-    fresh.sort(key=_dt, reverse=True)
-    _write_atomic(wudd_path, fresh)
-    print_console(f"48-heures.json : +{len(new_articles)} web | {len(fresh)} total dans la fenêtre 48h")
+# ─── Mise à jour 48-heures.json — déléguée à utils/rolling_window.py ─────────
 
 
 # ─── Traitement d'une source ─────────────────────────────────────────────────
@@ -512,7 +478,28 @@ def _process_source(
 
         existing_articles.sort(key=_sort_key, reverse=True)
         _write_atomic(out_path, existing_articles)
-        _update_48h(new_for_48h)
+        # Mise à jour des indexes article + entités (B)
+        try:
+            _rel_kw = str(out_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+            get_article_index(PROJECT_ROOT).update(existing_articles, _rel_kw)
+            if any("entities" in a for a in existing_articles):
+                get_entity_index(PROJECT_ROOT).update(existing_articles, _rel_kw)
+        except Exception as _e:
+            print_console(f"  Avertissement : index non mis à jour ({_e})", level="warning")
+        # Mise à jour 48-heures.json via rolling_window (F)
+        WUDD_DIR.mkdir(parents=True, exist_ok=True)
+        wudd_path = WUDD_DIR / "48-heures.json"
+        nb_48h = update_rolling_window(new_for_48h, wudd_path, hours=48)
+        print_console(f"48-heures.json : +{len(new_for_48h)} web | {nb_48h} total dans la fenêtre 48h")
+        # Mise à jour de l'index pour 48-heures.json
+        try:
+            _wudd_articles = json.loads(wudd_path.read_text(encoding="utf-8"))
+            _rel_wudd = str(wudd_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+            get_article_index(PROJECT_ROOT).update(_wudd_articles, _rel_wudd)
+            if any("entities" in a for a in _wudd_articles):
+                get_entity_index(PROJECT_ROOT).update(_wudd_articles, _rel_wudd)
+        except Exception as _e_48:
+            print_console(f"  Avertissement : index 48h non mis à jour ({_e_48})", level="warning")
         print_console(f"  → {added} article(s) sauvegardé(s) dans {out_path.name}")
 
     return added

@@ -32,6 +32,8 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from utils.logging import default_logger
 from utils.config import get_config
+from utils.date_utils import parse_article_date
+from utils.entity_index import get_entity_index
 
 
 # ── Constantes ───────────────────────────────────────────────────────────────
@@ -105,23 +107,47 @@ def _niveau_from_rules(rules: dict, ratio: float) -> str:
 # ── Parsing de date ───────────────────────────────────────────────────────────
 
 def _parse_date(date_str: str):
-    """Retourne un datetime UTC ou None."""
-    if not date_str:
+    """Retourne un datetime UTC naïf ou None (délègue à utils.date_utils)."""
+    dt = parse_article_date(date_str)
+    if dt is None:
         return None
-    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(date_str, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    try:
-        from email.utils import parsedate_to_datetime
-        return parsedate_to_datetime(date_str).astimezone(timezone.utc)
-    except Exception:
-        pass
-    return None
+    return dt.replace(tzinfo=timezone.utc)
 
 
 # ── Collecte des entités ──────────────────────────────────────────────────────
+
+def _collect_from_index(
+    project_root: Path,
+    cutoff,
+    monitored_types: set[str],
+    exclude_entities: set[str],
+    len_min: int,
+    len_max: int,
+) -> dict[str, int]:
+    """Compte les mentions via entity_index (O(k) sur les clés d'index)."""
+    counts: dict[str, int] = defaultdict(int)
+    eidx = get_entity_index(project_root)
+    all_entries = eidx.get_all_entries()  # { "TYPE:value": [{file, idx, date}, ...] }
+    for key, refs in all_entries.items():
+        parts = key.split(":", 1)
+        if len(parts) != 2:
+            continue
+        etype, value = parts[0], parts[1]
+        if etype not in monitored_types:
+            continue
+        value = value.strip()
+        if not value:
+            continue
+        if len(value) < len_min or len(value) > len_max:
+            continue
+        if value.lower() in exclude_entities:
+            continue
+        for ref in refs:
+            dt = _parse_date(ref.get("date", ""))
+            if dt is not None and dt >= cutoff:
+                counts[key] += 1
+    return counts
+
 
 def collect_entity_mentions(
     project_root: Path,
@@ -130,6 +156,9 @@ def collect_entity_mentions(
     filters: dict | None = None,
 ) -> dict[str, int]:
     """Compte les mentions de chaque entité dans la fenêtre temporelle.
+
+    Essaie d'abord l'entity_index (rapide), puis bascule sur rglob si l'index
+    est vide ou non disponible.
 
     Args:
         project_root    : racine du projet
@@ -151,8 +180,22 @@ def collect_entity_mentions(
 
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=window_days)
-    counts: dict[str, int] = defaultdict(int)
 
+    # ── Tentative via l'index (C) ─────────────────────────────────────────────
+    try:
+        counts = _collect_from_index(
+            project_root, cutoff, monitored_types, exclude_entities, len_min, len_max
+        )
+        if counts:
+            default_logger.debug(
+                f"collect_entity_mentions: {len(counts)} entités via index (window={window_days}j)"
+            )
+            return dict(counts)
+    except Exception as _e:
+        default_logger.warning(f"collect_entity_mentions: index indisponible ({_e}), fallback rglob")
+
+    # ── Fallback rglob ────────────────────────────────────────────────────────
+    counts = defaultdict(int)
     scan_dirs = [
         project_root / "data" / "articles",
         project_root / "data" / "articles-from-rss",
@@ -195,7 +238,7 @@ def collect_entity_mentions(
                             continue
                         counts[f"{etype}:{v}"] += 1
 
-    return counts
+    return dict(counts)
 
 
 # ── Génération des alertes ────────────────────────────────────────────────────

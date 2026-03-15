@@ -30,7 +30,9 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from utils.logging import print_console, default_logger
-from utils.scoring import ScoringEngine
+from utils.scoring import get_scoring_engine
+from utils.date_utils import parse_article_date
+from utils.article_index import get_article_index
 
 # ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -39,69 +41,87 @@ _ALERTS_FILE  = _PROJECT_ROOT / "data" / "alertes.json"
 
 _ENTITY_TYPES_PERTINENTS = {"PERSON", "ORG", "GPE", "PRODUCT", "EVENT"}
 
-_DATE_FMTS = (
-    "%Y-%m-%dT%H:%M:%SZ",
-    "%Y-%m-%d",
-    "%d/%m/%Y",
-)
-
 _PERIOD_HOURS = {"daily": 24, "weekly": 168}
 
 
 # ── Parsing de date ───────────────────────────────────────────────────────────
 
 def _parse_date(date_str: str) -> datetime | None:
-    if not date_str:
+    """Retourne un datetime UTC-aware ou None (délègue à utils.date_utils)."""
+    dt = parse_article_date(date_str)
+    if dt is None:
         return None
-    for fmt in _DATE_FMTS:
-        try:
-            return datetime.strptime(date_str[:len(fmt)], fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    try:
-        from email.utils import parsedate_to_datetime
-        return parsedate_to_datetime(date_str).astimezone(timezone.utc)
-    except Exception:
-        pass
-    return None
+    return dt.replace(tzinfo=timezone.utc)
 
 
 # ── Collecte des données ──────────────────────────────────────────────────────
 
+def _load_articles_from_files(file_paths: list[Path], cutoff, seen_urls: set) -> list[dict]:
+    """Charge les articles depuis une liste de fichiers JSON."""
+    articles = []
+    for json_file in file_paths:
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+            if not isinstance(data, list):
+                continue
+        except (json.JSONDecodeError, OSError):
+            continue
+        for article in data:
+            dt = _parse_date(article.get("Date de publication", ""))
+            if dt is None or dt < cutoff:
+                continue
+            url = article.get("URL") or article.get("url") or ""
+            if url and url in seen_urls:
+                continue
+            articles.append(article)
+            if url:
+                seen_urls.add(url)
+    return articles
+
+
 def collect_articles(project_root: Path, hours: int) -> list[dict]:
-    """Retourne tous les articles publiés dans les dernières `hours` heures."""
+    """Retourne tous les articles publiés dans les dernières `hours` heures.
+
+    Essaie d'abord l'article_index (rapide), puis bascule sur rglob si vide.
+    """
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=hours)
-    articles = []
     seen_urls: set[str] = set()
 
+    # ── Tentative via l'index (E) ─────────────────────────────────────────────
+    try:
+        aidx = get_article_index(project_root)
+        recent_entries = aidx.get_recent(hours=hours)
+        if recent_entries:
+            # Regrouper par fichier pour une lecture efficace
+            files_needed: dict[str, Path] = {}
+            for entry in recent_entries:
+                rel = entry.get("file", "")
+                if rel and rel not in files_needed:
+                    files_needed[rel] = project_root / rel
+            articles = _load_articles_from_files(list(files_needed.values()), cutoff, seen_urls)
+            if articles:
+                default_logger.debug(
+                    f"collect_articles: {len(articles)} articles via index (hours={hours})"
+                )
+                return articles
+    except Exception as _e:
+        default_logger.warning(f"collect_articles: index indisponible ({_e}), fallback rglob")
+
+    # ── Fallback rglob ────────────────────────────────────────────────────────
     scan_dirs = [
         project_root / "data" / "articles",
         project_root / "data" / "articles-from-rss",
     ]
+    rglob_files = []
     for scan_dir in scan_dirs:
         if not scan_dir.exists():
             continue
         for json_file in scan_dir.rglob("*.json"):
             if "cache" in json_file.relative_to(scan_dir).parts:
                 continue
-            try:
-                data = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(data, list):
-                    continue
-            except (json.JSONDecodeError, OSError):
-                continue
-            for article in data:
-                dt = _parse_date(article.get("Date de publication", ""))
-                if dt is None or dt < cutoff:
-                    continue
-                url = article.get("URL") or article.get("url") or ""
-                if url and url in seen_urls:
-                    continue
-                articles.append(article)
-                if url:
-                    seen_urls.add(url)
-    return articles
+            rglob_files.append(json_file)
+    return _load_articles_from_files(rglob_files, cutoff, seen_urls)
 
 
 def compute_top_entities(articles: list[dict], top_n: int = 10) -> list[tuple]:
@@ -519,7 +539,7 @@ def main():
         return
 
     # Top articles par score de pertinence
-    engine = ScoringEngine(project_root)
+    engine = get_scoring_engine(project_root)
     top_articles = engine.score_and_sort(articles, top_n=10)
 
     # Top entités

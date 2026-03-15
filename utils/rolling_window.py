@@ -1,0 +1,134 @@
+"""utils/rolling_window.py — Fenêtre glissante d'articles (48-heures.json).
+
+Utilitaire partagé entre get-keyword-from-rss.py, web_watcher.py et
+flux_watcher.py pour maintenir un fichier JSON agrégé des articles
+des dernières N heures.
+
+Usage :
+    from utils.rolling_window import update_rolling_window
+
+    # Mode incrémental : ajouter des articles à une fenêtre existante
+    update_rolling_window(new_articles, output_path, hours=48)
+
+    # Mode reconstruction : reconstruire depuis tous les JSON d'un répertoire
+    update_rolling_window([], output_path, hours=48, source_dir=OUTPUT_DIR)
+"""
+
+import json
+import threading
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+from .date_utils import parse_article_date
+from .logging import default_logger
+
+_lock = threading.Lock()
+
+
+def update_rolling_window(
+    new_articles: list[dict],
+    output_path: Path,
+    hours: int = 48,
+    source_dir: Optional[Path] = None,
+) -> int:
+    """Met à jour la fenêtre glissante d'articles et écrit le résultat de façon atomique.
+
+    Deux modes :
+
+    - **Incrémental** (source_dir absent) : charge la fenêtre existante,
+      y ajoute new_articles, élimine les entrées hors fenêtre et sauvegarde.
+      Idéal pour web_watcher.py qui ajoute 1 à 5 articles par run.
+
+    - **Reconstruction** (source_dir fourni) : relit tous les *.json du
+      répertoire source (hors output_path), collecte les articles dans la
+      fenêtre et reconstruit le fichier depuis zéro.
+      Idéal pour get-keyword-from-rss.py qui traite de nombreux fichiers.
+
+    Args:
+        new_articles : nouveaux articles à intégrer (vide si mode reconstruction)
+        output_path  : chemin du fichier de sortie (ex. 48-heures.json)
+        hours        : fenêtre temporelle en heures (défaut : 48)
+        source_dir   : répertoire source pour le mode reconstruction
+
+    Returns:
+        Nombre d'articles dans la fenêtre après mise à jour.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+    with _lock:
+        # ── Mode reconstruction depuis source_dir ─────────────────────────
+        if source_dir is not None and source_dir.exists():
+            seen_urls: set[str] = set()
+            collected: list[dict] = []
+            for json_file in sorted(source_dir.glob("*.json")):
+                if json_file.resolve() == output_path.resolve():
+                    continue
+                if "cache" in json_file.parts:
+                    continue
+                try:
+                    articles = json.loads(json_file.read_text(encoding="utf-8"))
+                    if not isinstance(articles, list):
+                        continue
+                except Exception:
+                    continue
+                for article in articles:
+                    url = article.get("URL", "")
+                    if not url or url in seen_urls:
+                        continue
+                    dt = parse_article_date(article.get("Date de publication", ""))
+                    if dt is None or dt < cutoff:
+                        continue
+                    seen_urls.add(url)
+                    collected.append(article)
+
+        # ── Mode incrémental ───────────────────────────────────────────────
+        else:
+            existing: list[dict] = []
+            if output_path.exists():
+                try:
+                    existing = json.loads(output_path.read_text(encoding="utf-8"))
+                    if not isinstance(existing, list):
+                        existing = []
+                except Exception:
+                    existing = []
+            existing_urls = {a.get("URL", "") for a in existing if a.get("URL")}
+            to_add = [a for a in new_articles if a.get("URL", "") not in existing_urls]
+            all_articles = existing + to_add
+            seen_urls = set()
+            collected = []
+            for article in all_articles:
+                url = article.get("URL", "")
+                if url and url in seen_urls:
+                    continue
+                dt = parse_article_date(article.get("Date de publication", ""))
+                if dt is None or dt < cutoff:
+                    continue
+                if url:
+                    seen_urls.add(url)
+                collected.append(article)
+
+        # Tri par date décroissante
+        def _sort_key(a: dict) -> datetime:
+            dt = parse_article_date(a.get("Date de publication", ""))
+            return dt if dt else datetime.min
+
+        collected.sort(key=_sort_key, reverse=True)
+
+        # Écriture atomique
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = output_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(collected, ensure_ascii=False, indent=4),
+                encoding="utf-8",
+            )
+            tmp.replace(output_path)
+        except OSError as e:
+            default_logger.error(f"rolling_window : erreur écriture {output_path} — {e}")
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+        return len(collected)

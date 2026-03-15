@@ -101,6 +101,40 @@ def get_default_date_range() -> Tuple[str, str]:
     return date_debut, date_fin
 
 
+def parse_article_date(date_str: str) -> Optional[datetime]:
+    """Parse une date d'article dans tous les formats du pipeline WUDD.ai.
+
+    Formats gérés dans l'ordre :
+    - DD/MM/YYYY           (format interne standard)
+    - YYYY-MM-DD           (ISO court)
+    - YYYY-MM-DDTHH:MM:SSZ (ISO long avec Z)
+    - YYYY-MM-DDTHH:MM:SS  (ISO long sans timezone)
+    - RFC 822 (ex. "Mon, 01 Jan 2026 00:00:00 +0000")
+
+    Retourne un datetime naïf (sans timezone) pour comparaison uniforme.
+    """
+    if not date_str:
+        return None
+    date_str = date_str.strip()
+    for fmt, length in (("%d/%m/%Y", 10), ("%Y-%m-%d", 10)):
+        try:
+            return datetime.strptime(date_str[:length], fmt)
+        except ValueError:
+            continue
+    for fmt, length in (("%Y-%m-%dT%H:%M:%SZ", 20), ("%Y-%m-%dT%H:%M:%S", 19)):
+        try:
+            return datetime.strptime(date_str[:length], fmt)
+        except ValueError:
+            continue
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(date_str)
+        return dt.replace(tzinfo=None)
+    except Exception:
+        pass
+    return None
+
+
 def validate_date_range(date_debut: str, date_fin: str) -> bool:
     """Valide qu'une plage de dates est cohérente.
     

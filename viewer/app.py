@@ -42,6 +42,14 @@ if str(PROJECT_ROOT) not in _sys.path:
     _sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.api_client import CLAUDE_API_VERSION
+from utils.article_index import get_article_index
+from utils.entity_index import get_entity_index
+from utils.scoring import get_scoring_engine
+
+# Cache TTL en mémoire pour /api/sources/bias (5 minutes)
+import time as _time
+_bias_cache: dict = {"data": None, "ts": 0.0}
+_BIAS_CACHE_TTL = 300  # secondes
 
 
 # ── Utilitaires ───────────────────────────────────────────────────────────────
@@ -1036,7 +1044,7 @@ def api_reset_quota():
 
 @app.route("/api/search/entity")
 def api_search_entity():
-    """Recherche cross-fichiers d'une valeur d'entité nommée."""
+    """Recherche cross-fichiers d'une valeur d'entité nommée (via entity_index)."""
     q = request.args.get("q", "").strip()
     entity_type = request.args.get("type", "").strip()
     if len(q) < 2:
@@ -1045,46 +1053,54 @@ def api_search_entity():
     q_lower = q.lower()
     results = []
 
-    data_dirs = [
-        PROJECT_ROOT / "data" / "articles",
-        PROJECT_ROOT / "data" / "articles-from-rss",
-    ]
+    try:
+        eidx = get_entity_index(PROJECT_ROOT)
+        all_entries = eidx.get_all_entries()  # { "TYPE:value": [{file, idx, date}, ...] }
 
-    for data_dir in data_dirs:
-        if not data_dir.exists():
-            continue
-        for json_file in sorted(data_dir.rglob("*.json")):
-            if "cache" in json_file.relative_to(data_dir).parts:
-                continue
+        # Filtrer les clés qui contiennent q_lower (correspondance partielle)
+        matching_keys = [
+            k for k in all_entries
+            if q_lower in k.split(":", 1)[-1].lower()
+            and (not entity_type or k.startswith(entity_type + ":"))
+        ]
+
+        # Regrouper refs par fichier pour charger chaque fichier une seule fois
+        files_to_idxs: dict[str, set[int]] = {}
+        key_by_file_idx: dict[tuple, list[str]] = {}  # (file, idx) → matched types
+        for k in matching_keys:
+            etype = k.split(":", 1)[0]
+            for ref in all_entries[k]:
+                fpath = ref.get("file", "")
+                idx = ref.get("idx", -1)
+                if not fpath:
+                    continue
+                files_to_idxs.setdefault(fpath, set()).add(idx)
+                key_by_file_idx.setdefault((fpath, idx), []).append(etype)
+
+        seen_results: set[str] = set()
+        for rel_path, idxs in files_to_idxs.items():
             try:
-                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                articles = json.loads(
+                    (PROJECT_ROOT / rel_path).read_text(encoding="utf-8", errors="replace")
+                )
                 if not isinstance(articles, list):
                     continue
             except (json.JSONDecodeError, OSError):
                 continue
-
-            for article in articles:
-                ents = article.get("entities")
-                if not ents or not isinstance(ents, dict):
+            for i, article in enumerate(articles):
+                if i not in idxs:
                     continue
-
-                matched_types = []
-                for etype, values in ents.items():
-                    if entity_type and etype != entity_type:
-                        continue
-                    if not isinstance(values, list):
-                        continue
-                    if any(q_lower in str(v).lower() for v in values):
-                        matched_types.append(etype)
-
-                if not matched_types:
+                url = article.get("URL", "")
+                if url and url in seen_results:
                     continue
-
+                if url:
+                    seen_results.add(url)
+                matched_types = key_by_file_idx.get((rel_path, i), [])
                 resume = article.get("Résumé", "")
-                idx = resume.lower().find(q_lower)
-                if idx >= 0:
-                    start = max(0, idx - 80)
-                    end = min(len(resume), idx + len(q) + 80)
+                idx_in_resume = resume.lower().find(q_lower)
+                if idx_in_resume >= 0:
+                    start = max(0, idx_in_resume - 80)
+                    end = min(len(resume), idx_in_resume + len(q) + 80)
                     excerpt = (
                         ("…" if start > 0 else "")
                         + resume[start:end]
@@ -1092,17 +1108,69 @@ def api_search_entity():
                     )
                 else:
                     excerpt = resume[:160] + ("…" if len(resume) > 160 else "")
-
-                rel = json_file.relative_to(PROJECT_ROOT)
                 results.append({
-                    "path": str(rel).replace("\\", "/"),
-                    "name": json_file.name,
+                    "path": rel_path,
+                    "name": Path(rel_path).name,
                     "source": article.get("Sources", ""),
                     "date": article.get("Date de publication", ""),
-                    "url": article.get("URL", ""),
+                    "url": url,
                     "excerpt": excerpt,
                     "types": matched_types,
                 })
+    except Exception:
+        # Fallback rglob si l'index est indisponible
+        data_dirs = [
+            PROJECT_ROOT / "data" / "articles",
+            PROJECT_ROOT / "data" / "articles-from-rss",
+        ]
+        for data_dir in data_dirs:
+            if not data_dir.exists():
+                continue
+            for json_file in sorted(data_dir.rglob("*.json")):
+                if "cache" in json_file.relative_to(data_dir).parts:
+                    continue
+                try:
+                    articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(articles, list):
+                        continue
+                except (json.JSONDecodeError, OSError):
+                    continue
+                for article in articles:
+                    ents = article.get("entities")
+                    if not ents or not isinstance(ents, dict):
+                        continue
+                    matched_types = []
+                    for etype, values in ents.items():
+                        if entity_type and etype != entity_type:
+                            continue
+                        if not isinstance(values, list):
+                            continue
+                        if any(q_lower in str(v).lower() for v in values):
+                            matched_types.append(etype)
+                    if not matched_types:
+                        continue
+                    resume = article.get("Résumé", "")
+                    idx = resume.lower().find(q_lower)
+                    if idx >= 0:
+                        start = max(0, idx - 80)
+                        end = min(len(resume), idx + len(q) + 80)
+                        excerpt = (
+                            ("…" if start > 0 else "")
+                            + resume[start:end]
+                            + ("…" if end < len(resume) else "")
+                        )
+                    else:
+                        excerpt = resume[:160] + ("…" if len(resume) > 160 else "")
+                    rel = json_file.relative_to(PROJECT_ROOT)
+                    results.append({
+                        "path": str(rel).replace("\\", "/"),
+                        "name": json_file.name,
+                        "source": article.get("Sources", ""),
+                        "date": article.get("Date de publication", ""),
+                        "url": article.get("URL", ""),
+                        "excerpt": excerpt,
+                        "types": matched_types,
+                    })
 
     results.sort(key=lambda r: r["date"], reverse=True)
     return jsonify(results[:100])
@@ -1110,51 +1178,78 @@ def api_search_entity():
 
 @app.route("/api/entities/dashboard")
 def api_entities_dashboard():
-    """Agrège les entités de tous les fichiers JSON et retourne des stats globales."""
-    data_dirs = [
-        PROJECT_ROOT / "data" / "articles",
-        PROJECT_ROOT / "data" / "articles-from-rss",
-    ]
-
-    total_files = 0
-    total_articles = 0
-    total_with_entities = 0
-    # { type: { value: count } }
+    """Agrège les entités de tous les fichiers JSON et retourne des stats globales (via entity_index)."""
     by_type: dict[str, dict[str, int]] = {}
+    total_with_entities = 0
 
-    for data_dir in data_dirs:
-        if not data_dir.exists():
-            continue
-        for json_file in sorted(data_dir.rglob("*.json")):
-            if "cache" in json_file.relative_to(data_dir).parts:
+    try:
+        eidx = get_entity_index(PROJECT_ROOT)
+        all_entries = eidx.get_all_entries()  # { "TYPE:value": [{file, idx, date}, ...] }
+
+        # Compter les mentions depuis l'index (O(k) sur les clés)
+        for key, refs in all_entries.items():
+            parts = key.split(":", 1)
+            if len(parts) != 2:
                 continue
-            try:
-                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(articles, list):
-                    continue
-            except (json.JSONDecodeError, OSError):
+            etype, value = parts[0], parts[1].strip()
+            if not value:
                 continue
+            if etype not in by_type:
+                by_type[etype] = {}
+            by_type[etype][value] = by_type[etype].get(value, 0) + len(refs)
 
-            total_files += 1
-            total_articles += len(articles)
+        # Totaux depuis l'article_index
+        aidx = get_article_index(PROJECT_ROOT)
+        astats = aidx.stats()
+        total_files = len({ref.get("file", "") for refs in all_entries.values() for ref in refs if ref.get("file")})
+        total_articles = astats.get("total", 0)
+        # Approximation : articles avec entités = ceux que l'index entités a référencés
+        seen_refs: set[tuple] = set()
+        for refs in all_entries.values():
+            for ref in refs:
+                seen_refs.add((ref.get("file", ""), ref.get("idx", -1)))
+        total_with_entities = len(seen_refs)
 
-            for article in articles:
-                ents = article.get("entities")
-                if not ents or not isinstance(ents, dict):
+    except Exception:
+        # Fallback rglob
+        data_dirs = [
+            PROJECT_ROOT / "data" / "articles",
+            PROJECT_ROOT / "data" / "articles-from-rss",
+        ]
+        total_files = 0
+        total_articles = 0
+        total_with_entities = 0
+        for data_dir in data_dirs:
+            if not data_dir.exists():
+                continue
+            for json_file in sorted(data_dir.rglob("*.json")):
+                if "cache" in json_file.relative_to(data_dir).parts:
                     continue
-                has_ent = False
-                for etype, values in ents.items():
-                    if not isinstance(values, list) or not values:
+                try:
+                    articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(articles, list):
                         continue
-                    has_ent = True
-                    if etype not in by_type:
-                        by_type[etype] = {}
-                    for v in values:
-                        if isinstance(v, str) and v.strip():
-                            key = v.strip()
-                            by_type[etype][key] = by_type[etype].get(key, 0) + 1
-                if has_ent:
-                    total_with_entities += 1
+                except (json.JSONDecodeError, OSError):
+                    continue
+                total_files += 1
+                total_articles += len(articles)
+                for article in articles:
+                    ents = article.get("entities")
+                    if not ents or not isinstance(ents, dict):
+                        continue
+                    has_ent = False
+                    for etype, values in ents.items():
+                        if not isinstance(values, list) or not values:
+                            continue
+                        has_ent = True
+                        if etype not in by_type:
+                            by_type[etype] = {}
+                        for v in values:
+                            if isinstance(v, str) and v.strip():
+                                key = v.strip()
+                                by_type[etype][key] = by_type[etype].get(key, 0) + 1
+                    if has_ent:
+                        total_with_entities += 1
 
     result_types = []
     for etype, value_counts in by_type.items():
@@ -1177,43 +1272,58 @@ def api_entities_dashboard():
 
 @app.route("/api/entities/articles")
 def api_entities_articles():
-    """Retourne tous les articles contenant une entité donnée (type + valeur)."""
+    """Retourne tous les articles contenant une entité donnée (type + valeur) via entity_index."""
     entity_type = request.args.get("type", "").strip()
     entity_value = request.args.get("value", "").strip()
     if not entity_type or not entity_value:
         return jsonify({"error": "Paramètres type et value requis"}), 400
 
-    seen_urls = set()
+    seen_urls: set = set()
     results = []
-    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
-        if not data_dir.exists():
-            continue
-        for json_file in sorted(data_dir.rglob("*.json")):
-            if "cache" in json_file.relative_to(data_dir).parts:
+
+    try:
+        eidx = get_entity_index(PROJECT_ROOT)
+        articles_from_idx = eidx.load_articles(entity_type, entity_value)
+        for article in articles_from_idx:
+            url = (article.get("URL") or "").strip()
+            resume_key = article.get("Résumé", "")[:150].strip()
+            if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
                 continue
-            try:
-                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(articles, list):
-                    continue
-            except (json.JSONDecodeError, OSError):
+            if url:
+                seen_urls.add(url)
+            if resume_key:
+                seen_urls.add(resume_key)
+            results.append(article)
+    except Exception:
+        # Fallback rglob
+        for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+            if not data_dir.exists():
                 continue
-            for article in articles:
-                entities = article.get("entities", {})
-                if not isinstance(entities, dict):
+            for json_file in sorted(data_dir.rglob("*.json")):
+                if "cache" in json_file.relative_to(data_dir).parts:
                     continue
-                values = entities.get(entity_type, [])
-                if not (isinstance(values, list) and entity_value in values):
+                try:
+                    articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(articles, list):
+                        continue
+                except (json.JSONDecodeError, OSError):
                     continue
-                # Déduplication : URL d'abord, puis résumé (articles syndiqués sans URL unique)
-                url = (article.get("URL") or "").strip()
-                resume_key = article.get("Résumé", "")[:150].strip()
-                if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
-                    continue
-                if url:
-                    seen_urls.add(url)
-                if resume_key:
-                    seen_urls.add(resume_key)
-                results.append(article)
+                for article in articles:
+                    entities = article.get("entities", {})
+                    if not isinstance(entities, dict):
+                        continue
+                    values = entities.get(entity_type, [])
+                    if not (isinstance(values, list) and entity_value in values):
+                        continue
+                    url = (article.get("URL") or "").strip()
+                    resume_key = article.get("Résumé", "")[:150].strip()
+                    if (url and url in seen_urls) or (resume_key and resume_key in seen_urls):
+                        continue
+                    if url:
+                        seen_urls.add(url)
+                    if resume_key:
+                        seen_urls.add(resume_key)
+                    results.append(article)
 
     results.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
     return jsonify(results)
@@ -2517,11 +2627,18 @@ def api_run_trend_detector():
 def api_sources_bias():
     """Agrège les données de sentiment par source pour détecter les biais éditoriaux.
 
+    Résultat mis en cache en mémoire pendant 5 minutes pour éviter les rglob répétés.
+
     Returns :
       [{ source, article_count, sentiment_counts: {positif, neutre, négatif},
          avg_score_sentiment, avg_score_ton, ton_distribution: {...} }]
     """
     from collections import defaultdict
+
+    # ── Cache TTL 5 min ───────────────────────────────────────────────────────
+    now_ts = _time.time()
+    if _bias_cache["data"] is not None and (now_ts - _bias_cache["ts"]) < _BIAS_CACHE_TTL:
+        return jsonify(_bias_cache["data"])
 
     data_dirs = [
         PROJECT_ROOT / "data" / "articles",
@@ -2581,6 +2698,8 @@ def api_sources_bias():
         })
 
     result.sort(key=lambda x: x["article_count"], reverse=True)
+    _bias_cache["data"] = result
+    _bias_cache["ts"] = now_ts
     return jsonify(result)
 
 
@@ -2611,29 +2730,38 @@ def api_synthesize_topic():
     matching_articles = []
     search_term = (entity_value or topic).lower()
 
-    for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
-        if not data_dir.exists():
-            continue
-        for json_file in sorted(data_dir.rglob("*.json")):
-            if "cache" in str(json_file):
+    # Quand entité précise fournie, utiliser l'index (rapide)
+    if entity_type and entity_value:
+        try:
+            eidx = get_entity_index(PROJECT_ROOT)
+            matching_articles = eidx.load_articles(entity_type, entity_value)
+        except Exception:
+            matching_articles = []
+
+    # Si non trouvé via index, ou si recherche par topic libre : fallback rglob
+    if not matching_articles:
+        for data_dir in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+            if not data_dir.exists():
                 continue
-            try:
-                arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(arts, list):
+            for json_file in sorted(data_dir.rglob("*.json")):
+                if "cache" in str(json_file):
                     continue
-            except (json.JSONDecodeError, OSError):
-                continue
-            for article in arts:
-                resume = (article.get("Résumé") or "").lower()
-                entities = article.get("entities", {})
-                # Correspondance : entité NER OU présence dans le résumé
-                entity_match = False
-                if entity_type and entity_value:
-                    values = entities.get(entity_type, []) if isinstance(entities, dict) else []
-                    entity_match = entity_value in values
-                text_match = search_term in resume
-                if entity_match or text_match:
-                    matching_articles.append(article)
+                try:
+                    arts = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+                    if not isinstance(arts, list):
+                        continue
+                except (json.JSONDecodeError, OSError):
+                    continue
+                for article in arts:
+                    resume = (article.get("Résumé") or "").lower()
+                    entities = article.get("entities", {})
+                    entity_match = False
+                    if entity_type and entity_value:
+                        values = entities.get(entity_type, []) if isinstance(entities, dict) else []
+                        entity_match = entity_value in values
+                    text_match = search_term in resume
+                    if entity_match or text_match:
+                        matching_articles.append(article)
 
     # Déduplication par URL
     seen_urls = set()
@@ -2772,20 +2900,45 @@ def api_export_atom():
                 max_entries=max_entries,
             )
         else:
-            # Tout agréger
+            # Tout agréger via article_index (2 semaines)
             all_articles = []
-            for d in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
-                if not d.exists():
-                    continue
-                for jf in sorted(d.rglob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)[:10]:
-                    if "cache" in str(jf):
-                        continue
+            seen_urls_atom: set = set()
+            try:
+                aidx = get_article_index(PROJECT_ROOT)
+                recent_entries = aidx.get_recent(hours=336)  # 14 jours
+                # Regrouper par fichier
+                files_atom: dict[str, Path] = {}
+                for entry in recent_entries:
+                    rel = entry.get("file", "")
+                    if rel and rel not in files_atom:
+                        files_atom[rel] = PROJECT_ROOT / rel
+                for rel, jf in files_atom.items():
                     try:
                         data = json.loads(jf.read_text(encoding="utf-8"))
                         if isinstance(data, list):
-                            all_articles.extend(data)
+                            for a in data:
+                                url = a.get("URL", "")
+                                if url and url in seen_urls_atom:
+                                    continue
+                                if url:
+                                    seen_urls_atom.add(url)
+                                all_articles.append(a)
                     except Exception:
                         continue
+            except Exception:
+                # Fallback rglob
+                for d in [PROJECT_ROOT / "data" / "articles", PROJECT_ROOT / "data" / "articles-from-rss"]:
+                    if not d.exists():
+                        continue
+                    for jf in sorted(d.rglob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)[:10]:
+                        if "cache" in str(jf):
+                            continue
+                        try:
+                            data = json.loads(jf.read_text(encoding="utf-8"))
+                            if isinstance(data, list):
+                                all_articles.extend(data)
+                        except Exception:
+                            continue
             all_articles.sort(key=lambda a: a.get("Date de publication", ""), reverse=True)
             xml = generate_atom_feed(all_articles, feed_title="WUDD.ai · Veille complète",
                                      self_url=actual_self_url,
@@ -2811,13 +2964,12 @@ def api_export_newsletter():
     sys.path.insert(0, str(PROJECT_ROOT))
     try:
         from utils.exporters.newsletter import generate_newsletter_html, send_newsletter
-        from utils.scoring import ScoringEngine
 
         hours = int(request.args.get("hours", 48))
         title = request.args.get("title", "").strip() or \
             f"Veille WUDD.ai — {datetime.datetime.now().strftime('%d %B %Y')}"
 
-        engine = ScoringEngine(PROJECT_ROOT)
+        engine = get_scoring_engine(PROJECT_ROOT)
         articles = engine.get_top_articles(top_n=20, hours=hours)
         html = generate_newsletter_html(articles, title=title)
 
