@@ -174,6 +174,7 @@ def enrich_file(
         entities = api_client.generate_entities(resume, timeout=60)
         if entities:
             article["entities"] = entities
+            article["enrichissement_statut"] = "ok"
             modified = True
             stats["enrichis"] += 1
             nb_entites = sum(len(v) for v in entities.values())
@@ -183,6 +184,8 @@ def enrich_file(
                 level="debug",
             )
         else:
+            article["enrichissement_statut"] = "echec_api"
+            modified = True
             stats["erreurs"] += 1
             print_console(
                 f"    Article {i+1}/{len(articles)} — {article.get('Sources', '?')} "

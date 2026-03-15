@@ -64,15 +64,86 @@ def _parse_date(date_str: str) -> datetime | None:
 
 # ── Collecte par flux ─────────────────────────────────────────────────────────
 
+def _file_path_to_flux_name(file_path: str) -> str:
+    """Dérive le nom du flux depuis le chemin relatif stocké dans l'entity_index."""
+    if not file_path:
+        return ""
+    parts = Path(file_path).parts
+    # data/articles/<flux_dir>/...json
+    if len(parts) >= 3 and parts[1] == "articles":
+        return parts[2]
+    # data/articles-from-rss/<subdir>/<file>.json
+    if len(parts) == 4 and parts[1] == "articles-from-rss":
+        return f"rss:{parts[2]}/{Path(file_path).stem}"
+    # data/articles-from-rss/<file>.json
+    if len(parts) == 3 and parts[1] == "articles-from-rss":
+        return f"rss:{Path(file_path).stem}"
+    return ""
+
+
+def _collect_entities_from_index(
+    project_root: Path,
+    days: int,
+) -> dict[str, dict[str, int]] | None:
+    """Construit l'analyse croisée depuis l'entity_index sans scan rglob.
+
+    Retourne None si l'index est absent ou vide (→ fallback rglob).
+    """
+    try:
+        from utils.entity_index import get_entity_index
+        eidx = get_entity_index(project_root)
+        all_entries = eidx.get_all_entries()
+    except Exception:
+        return None
+
+    if not all_entries:
+        return None
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=days) if days > 0 else None
+
+    flux_entities: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    for entity_key, refs in all_entries.items():
+        if ":" not in entity_key:
+            continue
+        etype = entity_key.split(":", 1)[0]
+        if etype not in _ENTITY_TYPES_PERTINENTS:
+            continue
+
+        for ref in refs:
+            date_str = ref.get("date", "")
+            if cutoff and date_str:
+                try:
+                    dt = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    if dt < cutoff:
+                        continue
+                except ValueError:
+                    pass
+
+            flux_name = _file_path_to_flux_name(ref.get("file", ""))
+            if flux_name:
+                flux_entities[flux_name][entity_key] += 1
+
+    return {flux: dict(counts) for flux, counts in flux_entities.items()}
+
+
 def collect_entities_by_flux(
     project_root: Path,
     days: int = 30,
 ) -> dict[str, dict[str, int]]:
     """Collecte les entités par flux (nom du répertoire parent).
 
+    Essaie d'abord l'entity_index (lecture unique), puis fallback scan rglob.
+
     Returns:
         { "nom_flux" : { "TYPE:valeur" : count } }
     """
+    result = _collect_entities_from_index(project_root, days)
+    if result is not None:
+        return result
+
+    # Fallback : scan rglob complet
     now    = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days) if days > 0 else None
 
@@ -91,7 +162,6 @@ def collect_entities_by_flux(
                 _collect_from_file(json_file, flux_name, cutoff, flux_entities)
 
     # articles-from-rss : chaque fichier JSON est un "flux" nommé par son stem
-    # rglob descend dans les sous-dossiers (_WUDD.AI_/, etc.)
     rss_dir = project_root / "data" / "articles-from-rss"
     if rss_dir.exists():
         for json_file in rss_dir.rglob("*.json"):

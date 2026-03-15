@@ -26,6 +26,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from utils.article_index import get_article_index
 from utils.config import get_config
 from utils.logging import print_console
 
@@ -46,31 +47,17 @@ def load_annotations() -> dict:
 
 
 def build_article_index(project_root: Path) -> dict:
-    """Construit un index {url: article_dict} depuis tous les JSON d'articles."""
-    index: dict = {}
-
-    def _index_list(articles: list) -> None:
-        for a in articles:
-            if isinstance(a, dict) and a.get("URL"):
-                index[a["URL"]] = a
-
-    for f in (project_root / "data" / "articles-from-rss").rglob("*.json"):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                _index_list(data)
-        except Exception:
-            pass
-
-    for f in (project_root / "data" / "articles").rglob("*.json"):
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                _index_list(data)
-        except Exception:
-            pass
-
-    return index
+    """Construit un index {url: article_dict} depuis l'article_index (sans scan rglob)."""
+    aidx = get_article_index(project_root)
+    entries = aidx.get_recent(hours=0)  # heures=0 → tous les articles
+    return {
+        e["url"]: {
+            "Sources": e.get("source", ""),
+            "Date de publication": e.get("date_iso", ""),
+        }
+        for e in entries
+        if e.get("url")
+    }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
