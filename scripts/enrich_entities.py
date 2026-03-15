@@ -38,6 +38,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from utils.logging import print_console, setup_logger
 from utils.config import get_config
 from utils.api_client import get_ai_client
+from utils.article_index import get_article_index
+from utils.entity_index import get_entity_index
 
 logger = setup_logger(__name__)
 
@@ -172,7 +174,17 @@ def enrich_file(
 
         # Appel API via generate_entities() (parsing inclus)
         entities = api_client.generate_entities(resume, timeout=60)
-        if entities:
+        if entities is None:
+            # echec_parse : réponse reçue mais JSON non extractible
+            article["enrichissement_statut"] = "echec_parse"
+            modified = True
+            stats["erreurs"] += 1
+            print_console(
+                f"    Article {i+1}/{len(articles)} — {article.get('Sources', '?')} "
+                f"→ réponse non parseable (echec_parse)",
+                level="error",
+            )
+        elif entities:
             article["entities"] = entities
             article["enrichissement_statut"] = "ok"
             modified = True
@@ -184,12 +196,13 @@ def enrich_file(
                 level="debug",
             )
         else:
+            # {} : echec_api (exception réseau) ou aucune entité trouvée
             article["enrichissement_statut"] = "echec_api"
             modified = True
             stats["erreurs"] += 1
             print_console(
                 f"    Article {i+1}/{len(articles)} — {article.get('Sources', '?')} "
-                f"→ réponse vide ou invalide",
+                f"→ réponse vide ou erreur API",
                 level="error",
             )
 
@@ -203,6 +216,14 @@ def enrich_file(
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(articles, f, ensure_ascii=False, indent=4)
             tmp.replace(json_file)
+            # Mise à jour des indexes après sauvegarde (proposition 1)
+            rel = str(json_file.relative_to(PROJECT_ROOT)).replace("\\", "/")
+            try:
+                get_article_index(PROJECT_ROOT).update(articles, rel)
+                if any("entities" in a for a in articles):
+                    get_entity_index(PROJECT_ROOT).update(articles, rel)
+            except Exception as _idx_e:
+                print_console(f"  Avertissement : index non mis à jour ({_idx_e})", level="warning")
         except Exception as e:
             print_console(f"  Erreur de sauvegarde : {e}", level="error")
             if tmp.exists():

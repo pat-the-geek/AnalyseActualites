@@ -52,6 +52,83 @@ _bias_cache: dict = {"data": None, "ts": 0.0}
 _BIAS_CACHE_TTL = 300  # secondes
 
 
+def _invalidate_bias_cache() -> None:
+    """Invalide le cache /api/sources/bias.
+
+    À appeler après toute modification d'un fichier JSON dans data/ susceptible
+    de contenir des champs sentiment/score_sentiment/ton_editorial.
+    """
+    _bias_cache["data"] = None
+    _bias_cache["ts"] = 0.0
+
+# ── Rebuild des indexes au démarrage ─────────────────────────────────────────
+_INDEX_STALE_HOURS = 24  # Reconstruire si l'index a plus de N heures
+
+
+def _is_index_stale(generated_at: str) -> bool:
+    """Retourne True si generated_at est vide ou daté de plus de _INDEX_STALE_HOURS."""
+    if not generated_at:
+        return True
+    try:
+        import datetime as _dt
+        ts = _dt.datetime.strptime(generated_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=_dt.timezone.utc
+        )
+        age_h = (_dt.datetime.now(_dt.timezone.utc) - ts).total_seconds() / 3600
+        return age_h > _INDEX_STALE_HOURS
+    except Exception:
+        return True
+
+
+def _startup_index_rebuild() -> None:
+    """Lance en arrière-plan une reconstruction des indexes si nécessaire."""
+    def _rebuild():
+        try:
+            aidx = get_article_index(PROJECT_ROOT)
+            eidx = get_entity_index(PROJECT_ROOT)
+
+            a_stats = aidx.stats()
+            e_stats = eidx.stats()
+
+            need_article = a_stats.get("count", 0) == 0 or _is_index_stale(
+                a_stats.get("generated_at", "")
+            )
+            need_entity = e_stats.get("entities", 0) == 0 or _is_index_stale(
+                e_stats.get("generated_at", "")
+            )
+
+            if need_article:
+                print("[startup] Reconstruction article_index en cours…", flush=True)
+                n = aidx.rebuild()
+                print(f"[startup] article_index : {n} articles indexés.", flush=True)
+            else:
+                print(
+                    f"[startup] article_index OK ({a_stats.get('count', 0)} articles, "
+                    f"généré le {a_stats.get('generated_at', '?')[:10]})",
+                    flush=True,
+                )
+
+            if need_entity:
+                print("[startup] Reconstruction entity_index en cours…", flush=True)
+                n = eidx.rebuild()
+                print(f"[startup] entity_index : {n} références indexées.", flush=True)
+            else:
+                print(
+                    f"[startup] entity_index OK ({e_stats.get('entities', 0)} entités, "
+                    f"généré le {e_stats.get('generated_at', '?')[:10]})",
+                    flush=True,
+                )
+        except Exception as exc:
+            print(f"[startup] Erreur rebuild index : {exc}", flush=True)
+
+    t = threading.Thread(target=_rebuild, daemon=True, name="startup-index-rebuild")
+    t.start()
+
+
+# Lancer la vérification des indexes dès le chargement du module
+_startup_index_rebuild()
+
+
 # ── Utilitaires ───────────────────────────────────────────────────────────────
 
 def safe_path(relative: str) -> Path:
@@ -303,6 +380,9 @@ def api_save_content():
         target.write_text(content, encoding="utf-8")
     except OSError as e:
         abort(500, f"Erreur d'écriture : {e}")
+    # Invalider le cache biais si un fichier JSON de data/ est modifié
+    if rel.startswith("data/") and target.suffix == ".json":
+        _invalidate_bias_cache()
     return jsonify({"ok": True})
 
 
@@ -2536,6 +2616,9 @@ def api_delete_file():
         target.unlink()
     except OSError as exc:
         abort(500, f"Erreur de suppression : {exc}")
+    # Invalider le cache biais si un fichier JSON de data/ est supprimé
+    if rel.startswith("data/") and target.suffix == ".json":
+        _invalidate_bias_cache()
     return jsonify({"ok": True, "deleted": rel})
 
 
@@ -4596,6 +4679,104 @@ def api_article_full_report():
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/api/data-quality")
+def api_data_quality():
+    """Rapport de qualité des données WUDD.ai.
+
+    Scanne data/articles/ et data/articles-from-rss/ et retourne pour chaque fichier :
+      - total       : nombre d'articles
+      - sans_resume : articles sans champ Résumé ou résumé vide
+      - sans_entites: articles sans champ entities (et statut enrichissement)
+      - sans_sentiment : articles sans sentiment
+      - echec_api   : articles avec enrichissement_statut = "echec_api"
+      - echec_parse : articles avec enrichissement_statut = "echec_parse"
+      - sans_image  : articles sans Images ou Images vide
+      - sans_date   : articles sans Date de publication
+
+    Paramètres GET :
+      dir  : "articles" (défaut) | "rss" | "all" — sous-répertoire à scanner
+    """
+    from collections import defaultdict
+
+    dir_filter = request.args.get("dir", "all").strip().lower()
+
+    scan_dirs = []
+    if dir_filter in ("articles", "all"):
+        scan_dirs.append(PROJECT_ROOT / "data" / "articles")
+    if dir_filter in ("rss", "all"):
+        scan_dirs.append(PROJECT_ROOT / "data" / "articles-from-rss")
+
+    results = []
+    totals = defaultdict(int)
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for json_file in sorted(scan_dir.rglob("*.json")):
+            if "cache" in json_file.relative_to(scan_dir).parts:
+                continue
+            try:
+                articles = json.loads(json_file.read_text(encoding="utf-8", errors="replace"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(articles, list) or not articles:
+                continue
+
+            stats = {
+                "total": len(articles),
+                "sans_resume": 0,
+                "sans_entites": 0,
+                "sans_sentiment": 0,
+                "echec_api": 0,
+                "echec_parse": 0,
+                "sans_image": 0,
+                "sans_date": 0,
+            }
+            for a in articles:
+                if not isinstance(a, dict):
+                    continue
+                resume = a.get("Résumé", "")
+                if not resume or not str(resume).strip():
+                    stats["sans_resume"] += 1
+                if not a.get("entities"):
+                    stats["sans_entites"] += 1
+                if not a.get("sentiment"):
+                    stats["sans_sentiment"] += 1
+                statut = a.get("enrichissement_statut", "")
+                if statut == "echec_api":
+                    stats["echec_api"] += 1
+                elif statut == "echec_parse":
+                    stats["echec_parse"] += 1
+                images = a.get("Images", [])
+                if not images:
+                    stats["sans_image"] += 1
+                if not a.get("Date de publication", ""):
+                    stats["sans_date"] += 1
+
+            rel = str(json_file.relative_to(PROJECT_ROOT)).replace("\\", "/")
+            # Score qualité 0–100 : pénalise les articles incomplets
+            pct_ok = round(
+                100 * (1 - (stats["sans_resume"] + stats["sans_entites"]) / (2 * stats["total"])),
+                1,
+            ) if stats["total"] > 0 else 100.0
+
+            results.append({
+                "file": rel,
+                "quality_score": pct_ok,
+                **stats,
+            })
+            for k, v in stats.items():
+                totals[k] += v
+
+    results.sort(key=lambda r: r.get("quality_score", 100))
+
+    return jsonify({
+        "files": results,
+        "totals": dict(totals),
+        "file_count": len(results),
+    })
 
 
 @app.route("/", defaults={"path": ""})

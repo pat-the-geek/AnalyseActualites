@@ -36,6 +36,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from utils.config import get_config
 from utils.api_client import get_ai_client
 from utils.logging import default_logger
+from utils.article_index import get_article_index
 
 _STATE_FILE = _PROJECT_ROOT / "data" / "enrich_sentiment_state.json"
 
@@ -151,24 +152,30 @@ def enrich_file(json_file: Path, client, dry_run: bool, force: bool, delay: floa
             continue
 
         result = client.generate_sentiment(resume)
-        if result:
+        if result is None:
+            # echec_parse : réponse reçue mais JSON non extractible
+            article["enrichissement_statut"] = "echec_parse"
+            modified = True
+            default_logger.warning("  Réponse sentiment non parseable (echec_parse)")
+            skipped += 1
+        elif result:
             article.update(result)
             article["enrichissement_statut"] = "ok"
             enriched += 1
             modified = True
         else:
+            # {} : echec_api (exception réseau)
             article["enrichissement_statut"] = "echec_api"
             modified = True
-            default_logger.warning("  Analyse sentiment vide, article ignoré")
+            default_logger.warning("  Analyse sentiment vide ou erreur API")
             skipped += 1
 
-        # Sauvegarde intermédiaire toutes les SAVE_EVERY enrichissements
+        # Sauvegarde intermédiaire toutes les SAVE_EVERY enrichissements (atomique)
         if modified and not dry_run and enriched % SAVE_EVERY == 0:
             try:
-                json_file.write_text(
-                    json.dumps(articles, ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
+                _tmp = json_file.with_suffix(".tmp")
+                _tmp.write_text(json.dumps(articles, ensure_ascii=False, indent=2), encoding="utf-8")
+                _tmp.replace(json_file)
                 default_logger.info(f"  ↳ Sauvegarde intermédiaire ({enriched} enrichis) → {json_file.name}")
             except OSError as e:
                 default_logger.error(f"  Erreur d'écriture {json_file}: {e}")
@@ -178,11 +185,16 @@ def enrich_file(json_file: Path, client, dry_run: bool, force: bool, delay: floa
 
     if modified and not dry_run:
         try:
-            json_file.write_text(
-                json.dumps(articles, ensure_ascii=False, indent=2),
-                encoding="utf-8"
-            )
+            _tmp = json_file.with_suffix(".tmp")
+            _tmp.write_text(json.dumps(articles, ensure_ascii=False, indent=2), encoding="utf-8")
+            _tmp.replace(json_file)
             default_logger.info(f"  Sauvegardé → {json_file.name}")
+            # Mise à jour de l'article_index après enrichissement sentiment (proposition 1)
+            rel = str(json_file.relative_to(_PROJECT_ROOT)).replace("\\", "/")
+            try:
+                get_article_index(_PROJECT_ROOT).update(articles, rel)
+            except Exception as _idx_e:
+                default_logger.warning(f"  Index non mis à jour : {_idx_e}")
         except OSError as e:
             default_logger.error(f"  Erreur d'écriture {json_file}: {e}")
 

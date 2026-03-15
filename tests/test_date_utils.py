@@ -11,7 +11,8 @@ from utils.date_utils import (
     parse_simple_date,
     verifier_date_entre,
     get_default_date_range,
-    validate_date_range
+    validate_date_range,
+    parse_article_date,
 )
 
 
@@ -182,3 +183,59 @@ def test_parse_simple_date_parametrized(date_str, expected_year, expected_month,
 def test_verifier_date_entre_parametrized(date, debut, fin, expected):
     """Test vérification de dates avec paramètres."""
     assert verifier_date_entre(date, debut, fin) == expected
+
+
+# ── Tests parse_article_date (proposition 4) ──────────────────────────────────
+
+class TestParseArticleDate:
+    """Tests pour parse_article_date() — parser multi-format centralisé."""
+
+    def test_ddmmyyyy(self):
+        dt = parse_article_date("15/03/2026")
+        assert dt is not None
+        assert dt.day == 15
+        assert dt.month == 3
+        assert dt.year == 2026
+
+    def test_iso_date_only(self):
+        dt = parse_article_date("2026-03-15")
+        assert dt is not None
+        assert dt.year == 2026
+        assert dt.month == 3
+        assert dt.day == 15
+
+    def test_iso_datetime_z(self):
+        dt = parse_article_date("2026-03-15T10:30:00Z")
+        assert dt is not None
+        assert dt.hour == 10
+        assert dt.minute == 30
+
+    def test_iso_datetime_no_z(self):
+        dt = parse_article_date("2026-03-15T08:00:00")
+        assert dt is not None
+        assert dt.hour == 8
+
+    def test_rfc822(self):
+        dt = parse_article_date("Mon, 15 Mar 2026 10:30:00 +0000")
+        assert dt is not None
+        assert dt.year == 2026
+        assert dt.month == 3
+        assert dt.day == 15
+
+    def test_empty_string(self):
+        assert parse_article_date("") is None
+
+    def test_none_input(self):
+        assert parse_article_date(None) is None
+
+    def test_invalid_format(self):
+        assert parse_article_date("not-a-date") is None
+
+    def test_leading_trailing_spaces(self):
+        dt = parse_article_date("  2026-03-15  ")
+        assert dt is not None
+        assert dt.year == 2026
+
+    def test_returns_datetime(self):
+        dt = parse_article_date("15/03/2026")
+        assert isinstance(dt, datetime)

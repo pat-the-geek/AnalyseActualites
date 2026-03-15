@@ -36,6 +36,7 @@ from utils.http_utils import fetch_and_extract_text, extract_top_n_largest_image
 from utils.logging import print_console
 from utils.quota import get_quota_manager
 from utils.rolling_window import update_rolling_window
+from utils.source_credibility import CredibilityEngine
 
 # Constantes
 
@@ -137,6 +138,9 @@ print_console(f"Fenêtre temporelle : {one_week_ago.date()} à {now.date()}")
 # Initialiser le client IA
 print_console("Initialisation du client IA...")
 api_client = get_ai_client()
+
+# Initialiser la crédibilité sources (proposition 3)
+_credibility = CredibilityEngine(PROJECT_ROOT)
 
 # Initialiser le gestionnaire de quotas
 quota = get_quota_manager()
@@ -254,6 +258,7 @@ for feed_idx, (feed_url, feed_title) in enumerate(feeds, 1):
                     "URL": link,
                     "Résumé": resume,
                     "Images": images,
+                    "score_source": _credibility.get_score(feed_title),
                 }
                 if entities:
                     article["entities"] = entities

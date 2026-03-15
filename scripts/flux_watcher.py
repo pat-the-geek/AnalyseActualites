@@ -37,6 +37,7 @@ from utils.logging import print_console
 from utils.quota import get_quota_manager
 from utils.article_index import get_article_index
 from utils.entity_index import get_entity_index
+from utils.rolling_window import update_rolling_window
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -120,55 +121,6 @@ def _parse_feed_items(xml_root) -> list:
         normalized.append((title, link, pub_date_rfc, pub_dt))
 
     return normalized
-
-
-def _update_48h_incremental(new_articles: list) -> int:
-    """
-    Met à jour 48-heures.json de façon incrémentale :
-    - Ajoute les nouveaux articles (sans doublon)
-    - Élague les articles de plus de 48h
-    Retourne le nombre de nouveaux articles ajoutés.
-    """
-    wudd_path = WUDD_DIR / "48-heures.json"
-    now = datetime.utcnow()
-    two_days_ago = now - timedelta(hours=48)
-
-    existing: list = []
-    if wudd_path.exists():
-        try:
-            existing = json.loads(wudd_path.read_text(encoding="utf-8"))
-        except Exception:
-            existing = []
-
-    seen_urls = {a.get("URL", "") for a in existing}
-    added = 0
-    for article in new_articles:
-        url = article.get("URL", "")
-        if not url or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        existing.append(article)
-        added += 1
-
-    def _safe_date(a: dict) -> datetime:
-        date_str = a.get("Date de publication", "")
-        # Format RFC 2822 (produit par flux_watcher)
-        try:
-            return datetime.strptime(date_str[:25], DATE_FORMAT_RSS)
-        except Exception:
-            pass
-        # Format DD/MM/YYYY (produit par get-keyword-from-rss et web_watcher)
-        try:
-            return datetime.strptime(date_str[:10], "%d/%m/%Y")
-        except Exception:
-            pass
-        return datetime.min
-
-    fresh = [a for a in existing if _safe_date(a) >= two_days_ago]
-    fresh.sort(key=_safe_date, reverse=True)
-    _write_atomic(wudd_path, fresh)
-    print_console(f"48-heures.json : +{added} nouveaux | {len(fresh)} articles au total dans la fenêtre 48h")
-    return added
 
 
 # ─── Point d'entrée ──────────────────────────────────────────────────────────
@@ -344,17 +296,19 @@ def main(dry_run: bool = False) -> None:
                 print_console("Plafond global atteint après ajout.", level="warning")
                 break
 
-    # ── Mise à jour incrémentale de 48-heures.json ──────────────────────────
-    _update_48h_incremental(new_articles_all)
+    # ── Mise à jour 48-heures.json via rolling_window (proposition 2) ───────
+    wudd_path = WUDD_DIR / "48-heures.json"
+    nb_48h = update_rolling_window(new_articles_all, wudd_path, hours=48)
+    print_console(f"48-heures.json : +{len(new_articles_all)} nouveaux | {nb_48h} articles au total dans la fenêtre 48h")
 
     # ── Mise à jour des index (article_index + entity_index) ─────────────
     if new_articles_all:
-        wudd_path_rel = str(
-            (WUDD_DIR / "48-heures.json").relative_to(PROJECT_ROOT)
-        ).replace("\\", "/")
+        wudd_path_rel = str(wudd_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
         try:
+            # Lire le contenu mis à jour de 48-heures.json pour l'index
+            _wudd_articles = json.loads(wudd_path.read_text(encoding="utf-8"))
             art_idx = get_article_index(PROJECT_ROOT)
-            art_idx.update(new_articles_all, source_file=wudd_path_rel)
+            art_idx.update(_wudd_articles, source_file=wudd_path_rel)
             print_console(f"  article_index.json mis à jour ({len(new_articles_all)} article(s))")
         except Exception as e:
             print_console(f"  Mise à jour article_index ignorée : {e}", level="warning")
